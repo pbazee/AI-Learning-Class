@@ -1,0 +1,75 @@
+
+> ai-learning-class@0.1.0 build
+> next build
+
+  ▲ Next.js 15.0.0
+  - Environments: .env.local, .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/11) ...
+   Generating static pages (2/11) 
+   Generating static pages (5/11) 
+   Generating static pages (8/11) 
+ ✓ Generating static pages (11/11)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ƒ /                                    8.28 kB         232 kB
+├ ƒ /_not-found                          190 B          99.4 kB
+├ ƒ /admin                               176 B           108 kB
+├ ƒ /admin/analytics                     189 B          99.4 kB
+├ ƒ /admin/announcements                 1.36 kB         149 kB
+├ ƒ /admin/blogs                         3.53 kB         158 kB
+├ ƒ /admin/categories                    1.31 kB         149 kB
+├ ƒ /admin/coupons                       1.37 kB         149 kB
+├ ƒ /admin/courses                       4.05 kB         158 kB
+├ ƒ /admin/hero                          1.36 kB         149 kB
+├ ƒ /admin/popups                        1.39 kB         149 kB
+├ ƒ /admin/reviews                       1.35 kB         149 kB
+├ ƒ /admin/settings                      6.36 kB         148 kB
+├ ƒ /admin/subscribers                   7.86 kB         150 kB
+├ ƒ /admin/subscriptions                 1.58 kB         150 kB
+├ ƒ /admin/users                         1.38 kB         149 kB
+├ ƒ /api/admin/upload                    189 B          99.4 kB
+├ ƒ /api/auth/sync-user                  189 B          99.4 kB
+├ ƒ /api/certificate/generate            189 B          99.4 kB
+├ ƒ /api/copilot                         189 B          99.4 kB
+├ ƒ /api/email/send                      189 B          99.4 kB
+├ ƒ /api/newsletter/subscribe            189 B          99.4 kB
+├ ƒ /api/paystack/initialize             189 B          99.4 kB
+├ ƒ /api/stripe/checkout                 190 B          99.4 kB
+├ ƒ /api/stripe/webhook                  190 B          99.4 kB
+├ ƒ /auth/callback                       190 B          99.4 kB
+├ ƒ /blog                                223 B           224 kB
+├ ƒ /blog/[slug]                         223 B           224 kB
+├ ƒ /cart                                2.4 kB          226 kB
+├ ƒ /certificates                        210 B           218 kB
+├ ƒ /checkout                            3.52 kB         224 kB
+├ ƒ /checkout/success                    2.15 kB         217 kB
+├ ƒ /courses                             4.23 kB         228 kB
+├ ƒ /courses/[slug]                      6.01 kB         229 kB
+├ ƒ /dashboard                           223 B           224 kB
+├ ƒ /dashboard/certificates              189 B          99.4 kB
+├ ƒ /dashboard/settings                  190 B          99.4 kB
+├ ƒ /leaderboard                         198 B           218 kB
+├ ƒ /learn/[slug]/[lessonId]             8.57 kB         160 kB
+├ ƒ /login                               3.77 kB         203 kB
+├ ƒ /pricing                             1.82 kB         220 kB
+├ ƒ /settings                            3.1 kB          221 kB
+├ ƒ /sign-in                             190 B          99.4 kB
+├ ƒ /sign-up                             190 B          99.4 kB
+└ ƒ /signup                              6.51 kB         206 kB
++ First Load JS shared by all            99.2 kB
+  ├ chunks/4bd1b696-02ca9478816d7af3.js  52.6 kB
+  ├ chunks/6215-c99f5b63fca9ebd7.js      44.6 kB
+  └ other shared chunks (total)          1.91 kB
+
+
+ƒ Middleware                             78.9 kB
+
+ƒ  (Dynamic)  server-rendered on demand
+

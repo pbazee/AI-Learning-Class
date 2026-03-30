@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  --font-inter: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --radius: 0.9rem;
+
+  /* Professional Blue Theme - Light Mode */
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+
+  --primary: 211 100% 50%; /* #007BFF */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222 47% 11%;
+
+  --muted: 210 40% 90%;
+  --muted-foreground: 215 16% 47%;
+
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222 47% 11%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 214 32% 91.4%;
+  --input: 214 32% 91.4%;
+  --ring: 211 100% 50%;
+}
+
+.dark {
+  /* Professional Blue Theme - Dark Mode */
+  --background: 0 0% 0%;
+  --foreground: 210 40% 98%;
+
+  --card: 222 40% 14%;
+  --card-foreground: 210 40% 98%;
+
+  --popover: 222 40% 12%;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: 211 100% 60%; /* Lighter blue for dark mode */
+  --primary-foreground: 222 47% 11%;
+
+  --secondary: 217 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 217 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+
+  --accent: 217 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 217 25% 25%;
+  --input: 217 25% 25%;
+  --ring: 211 100% 60%;
+}
+
+* {
+  @apply border-border;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: hsl(var(--background));
+}
+
+body {
+  @apply bg-background text-foreground font-sans;
+  min-height: 100vh;
+  background-color: hsl(var(--background));
+}
+
+/* Keep the app canvas flat so light mode is pure white and dark mode is pure black. */
+body.professional-app {
+  background-color: hsl(var(--background));
+}
+
+a,
+button,
+input,
+textarea,
+select {
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.section-shell {
+  @apply py-16 md:py-20;
+}
+
+.section-frame {
+  @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
+}
+
+/* A subtle card style for most components */
+.surface-card {
+  @apply rounded-xl border bg-card shadow-sm;
+}
+
+.surface-card-muted {
+  @apply rounded-xl border bg-muted;
+}
+
+/* Simple, professional buttons */
+.action-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90;
+}
+
+.action-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background px-5 py-3 text-sm font-semibold text-foreground hover:bg-accent;
+}
+
+.input-surface {
+  @apply rounded-md border border-input bg-transparent px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--accent-foreground) / 0.5);
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--secondary)) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
