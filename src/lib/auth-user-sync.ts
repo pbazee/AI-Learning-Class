@@ -2,6 +2,24 @@ import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { prisma } from "./prisma";
 import { getPrimaryAdminEmail, normalizeEmail } from "./admin-email";
 
+function generateReferralCode() {
+  return Math.random().toString(36).slice(2, 10).toUpperCase();
+}
+
+async function getUniqueReferralCode() {
+  let attempt = 0;
+  while (attempt < 20) {
+    const code = generateReferralCode();
+    const existing = await prisma.user.findUnique({
+      where: { referralCode: code },
+      select: { id: true },
+    });
+    if (!existing) return code;
+    attempt += 1;
+  }
+  return `${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+}
+
 export async function syncAuthenticatedUser(user: SupabaseUser) {
   if (!user.email) return null;
 
@@ -44,6 +62,11 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
   const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) || null;
 
   if (existingById) {
+    const referralCode = (await prisma.user.findUnique({
+      where: { id: existingById.id },
+      select: { referralCode: true },
+    }))?.referralCode;
+
     return prisma.user.update({
       where: { id: existingById.id },
       data: {
@@ -51,17 +74,24 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
         name,
         avatarUrl,
         role,
+        ...(referralCode ? {} : { referralCode: await getUniqueReferralCode() }),
       },
     });
   }
 
   if (existingByEmail) {
+    const referralCode = (await prisma.user.findUnique({
+      where: { id: existingByEmail.id },
+      select: { referralCode: true },
+    }))?.referralCode;
+
     return prisma.user.update({
       where: { id: existingByEmail.id },
       data: {
         name,
         avatarUrl,
         role,
+        ...(referralCode ? {} : { referralCode: await getUniqueReferralCode() }),
       },
     });
   }
@@ -73,6 +103,7 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
       name,
       avatarUrl,
       role,
+      referralCode: await getUniqueReferralCode(),
     },
   });
 }

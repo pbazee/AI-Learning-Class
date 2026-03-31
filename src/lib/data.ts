@@ -7,10 +7,18 @@ import type {
   BlogPost,
   Category,
   Course,
+  CourseAccessState,
   HeroSlide,
   SubscriptionPlan,
   Testimonial,
 } from "@/types";
+import {
+  HOMEPAGE_PARAGRAPH_DEFAULTS,
+  HOMEPAGE_PARAGRAPH_SECTIONS,
+  type HomepageParagraphContentMap,
+  type HomepageParagraphEntry,
+  type HomepageParagraphSectionKey,
+} from "@/lib/homepage-paragraphs";
 import { isPrismaConnectionError, prisma } from "./prisma";
 import { createServerSupabaseClient } from "./supabase-server";
 import { syncAuthenticatedUser } from "./auth-user-sync";
@@ -25,6 +33,18 @@ type CourseWithDetails = Prisma.CourseGetPayload<{
     modules: {
       include: { lessons: true };
     };
+    reviews: {
+      where: { isApproved: true };
+      include: {
+        user: {
+          select: {
+            name: true;
+            avatarUrl: true;
+          };
+        };
+      };
+      orderBy: { createdAt: "desc" };
+    };
   };
 }>;
 
@@ -37,6 +57,8 @@ export type DashboardEnrollment = {
   completedLessons: number;
   totalLessons: number;
   lastLessonTitle?: string;
+  lessonHref: string;
+  actionLabel: "Continue Learning" | "Go to Classroom";
   remainingMinutes: number;
   course: Course;
 };
@@ -350,6 +372,8 @@ function mapCourse(
     slug: course.slug,
     description: course.description,
     shortDescription: course.shortDescription ?? undefined,
+    imageUrl: course.imageUrl ?? undefined,
+    imagePath: course.imagePath ?? undefined,
     thumbnailUrl: course.thumbnailUrl ?? undefined,
     previewVideoUrl: course.previewVideoUrl ?? undefined,
     categoryId: course.categoryId,
@@ -376,9 +400,11 @@ function mapCourse(
     language: course.language,
   };
 
+  let mappedCourse = baseCourse;
+
   if ("modules" in course) {
-    return {
-      ...baseCourse,
+    mappedCourse = {
+      ...mappedCourse,
       modules: [...course.modules]
         .sort((left, right) => left.order - right.order)
         .map((module) => ({
@@ -409,7 +435,22 @@ function mapCourse(
     };
   }
 
-  return baseCourse;
+  if ("reviews" in course) {
+    mappedCourse = {
+      ...mappedCourse,
+      reviews: course.reviews.map((review) => ({
+        id: review.id,
+        name: review.user.name || "AI Learning Class student",
+        avatarUrl: review.user.avatarUrl ?? undefined,
+        rating: review.rating,
+        title: review.title ?? undefined,
+        body: review.body,
+        createdAt: formatDate(review.createdAt) || "",
+      })),
+    };
+  }
+
+  return mappedCourse;
 }
 
 export const getCurrentUserProfile = cache(async () => {
@@ -430,6 +471,175 @@ export const getCurrentUserProfile = cache(async () => {
     return syncAuthenticatedUser(user);
   });
 });
+
+type CourseAccessComputation = CourseAccessState & {
+  courseSlug: string;
+  completedLessonIds: string[];
+};
+
+async function computeUserCourseAccess(userId: string, courseIds: string[]) {
+  if (courseIds.length === 0) {
+    return [];
+  }
+
+  const [courses, progressRows] = await Promise.all([
+    prisma.course.findMany({
+      where: {
+        id: { in: courseIds },
+        isPublished: true,
+      },
+      select: {
+        id: true,
+        slug: true,
+        price: true,
+        isFree: true,
+        totalLessons: true,
+        modules: {
+          orderBy: { order: "asc" },
+          select: {
+            lessons: {
+              orderBy: { order: "asc" },
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.lessonProgress.findMany({
+      where: {
+        userId,
+        lesson: {
+          module: {
+            courseId: { in: courseIds },
+          },
+        },
+      },
+      include: {
+        lesson: {
+          select: {
+            id: true,
+            title: true,
+            module: {
+              select: {
+                courseId: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
+
+  const progressByCourse = progressRows.reduce(
+    (accumulator, row) => {
+      const courseId = row.lesson.module.courseId;
+      const current = accumulator.get(courseId) ?? [];
+      current.push(row);
+      accumulator.set(courseId, current);
+      return accumulator;
+    },
+    new Map<string, typeof progressRows>()
+  );
+
+  return courses.map<CourseAccessComputation>((course) => {
+    const orderedLessons = course.modules.flatMap((module) => module.lessons);
+    const courseProgress = progressByCourse.get(course.id) ?? [];
+    const completedLessonIds = new Set(
+      courseProgress.filter((row) => row.isCompleted).map((row) => row.lessonId)
+    );
+    const completedLessons = orderedLessons.filter((lesson) => completedLessonIds.has(lesson.id)).length;
+    const totalLessons = orderedLessons.length || course.totalLessons;
+    const latestProgress = courseProgress[0];
+    const firstIncompleteLesson =
+      orderedLessons.find((lesson) => !completedLessonIds.has(lesson.id)) ?? orderedLessons[0];
+    const resumeLessonId = latestProgress?.lessonId ?? firstIncompleteLesson?.id;
+    const progress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+
+    return {
+      courseId: course.id,
+      courseSlug: course.slug,
+      hasAccess: true,
+      statusLabel: course.isFree || course.price === 0 ? "Enrolled" : "Owned",
+      actionLabel: latestProgress ? "Continue Learning" : "Go to Classroom",
+      lessonHref: resumeLessonId ? `/learn/${course.slug}/${resumeLessonId}` : `/courses/${course.slug}`,
+      progress,
+      completedLessons,
+      totalLessons,
+      lastLessonTitle: latestProgress?.lesson.title,
+      completedLessonIds: Array.from(completedLessonIds),
+    };
+  });
+}
+
+export async function getUserCourseAccessMap(
+  userId: string,
+  courseIds: string[]
+): Promise<Record<string, CourseAccessState>> {
+  return safeDatabaseRead("getUserCourseAccessMap", {} as Record<string, CourseAccessState>, async () => {
+    if (courseIds.length === 0) {
+      return {};
+    }
+
+    const enrollments = await prisma.enrollment.findMany({
+      where: {
+        userId,
+        courseId: { in: courseIds },
+        status: { in: ["ACTIVE", "COMPLETED"] },
+      },
+      select: {
+        courseId: true,
+      },
+    });
+
+    const accessibleCourseIds = Array.from(new Set(enrollments.map((enrollment) => enrollment.courseId)));
+
+    if (accessibleCourseIds.length === 0) {
+      return {};
+    }
+
+    const accessRows = await computeUserCourseAccess(userId, accessibleCourseIds);
+
+    return accessRows.reduce<Record<string, CourseAccessState>>((accumulator, row) => {
+      accumulator[row.courseId] = {
+        courseId: row.courseId,
+        hasAccess: row.hasAccess,
+        statusLabel: row.statusLabel,
+        actionLabel: row.actionLabel,
+        lessonHref: row.lessonHref,
+        progress: row.progress,
+        completedLessons: row.completedLessons,
+        totalLessons: row.totalLessons,
+        lastLessonTitle: row.lastLessonTitle,
+      };
+      return accumulator;
+    }, {});
+  });
+}
+
+export async function getUserAffiliateStatus(userId: string) {
+  return safeDatabaseRead(
+    "getUserAffiliateStatus",
+    { hasJoined: false, status: null as string | null },
+    async () => {
+      const affiliate = await prisma.affiliate.findUnique({
+        where: { userId },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      return {
+        hasJoined: Boolean(affiliate),
+        status: affiliate?.status ?? null,
+      };
+    }
+  );
+}
 
 export async function getCourses(filters?: {
   categorySlug?: string;
@@ -526,6 +736,59 @@ export async function getCourses(filters?: {
   });
 }
 
+export async function getHomepageParagraphEntries(): Promise<HomepageParagraphEntry[]> {
+  return safeDatabaseRead(
+    "getHomepageParagraphEntries",
+    HOMEPAGE_PARAGRAPH_SECTIONS.map((section) => ({
+      id: null,
+      sectionKey: section.sectionKey,
+      sectionName: section.sectionName,
+      defaultContent: section.defaultContent,
+      content: section.defaultContent,
+      updatedAt: null,
+      isDefault: true,
+    })),
+    async () => {
+      const paragraphs = await prisma.homepageParagraph.findMany({
+        orderBy: { updatedAt: "desc" },
+      });
+
+      const paragraphMap = new Map(
+        paragraphs.map((paragraph) => [
+          paragraph.sectionKey as HomepageParagraphSectionKey,
+          paragraph,
+        ])
+      );
+
+      return HOMEPAGE_PARAGRAPH_SECTIONS.map((section) => {
+        const paragraph = paragraphMap.get(section.sectionKey);
+
+        return {
+          id: paragraph?.id ?? null,
+          sectionKey: section.sectionKey,
+          sectionName: section.sectionName,
+          defaultContent: section.defaultContent,
+          content: paragraph?.content ?? section.defaultContent,
+          updatedAt: paragraph?.updatedAt.toISOString() ?? null,
+          isDefault: !paragraph,
+        };
+      });
+    }
+  );
+}
+
+export async function getHomepageParagraphContentMap(): Promise<HomepageParagraphContentMap> {
+  const paragraphs = await getHomepageParagraphEntries();
+
+  return paragraphs.reduce(
+    (accumulator, paragraph) => {
+      accumulator[paragraph.sectionKey] = paragraph.content;
+      return accumulator;
+    },
+    { ...HOMEPAGE_PARAGRAPH_DEFAULTS }
+  );
+}
+
 export async function getCourseBySlug(slug: string): Promise<Course | null> {
   return safeDatabaseRead("getCourseBySlug", null, async () => {
     const course = await prisma.course.findUnique({
@@ -536,6 +799,18 @@ export async function getCourseBySlug(slug: string): Promise<Course | null> {
           include: {
             lessons: true,
           },
+        },
+        reviews: {
+          where: { isApproved: true },
+          include: {
+            user: {
+              select: {
+                name: true,
+                avatarUrl: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
         },
       },
     });
@@ -561,6 +836,8 @@ export async function getCategories(): Promise<Category[]> {
       name: category.name,
       slug: category.slug,
       description: category.description ?? undefined,
+      imageUrl: category.imageUrl ?? undefined,
+      imagePath: category.imagePath ?? undefined,
       icon: category.icon ?? undefined,
       color: category.color ?? undefined,
       isActive: category.isActive,
@@ -1207,67 +1484,48 @@ export async function getUserEnrollments(userId: string): Promise<DashboardEnrol
     }
 
     const courseIds = enrollments.map((enrollment) => enrollment.courseId);
-    const [progressRows, instructorMap] = await Promise.all([
-      prisma.lessonProgress.findMany({
-        where: {
-          userId,
-          lesson: {
-            module: {
-              courseId: { in: courseIds },
-            },
-          },
-        },
-        include: {
-          lesson: {
-            include: {
-              module: true,
-            },
-          },
-        },
-        orderBy: { updatedAt: "desc" },
-      }),
+    const [accessRows, instructorMap] = await Promise.all([
+      computeUserCourseAccess(userId, courseIds),
       getInstructorMap(enrollments.map((enrollment) => enrollment.course)),
     ]);
-
-    const progressByCourse = progressRows.reduce(
-      (accumulator, row) => {
-        const courseId = row.lesson.module.courseId;
-        const courseProgress = accumulator.get(courseId) ?? [];
-        courseProgress.push(row);
-        accumulator.set(courseId, courseProgress);
-        return accumulator;
-      },
-      new Map<string, typeof progressRows>()
-    );
+    const accessByCourse = new Map(accessRows.map((row) => [row.courseId, row]));
 
     return enrollments.map((enrollment) => {
-      const courseProgress = progressByCourse.get(enrollment.courseId) ?? [];
-      const completedLessons = courseProgress.filter((row) => row.isCompleted).length;
+      const courseAccess = accessByCourse.get(enrollment.courseId);
       const totalLessons =
+        courseAccess?.totalLessons ||
         enrollment.course.modules.reduce((sum, module) => sum + module.lessons.length, 0) ||
         enrollment.course.totalLessons;
+      const completedLessons = courseAccess?.completedLessons ?? 0;
       const totalDurationSeconds = enrollment.course.modules.reduce(
         (sum, module) =>
           sum +
           module.lessons.reduce((lessonSum, lesson) => lessonSum + (lesson.duration ?? 0), 0),
         0
       );
-      const completedDurationSeconds = courseProgress
-        .filter((row) => row.isCompleted)
-        .reduce((sum, row) => sum + (row.lesson.duration ?? 0), 0);
+      const orderedLessons = enrollment.course.modules.flatMap((module) => module.lessons);
+      const completedLessonIds = new Set(courseAccess?.completedLessonIds ?? []);
+      const completedDurationSeconds = orderedLessons.reduce((sum, lesson) => {
+        if (completedLessonIds.has(lesson.id)) {
+          return sum + (lesson.duration ?? 0);
+        }
+
+        return sum;
+      }, 0);
       const remainingMinutes = Math.max(
         0,
         Math.ceil((totalDurationSeconds - completedDurationSeconds) / 60)
       );
-      const lastLessonTitle = courseProgress[0]?.lesson.title;
 
       return {
         id: enrollment.id,
         enrolledAt: enrollment.enrolledAt.toISOString(),
-        progress: totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0,
+        progress: courseAccess?.progress ?? (totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0),
         completedLessons,
         totalLessons,
-        lastLessonTitle,
+        lastLessonTitle: courseAccess?.lastLessonTitle,
+        lessonHref: courseAccess?.lessonHref ?? `/courses/${enrollment.course.slug}`,
+        actionLabel: courseAccess?.actionLabel ?? "Go to Classroom",
         remainingMinutes,
         course: mapCourse(enrollment.course, instructorMap),
       };

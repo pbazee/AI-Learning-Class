@@ -5,13 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Bell,
   BookOpen,
   Brain,
   ChevronLeft,
   ChevronRight,
   CreditCard,
   FolderTree,
+  FileText,
   House,
   Image,
   Layers3,
@@ -20,6 +20,8 @@ import {
   Mail,
   Megaphone,
   Newspaper,
+  ShoppingBag,
+  Share2,
   Settings,
   Star,
   Ticket,
@@ -34,6 +36,7 @@ const navItems = [
   { label: "Categories", href: "/admin/categories", icon: FolderTree },
   { label: "Users", href: "/admin/users", icon: Users },
   { label: "User Subscriptions", href: "/admin/user-subscriptions", icon: CreditCard },
+  { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
   { label: "Subscriptions", href: "/admin/subscriptions", icon: CreditCard },
   { label: "Blogs", href: "/admin/blogs", icon: Newspaper },
   { label: "Coupons", href: "/admin/coupons", icon: Ticket },
@@ -43,7 +46,9 @@ const navItems = [
   { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { label: "Announcements", href: "/admin/announcements", icon: Megaphone },
   { label: "Hero Slides", href: "/admin/hero-slides", icon: Image },
+  { label: "Paragraphs", href: "/admin/paragraphs", icon: FileText },
   { label: "Affiliates", href: "/admin/affiliates", icon: Link2 },
+  { label: "Referrals", href: "/admin/referrals", icon: Share2 },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
@@ -72,6 +77,10 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
     title: "Subscriptions",
     subtitle: "Shape the plan architecture powering recurring revenue.",
   },
+  "/admin/orders": {
+    title: "Orders",
+    subtitle: "Track customer payments, fulfillment, refunds, and access delivery.",
+  },
   "/admin/popups": {
     title: "Popups",
     subtitle: "Design promotional moments with precise targeting and timing.",
@@ -79,6 +88,10 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/admin/hero-slides": {
     title: "Hero Slides",
     subtitle: "Control the first impression of the homepage experience.",
+  },
+  "/admin/paragraphs": {
+    title: "Homepage Sections",
+    subtitle: "Edit the supporting copy that appears across the homepage in real time.",
   },
 };
 
@@ -201,13 +214,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className="relative rounded-2xl border border-white/10 bg-white/5 p-2.5 text-slate-300 hover:border-blue-400/30 hover:bg-white/10 hover:text-white"
-              >
-                <Bell className="h-4 w-4" />
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-cyan-400" />
-              </button>
               <AdminSessionControls />
             </div>
           </div>

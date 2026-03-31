@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { CourseCard } from "@/components/courses/CourseCard";
 import { Search, X } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import type { Category, Course, Level } from "@/types";
+import type { Category, Course, CourseAccessState, Level } from "@/types";
 
 const levels: { value: Level | "ALL"; label: string }[] = [
   { value: "ALL", label: "All Levels" },
@@ -24,13 +25,17 @@ const sortOptions = [
 ];
 
 const inputClass =
-  "rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-blue-400 focus:ring-1 focus:ring-blue-400/20";
+  "rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary-blue focus:ring-1 focus:ring-primary-blue/20";
 
 type SpecialFilter = "all" | "featured" | "trending" | "new";
 
 function normalizeSpecialFilter(value?: string): SpecialFilter {
-  if (value === "featured" || value === "trending" || value === "new") {
+  if (value === "featured" || value === "trending") {
     return value;
+  }
+
+  if (value === "new" || value === "new-releases") {
+    return "new";
   }
 
   return "all";
@@ -41,18 +46,36 @@ export function CoursesCatalog({
   categories,
   initialCategory = "all",
   initialFilter,
+  viewerId,
+  courseAccessMap,
 }: {
   courses: Course[];
   categories: Category[];
   initialCategory?: string;
   initialFilter?: string;
+  viewerId?: string | null;
+  courseAccessMap?: Record<string, CourseAccessState>;
 }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState(initialCategory);
   const [level, setLevel] = useState<Level | "ALL">("ALL");
   const [priceFilter, setPriceFilter] = useState<"all" | "free" | "paid">("all");
   const [specialFilter, setSpecialFilter] = useState<SpecialFilter>(normalizeSpecialFilter(initialFilter));
   const [sort, setSort] = useState(initialFilter === "popular" ? "popular" : "popular");
+  const routeSignature = `${pathname}?${searchParams.toString()}`;
+
+  useEffect(() => {
+    const scrollToTop = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    };
+
+    scrollToTop();
+    const frame = window.requestAnimationFrame(scrollToTop);
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [routeSignature]);
 
   const filtered = useMemo(() => {
     let filteredCourses = [...courses];
@@ -136,11 +159,11 @@ export function CoursesCatalog({
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="pt-20">
+      <div>
         <div className="border-b border-border bg-card">
           <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
             <h1 className="mb-2 text-3xl font-black text-foreground">
-              All <span className="text-blue-600">AI Courses</span>
+              All <span className="text-primary-blue">AI Courses</span>
             </h1>
             <p className="text-muted-foreground">
               {filtered.length} course{filtered.length !== 1 ? "s" : ""} - learn from the world&apos;s best AI instructors
@@ -232,7 +255,7 @@ export function CoursesCatalog({
               <p className="mb-6 text-muted-foreground">Try adjusting your filters or search term.</p>
               <button
                 onClick={clearFilters}
-                className="rounded-xl border border-blue-200 bg-blue-50 px-6 py-3 text-blue-600 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-950/60"
+                className="rounded-xl border border-primary-blue/20 bg-primary-blue/10 px-6 py-3 text-primary-blue transition-colors hover:bg-primary-blue/15"
               >
                 Clear all filters
               </button>
@@ -240,7 +263,13 @@ export function CoursesCatalog({
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filtered.map((course, index) => (
-                <CourseCard key={course.id} course={course} index={index} />
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  index={index}
+                  viewerId={viewerId}
+                  courseAccess={courseAccessMap?.[course.id]}
+                />
               ))}
             </div>
           )}

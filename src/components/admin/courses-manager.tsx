@@ -28,7 +28,7 @@ import {
   FieldLabel,
   StatusPill,
 } from "@/components/admin/ui";
-import { useToast } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/ToastProvider";
 import { formatPrice, levelLabel } from "@/lib/utils";
 
 type CourseAssetRow = {
@@ -71,6 +71,8 @@ type CourseRow = {
   slug: string;
   description: string;
   shortDescription?: string | null;
+  imageUrl?: string | null;
+  imagePath?: string | null;
   categoryId: string;
   categoryName: string;
   instructorId: string;
@@ -112,6 +114,8 @@ type CourseFormState = {
   isRecommended: boolean;
   isFree: boolean;
   isNew: boolean;
+  imageUrl: string;
+  imagePath: string;
   thumbnailUrl: string;
   thumbnailPath: string;
   language: string;
@@ -170,6 +174,8 @@ function buildEmptyForm(
     isRecommended: false,
     isFree: false,
     isNew: true,
+    imageUrl: "",
+    imagePath: "",
     thumbnailUrl: "",
     thumbnailPath: "",
     language: "English",
@@ -197,6 +203,8 @@ function mapCourseToForm(course: CourseRow): CourseFormState {
     isRecommended: course.isRecommended,
     isFree: course.isFree,
     isNew: course.isNew,
+    imageUrl: course.imageUrl || "",
+    imagePath: course.imagePath || "",
     thumbnailUrl: course.thumbnailUrl || "",
     thumbnailPath: course.thumbnailPath || "",
     language: course.language,
@@ -297,6 +305,8 @@ export function CoursesManager({
           isRecommended: form.isRecommended,
           isFree: form.isFree,
           isNew: form.isNew,
+          imageUrl: form.imageUrl,
+          imagePath: form.imagePath,
           thumbnailUrl: form.thumbnailUrl,
           thumbnailPath: form.thumbnailPath,
           tags: fromLines(form.tagsText),
@@ -699,9 +709,23 @@ export function CoursesManager({
         title={form.id ? "Course Editor" : "Create Course"}
         description="Configure the course details, build the curriculum, and manage supplemental downloads from one workspace."
         size="xl"
+        scrollBody
+        stickyFooter
+        bodyClassName="pb-8"
         footer={
-          <div className="flex flex-wrap justify-between gap-3">
-            <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-3">
+            <AdminButton type="button" variant="secondary" onClick={() => setEditorOpen(false)}>
+              Cancel
+            </AdminButton>
+            <AdminButton type="button" busy={busy} onClick={handleSave}>
+              Save Course
+            </AdminButton>
+          </div>
+        }
+      >
+        <div className="space-y-6">
+          <div className="-mx-2 sticky top-0 z-10 rounded-[28px] border border-white/10 bg-[#04070d]/95 p-2 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.95)] backdrop-blur-xl">
+            <div className="flex flex-wrap gap-2">
               {(["details", "structure", "downloads"] as const).map((tab) => (
                 <AdminButton
                   key={tab}
@@ -713,208 +737,279 @@ export function CoursesManager({
                 </AdminButton>
               ))}
             </div>
-            <div className="flex gap-3">
-              <AdminButton type="button" variant="secondary" onClick={() => setEditorOpen(false)}>
-                Cancel
-              </AdminButton>
-              <AdminButton type="button" busy={busy} onClick={handleSave}>
-                Save Course
-              </AdminButton>
-            </div>
           </div>
-        }
-      >
-        {activeTab === "details" ? (
-          <div className="grid gap-8">
-            <div className="grid gap-5 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <FieldLabel>Course Title</FieldLabel>
-                <AdminInput value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-              </div>
-              <div>
-                <FieldLabel>Slug</FieldLabel>
-                <AdminInput
-                  value={form.slug}
-                  onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
-                  placeholder="leave blank to auto-generate"
-                />
-              </div>
-              <div>
-                <FieldLabel>Status</FieldLabel>
-                <AdminSelect
-                  value={form.status}
-                  onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "DRAFT" | "PUBLISHED" }))}
-                >
-                  <option value="DRAFT">Draft</option>
-                  <option value="PUBLISHED">Published</option>
-                </AdminSelect>
-              </div>
-              <div className="md:col-span-2">
-                <FieldLabel>Description</FieldLabel>
-                <AdminTextarea rows={5} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
-              </div>
-              <div className="md:col-span-2">
-                <FieldLabel>Short Description</FieldLabel>
-                <AdminTextarea rows={3} value={form.shortDescription} onChange={(event) => setForm((current) => ({ ...current, shortDescription: event.target.value }))} />
-              </div>
-              <div>
-                <FieldLabel>Category</FieldLabel>
-                <AdminSelect value={form.categoryId} onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}>
-                  {categoryOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </AdminSelect>
-              </div>
-              <div>
-                <FieldLabel>Instructor</FieldLabel>
-                <AdminSelect value={form.instructorId} onChange={(event) => setForm((current) => ({ ...current, instructorId: event.target.value }))}>
-                  {instructorOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </AdminSelect>
-              </div>
-              <div>
-                <FieldLabel>Level</FieldLabel>
-                <AdminSelect value={form.level} onChange={(event) => setForm((current) => ({ ...current, level: event.target.value as CourseRow["level"] }))}>
-                  <option value="BEGINNER">Beginner</option>
-                  <option value="INTERMEDIATE">Intermediate</option>
-                  <option value="ADVANCED">Advanced</option>
-                  <option value="ALL_LEVELS">All Levels</option>
-                </AdminSelect>
-              </div>
-              <div>
-                <FieldLabel>Language</FieldLabel>
-                <AdminInput value={form.language} onChange={(event) => setForm((current) => ({ ...current, language: event.target.value }))} />
-              </div>
-              <div>
-                <FieldLabel>Price</FieldLabel>
-                <AdminInput type="number" step="0.01" value={String(form.price)} onChange={(event) => setForm((current) => ({ ...current, price: Number(event.target.value) }))} />
-              </div>
-              <div className="grid gap-3">
-                <AdminSwitch checked={form.isFree} onChange={(value) => setForm((current) => ({ ...current, isFree: value }))} label="Free Course" />
-                <AdminSwitch checked={form.isFeatured} onChange={(value) => setForm((current) => ({ ...current, isFeatured: value }))} label="Featured" />
-                <AdminSwitch checked={form.isTrending} onChange={(value) => setForm((current) => ({ ...current, isTrending: value }))} label="Trending" />
-                <AdminSwitch checked={form.isRecommended} onChange={(value) => setForm((current) => ({ ...current, isRecommended: value }))} label="Recommended" />
-                <AdminSwitch checked={form.isNew} onChange={(value) => setForm((current) => ({ ...current, isNew: value }))} label="Mark as New" />
-              </div>
-              <div className="md:col-span-2">
-                <MediaUploader
-                  label="Thumbnail"
-                  hint="Upload the main course card image."
-                  folder="courses/thumbnails"
-                  accept="image/*"
-                  value={{
-                    url: form.thumbnailUrl,
-                    path: form.thumbnailPath,
-                    fileName: form.title || "Course thumbnail",
-                    mimeType: "image/*",
-                  }}
-                  onUploaded={(file) => setForm((current) => ({ ...current, thumbnailUrl: file.url, thumbnailPath: file.path }))}
-                  onRemoved={() => setForm((current) => ({ ...current, thumbnailUrl: "", thumbnailPath: "" }))}
-                />
-              </div>
-              <div>
-                <FieldLabel>Tags</FieldLabel>
-                <AdminTextarea rows={4} value={form.tagsText} onChange={(event) => setForm((current) => ({ ...current, tagsText: event.target.value }))} placeholder="One per line" />
-              </div>
-              <div>
-                <FieldLabel>What Learners Will Achieve</FieldLabel>
-                <AdminTextarea rows={4} value={form.whatYouLearnText} onChange={(event) => setForm((current) => ({ ...current, whatYouLearnText: event.target.value }))} placeholder="One per line" />
-              </div>
-              <div className="md:col-span-2">
-                <FieldLabel>Requirements</FieldLabel>
-                <AdminTextarea rows={4} value={form.requirementsText} onChange={(event) => setForm((current) => ({ ...current, requirementsText: event.target.value }))} placeholder="One per line" />
-              </div>
-            </div>
-          </div>
-        ) : activeTab === "structure" ? (
-          <CourseStructureBuilder
-            courseId={form.id || undefined}
-            sections={form.curriculum}
-            onChange={(curriculum) => setForm((current) => ({ ...current, curriculum }))}
-          />
-        ) : (
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-lg font-black text-white">Course Assets</h3>
-              <p className="mt-1 text-sm text-slate-400">
-                Upload supplemental downloads that sit alongside the lesson curriculum.
-              </p>
-            </div>
 
-            {!form.id ? (
-              <AdminCard className="border-dashed p-6">
-                <p className="text-sm text-slate-400">Save the course first to unlock the supplemental asset manager.</p>
-              </AdminCard>
-            ) : (
-              <>
-                <div className="grid gap-5 md:grid-cols-3">
-                  <div>
-                    <FieldLabel>Asset Type</FieldLabel>
-                    <AdminSelect value={assetDraft.type} onChange={(event) => setAssetDraft((current) => ({ ...current, type: event.target.value as CourseAssetRow["type"] }))}>
-                      <option value="VIDEO">Video</option>
-                      <option value="AUDIO">Audio</option>
-                      <option value="PDF">PDF</option>
-                    </AdminSelect>
-                  </div>
-                  <div className="md:col-span-2">
-                    <FieldLabel>Asset Title</FieldLabel>
-                    <AdminInput value={assetDraft.title} onChange={(event) => setAssetDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Introduction PDF" />
-                  </div>
-                  <div className="md:col-span-3">
-                    <MediaUploader
-                      label="Upload Asset"
-                      hint="The file will attach immediately after upload."
-                      folder={`courses/assets/${form.id}`}
-                      accept="audio/*,video/*,application/pdf"
-                      onUploaded={handleAssetUploaded}
-                    />
+          {activeTab === "details" ? (
+            <div className="grid gap-8">
+              <div className="grid gap-5 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <FieldLabel>Course Title</FieldLabel>
+                  <AdminInput value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
+                </div>
+                <div>
+                  <FieldLabel>Slug</FieldLabel>
+                  <AdminInput
+                    value={form.slug}
+                    onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
+                    placeholder="leave blank to auto-generate"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Status</FieldLabel>
+                  <AdminSelect
+                    value={form.status}
+                    onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "DRAFT" | "PUBLISHED" }))}
+                  >
+                    <option value="DRAFT">Draft</option>
+                    <option value="PUBLISHED">Published</option>
+                  </AdminSelect>
+                </div>
+                <div className="md:col-span-2">
+                  <FieldLabel>Description</FieldLabel>
+                  <AdminTextarea rows={5} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+                </div>
+                <div className="md:col-span-2">
+                  <FieldLabel>Short Description</FieldLabel>
+                  <AdminTextarea rows={3} value={form.shortDescription} onChange={(event) => setForm((current) => ({ ...current, shortDescription: event.target.value }))} />
+                </div>
+                <div className="md:col-span-2">
+                  <div className="space-y-4">
+                    <div>
+                      <FieldLabel>Course Image</FieldLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Upload from device to the shared admin bucket or paste a direct image URL for premium course cards.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_40px_minmax(0,0.9fr)] lg:items-start">
+                      <MediaUploader
+                        label="Upload from device"
+                        hint="Recommended for cinematic landing-page and catalog artwork."
+                        folder="courses/images"
+                        accept="image/*"
+                        value={{
+                          url: form.imageUrl,
+                          path: form.imagePath,
+                          fileName: form.title || "Course image",
+                          mimeType: "image/*",
+                        }}
+                        onUploaded={(file) =>
+                          setForm((current) => ({
+                            ...current,
+                            imageUrl: file.url,
+                            imagePath: file.path,
+                          }))
+                        }
+                        onRemoved={() =>
+                          setForm((current) => ({
+                            ...current,
+                            imageUrl: "",
+                            imagePath: "",
+                          }))
+                        }
+                      />
+
+                      <div className="hidden h-full items-center justify-center lg:flex">
+                        <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          Or
+                        </span>
+                      </div>
+
+                      <AdminCard className="p-5">
+                        <FieldLabel>Paste image URL</FieldLabel>
+                        <AdminInput
+                          type="url"
+                          placeholder="https://example.com/course-cover.jpg"
+                          value={form.imageUrl}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              imageUrl: event.target.value,
+                            }))
+                          }
+                        />
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Uploaded assets keep their storage path. Direct URLs save as the display image.
+                        </p>
+
+                        {form.imageUrl ? (
+                          <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                            <div className="border-b border-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                              Preview
+                            </div>
+                            <div className="p-4">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={form.imageUrl}
+                                alt={form.title || "Course preview"}
+                                className="h-40 w-full rounded-2xl object-cover"
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                      </AdminCard>
+                    </div>
                   </div>
                 </div>
+                <div>
+                  <FieldLabel>Category</FieldLabel>
+                  <AdminSelect value={form.categoryId} onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}>
+                    {categoryOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </AdminSelect>
+                </div>
+                <div>
+                  <FieldLabel>Instructor</FieldLabel>
+                  <AdminSelect value={form.instructorId} onChange={(event) => setForm((current) => ({ ...current, instructorId: event.target.value }))}>
+                    {instructorOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </AdminSelect>
+                </div>
+                <div>
+                  <FieldLabel>Level</FieldLabel>
+                  <AdminSelect value={form.level} onChange={(event) => setForm((current) => ({ ...current, level: event.target.value as CourseRow["level"] }))}>
+                    <option value="BEGINNER">Beginner</option>
+                    <option value="INTERMEDIATE">Intermediate</option>
+                    <option value="ADVANCED">Advanced</option>
+                    <option value="ALL_LEVELS">All Levels</option>
+                  </AdminSelect>
+                </div>
+                <div>
+                  <FieldLabel>Language</FieldLabel>
+                  <AdminInput value={form.language} onChange={(event) => setForm((current) => ({ ...current, language: event.target.value }))} />
+                </div>
+                <div>
+                  <FieldLabel>Price</FieldLabel>
+                  <AdminInput type="number" step="0.01" value={String(form.price)} onChange={(event) => setForm((current) => ({ ...current, price: Number(event.target.value) }))} />
+                </div>
+                <div className="grid gap-3">
+                  <AdminSwitch checked={form.isFree} onChange={(value) => setForm((current) => ({ ...current, isFree: value }))} label="Free Course" />
+                  <AdminSwitch checked={form.isFeatured} onChange={(value) => setForm((current) => ({ ...current, isFeatured: value }))} label="Featured" />
+                  <AdminSwitch checked={form.isTrending} onChange={(value) => setForm((current) => ({ ...current, isTrending: value }))} label="Trending" />
+                  <AdminSwitch checked={form.isRecommended} onChange={(value) => setForm((current) => ({ ...current, isRecommended: value }))} label="Recommended" />
+                  <AdminSwitch checked={form.isNew} onChange={(value) => setForm((current) => ({ ...current, isNew: value }))} label="Mark as New" />
+                </div>
+                <div className="md:col-span-2">
+                  <MediaUploader
+                    label="Thumbnail"
+                    hint="Optional secondary image for compact and legacy placements."
+                    folder="courses/thumbnails"
+                    accept="image/*"
+                    value={{
+                      url: form.thumbnailUrl,
+                      path: form.thumbnailPath,
+                      fileName: form.title || "Course thumbnail",
+                      mimeType: "image/*",
+                    }}
+                    onUploaded={(file) => setForm((current) => ({ ...current, thumbnailUrl: file.url, thumbnailPath: file.path }))}
+                    onRemoved={() => setForm((current) => ({ ...current, thumbnailUrl: "", thumbnailPath: "" }))}
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Tags</FieldLabel>
+                  <AdminTextarea rows={4} value={form.tagsText} onChange={(event) => setForm((current) => ({ ...current, tagsText: event.target.value }))} placeholder="One per line" />
+                </div>
+                <div>
+                  <FieldLabel>What Learners Will Achieve</FieldLabel>
+                  <AdminTextarea rows={4} value={form.whatYouLearnText} onChange={(event) => setForm((current) => ({ ...current, whatYouLearnText: event.target.value }))} placeholder="One per line" />
+                </div>
+                <div className="md:col-span-2">
+                  <FieldLabel>Requirements</FieldLabel>
+                  <AdminTextarea rows={4} value={form.requirementsText} onChange={(event) => setForm((current) => ({ ...current, requirementsText: event.target.value }))} placeholder="One per line" />
+                </div>
+              </div>
+            </div>
+          ) : activeTab === "structure" ? (
+            <CourseStructureBuilder
+              courseId={form.id || undefined}
+              sections={form.curriculum}
+              onChange={(curriculum) => setForm((current) => ({ ...current, curriculum }))}
+            />
+          ) : (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-lg font-black text-white">Course Assets</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Upload supplemental downloads that sit alongside the lesson curriculum.
+                </p>
+              </div>
 
-                <div className="grid gap-4">
-                  {(activeCourse?.assets || []).length === 0 ? (
-                    <AdminCard className="border-dashed p-6">
-                      <p className="text-sm text-slate-400">No supplemental assets uploaded yet for this course.</p>
-                    </AdminCard>
-                  ) : (
-                    activeCourse?.assets.map((asset) => {
-                      const Icon = getAssetIcon(asset.type);
-                      return (
-                        <AdminCard key={asset.id} className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300">
-                              <Icon className="h-5 w-5" />
-                            </div>
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-semibold text-white">{asset.title}</p>
-                                <StatusPill tone="info">{asset.type}</StatusPill>
+              {!form.id ? (
+                <AdminCard className="border-dashed p-6">
+                  <p className="text-sm text-slate-400">Save the course first to unlock the supplemental asset manager.</p>
+                </AdminCard>
+              ) : (
+                <>
+                  <div className="grid gap-5 md:grid-cols-3">
+                    <div>
+                      <FieldLabel>Asset Type</FieldLabel>
+                      <AdminSelect value={assetDraft.type} onChange={(event) => setAssetDraft((current) => ({ ...current, type: event.target.value as CourseAssetRow["type"] }))}>
+                        <option value="VIDEO">Video</option>
+                        <option value="AUDIO">Audio</option>
+                        <option value="PDF">PDF</option>
+                      </AdminSelect>
+                    </div>
+                    <div className="md:col-span-2">
+                      <FieldLabel>Asset Title</FieldLabel>
+                      <AdminInput value={assetDraft.title} onChange={(event) => setAssetDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Introduction PDF" />
+                    </div>
+                    <div className="md:col-span-3">
+                      <MediaUploader
+                        label="Upload Asset"
+                        hint="The file will attach immediately after upload."
+                        folder={`courses/assets/${form.id}`}
+                        accept="audio/*,video/*,application/pdf"
+                        onUploaded={handleAssetUploaded}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4">
+                    {(activeCourse?.assets || []).length === 0 ? (
+                      <AdminCard className="border-dashed p-6">
+                        <p className="text-sm text-slate-400">No supplemental assets uploaded yet for this course.</p>
+                      </AdminCard>
+                    ) : (
+                      activeCourse?.assets.map((asset) => {
+                        const Icon = getAssetIcon(asset.type);
+                        return (
+                          <AdminCard key={asset.id} className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300">
+                                <Icon className="h-5 w-5" />
                               </div>
-                              <p className="mt-1 text-xs text-slate-400">{asset.fileName}</p>
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-semibold text-white">{asset.title}</p>
+                                  <StatusPill tone="info">{asset.type}</StatusPill>
+                                </div>
+                                <p className="mt-1 text-xs text-slate-400">{asset.fileName}</p>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <AdminButton type="button" variant="secondary" onClick={() => window.open(asset.url, "_blank")}>
-                              Open
-                            </AdminButton>
-                            <AdminButton type="button" variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => handleDeleteAsset(asset.id)}>
-                              Delete
-                            </AdminButton>
-                          </div>
-                        </AdminCard>
-                      );
-                    })
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                            <div className="flex gap-2">
+                              <AdminButton type="button" variant="secondary" onClick={() => window.open(asset.url, "_blank")}>
+                                Open
+                              </AdminButton>
+                              <AdminButton type="button" variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => handleDeleteAsset(asset.id)}>
+                                Delete
+                              </AdminButton>
+                            </div>
+                          </AdminCard>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </AdminModal>
 
       <CourseBulkImportModal

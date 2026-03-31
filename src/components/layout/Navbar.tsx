@@ -1,445 +1,676 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+
+import * as Dialog from "@radix-ui/react-dialog";
+import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import {
-  Brain, ShoppingCart, Menu, X, Search, Sun, Moon,
-  GraduationCap, Award, Settings, LogOut, ChevronDown, Trophy,
+  BookOpen,
+  Brain,
+  ChevronDown,
+  GraduationCap,
+  Heart,
+  LogOut,
+  Menu,
+  MoonStar,
+  Search,
+  Shield,
+  ShoppingCart,
+  Star,
+  SunMedium,
+  Trophy,
+  X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useCartStore } from "@/store/cart";
 import { createClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import type { User } from "@supabase/supabase-js";
+import { useCartStore } from "@/store/cart";
 
-const navLinks = [
+const desktopLinks = [
+  { label: "Home", href: "/" },
+  { label: "Courses", href: "/courses" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "Affiliate", href: "/affiliate" },
+];
+
+const drawerLinks = [
   { label: "Home", href: "/" },
   { label: "Courses", href: "/courses" },
   { label: "Pricing", href: "/pricing" },
   { label: "Blog", href: "/blog" },
   { label: "Leaderboard", href: "/leaderboard" },
+  { label: "Affiliate", href: "/affiliate" },
+  { label: "Wishlist", href: "/wishlist" },
+  { label: "Cart", href: "/cart" },
 ];
 
+const suggestionGroups = [
+  {
+    label: "Courses",
+    href: "/courses",
+    icon: GraduationCap,
+    description: "Explore flagship AI tracks, certificates, and cohort-ready programs.",
+    keywords: ["courses", "class", "career", "certificates", "lessons", "training"],
+  },
+  {
+    label: "Free Resources",
+    href: "/blog",
+    icon: BookOpen,
+    description: "Discover free resources, learning guides, and weekly AI insights.",
+    keywords: ["free", "resources", "guides", "blog", "journal", "newsletter"],
+  },
+  {
+    label: "AI Tools",
+    href: "/blog?tag=AI%20Tools",
+    icon: Brain,
+    description: "Find practical AI tools, workflows, and implementation ideas.",
+    keywords: ["tools", "agents", "automation", "prompts", "workflow", "stack"],
+  },
+];
+
+const featuredSearches = ["Prompt engineering", "Beginner AI", "Free resources", "LLM tools"];
+
+function getDisplayName(user: User | null) {
+  if (!user) {
+    return "";
+  }
+
+  const fullName =
+    user.user_metadata?.full_name ||
+    user.user_metadata?.name ||
+    user.email?.split("@")[0] ||
+    "Member";
+
+  return String(fullName).trim();
+}
+
 export function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   const pathname = usePathname();
   const router = useRouter();
-  const cartCount = useCartStore((s) => s.itemCount)();
-  const { theme, setTheme } = useTheme();
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const cartCount = useCartStore((state) => state.itemCount)();
+  const { resolvedTheme, setTheme } = useTheme();
+  const navRef = useRef<HTMLElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const desktopSearchRef = useRef<HTMLDivElement>(null);
+  const mobileSearchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
-
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
+    const syncRole = async (nextUser: User | null) => {
+      setUser(nextUser);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user ?? null);
+      if (!nextUser) {
+        setUserRole(null);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/auth/sync-user", {
+          method: "POST",
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to sync the current user role.");
+        }
+
+        const payload = await response.json();
+        setUserRole(payload.user?.role ?? null);
+      } catch {
+        const fallbackRole =
+          typeof nextUser.user_metadata?.role === "string"
+            ? nextUser.user_metadata.role
+            : typeof nextUser.app_metadata?.role === "string"
+              ? nextUser.app_metadata.role
+              : null;
+
+        setUserRole(fallbackRole);
+      }
+    };
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      void syncRole(user);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_, session) => {
+      void syncRole(session?.user ?? null);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
+    const updateNavbarHeight = () => {
+      const nextHeight = navRef.current?.offsetHeight ?? 0;
+      document.documentElement.style.setProperty("--navbar-height", `${nextHeight}px`);
+    };
+
+    updateNavbarHeight();
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => updateNavbarHeight())
+        : null;
+
+    if (navRef.current && resizeObserver) {
+      resizeObserver.observe(navRef.current);
+    }
+
+    return () => {
+      resizeObserver?.disconnect();
+      document.documentElement.style.setProperty("--navbar-height", "0px");
+    };
   }, []);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setProfileOpen(false);
       }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+
+      const clickedInsideDesktop = desktopSearchRef.current?.contains(event.target as Node) ?? false;
+      const clickedInsideMobile = mobileSearchRef.current?.contains(event.target as Node) ?? false;
+
+      if (!clickedInsideDesktop && !clickedInsideMobile) {
+        setSearchFocused(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
   async function handleSignOut() {
     const supabase = createClient();
-    console.log("[navbar] Signing out");
     await supabase.auth.signOut();
+    setUserRole(null);
     setProfileOpen(false);
+    setMenuOpen(false);
     router.push("/");
     router.refresh();
   }
 
-  const displayName: string =
-    user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Learner";
+  function submitSearch(query = searchQuery) {
+    const nextQuery = query.trim();
+    setSearchFocused(false);
+    setMenuOpen(false);
 
-  const userInitials: string = displayName
-    .split(" ")
-    .map((n: string) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+    if (!nextQuery) {
+      router.push("/courses");
+      return;
+    }
 
-  const avatarUrl: string | undefined = user?.user_metadata?.avatar_url;
+    router.push(`/courses?q=${encodeURIComponent(nextQuery)}`);
+  }
+
+  const displayName = getDisplayName(user);
+  const firstName = displayName.split(" ")[0] || "Member";
+  const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+
+  const filteredSuggestions = useMemo(() => {
+    const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return suggestionGroups;
+    }
+
+    return suggestionGroups.filter((suggestion) => {
+      const searchable = `${suggestion.label} ${suggestion.description} ${suggestion.keywords.join(" ")}`.toLowerCase();
+      return searchable.includes(normalizedQuery);
+    });
+  }, [deferredSearchQuery]);
+
+  const profileLinks = [
+    { label: "My Dashboard", href: "/dashboard", icon: GraduationCap },
+    { label: "Leaderboard", href: "/leaderboard", icon: Trophy },
+    { label: "Reviews", href: "/reviews", icon: Star },
+    { label: "Courses", href: "/courses", icon: BookOpen },
+    ...(isAdmin ? [{ label: "Admin Console", href: "/admin", icon: Shield }] : []),
+  ];
+
+  const showSearchSuggestions = searchFocused && (filteredSuggestions.length > 0 || !deferredSearchQuery.trim());
 
   return (
-    <>
+    <Dialog.Root open={menuOpen} onOpenChange={setMenuOpen}>
       <nav
-        className={cn(
-          "fixed top-0 left-0 right-0 z-50 transition-all duration-200",
-          scrolled
-            ? "bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-b border-slate-200 dark:border-slate-800 shadow-sm"
-            : "bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800"
-        )}
+        ref={navRef}
+        className="sticky top-[var(--announcement-height)] z-[90] border-b border-slate-200/80 bg-white/95 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.3)] backdrop-blur-xl"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-
-            {/* Logo */}
-            <Link href="/" className="flex items-center gap-2.5 shrink-0">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-sm">
-                <Brain className="w-4 h-4 text-white" />
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="hidden min-h-[76px] items-center gap-4 lg:flex">
+            <Link href="/" className="flex shrink-0 items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 text-white shadow-[0_16px_36px_-18px_rgba(37,99,235,0.8)]">
+                <Brain className="h-[18px] w-[18px]" />
               </div>
-              <span className="font-bold text-base text-slate-900 dark:text-white tracking-tight">
-                AI Learning <span className="text-blue-600">Class</span>
+              <span className="text-[15px] font-black uppercase tracking-[0.18em] text-slate-950">
+                AI LEARNING CLASS
               </span>
             </Link>
 
-            {/* Desktop nav */}
-            <div className="hidden md:flex items-center gap-0.5">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                    pathname === link.href
-                      ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40"
-                      : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
-                  )}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-
-            {/* Right actions */}
-            <div className="flex items-center gap-1">
-
-              {/* Search */}
-              <button
-                type="button"
-                onClick={() => setSearchOpen(true)}
-                className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                aria-label="Search"
+            <div ref={desktopSearchRef} className="relative w-full max-w-[440px] flex-1 xl:max-w-[500px]">
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitSearch();
+                }}
+                className="group flex h-12 items-center gap-3 rounded-full border border-slate-300 bg-white px-4 shadow-[0_16px_34px_-28px_rgba(15,23,42,0.35)] transition-all focus-within:border-blue-300 focus-within:shadow-[0_20px_48px_-30px_rgba(37,99,235,0.35)]"
               >
-                <Search className="w-5 h-5" />
-              </button>
+                <Search className="h-[17px] w-[17px] shrink-0 text-slate-400 transition-colors group-focus-within:text-blue-500" />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onFocus={() => setSearchFocused(true)}
+                  placeholder="Search courses, blogs, AI tools..."
+                  className="h-full flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                />
+              </form>
 
-              {/* Theme toggle */}
-              {mounted && (
-                <button
-                  type="button"
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                  className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                  aria-label="Toggle theme"
-                >
-                  {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                </button>
-              )}
-
-              {/* Cart */}
-              <Link
-                href="/cart"
-                className="relative p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                aria-label="Shopping cart"
-              >
-                <ShoppingCart className="w-5 h-5" />
-                {cartCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                    {cartCount}
-                  </span>
-                )}
-              </Link>
-
-              {/* Authenticated — avatar + dropdown */}
-              {user ? (
-                <div className="relative ml-1" ref={profileRef}>
-                  <button
-                    type="button"
-                    onClick={() => setProfileOpen(!profileOpen)}
-                    className="flex items-center gap-1 p-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    aria-label="Profile menu"
-                    aria-expanded={profileOpen}
+              <AnimatePresence>
+                {showSearchSuggestions ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: 0.14 }}
+                    className="absolute inset-x-0 top-full mt-3 overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-[0_28px_80px_-40px_rgba(15,23,42,0.35)]"
                   >
-                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center overflow-hidden ring-2 ring-white dark:ring-slate-900">
-                      {avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-white text-xs font-bold">{userInitials}</span>
-                      )}
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        "w-3.5 h-3.5 text-slate-400 transition-transform duration-200",
-                        profileOpen && "rotate-180"
-                      )}
-                    />
-                  </button>
+                    <div className="p-4">
+                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Quick jump
+                      </p>
+                      <div className="space-y-2">
+                        {(filteredSuggestions.length > 0 ? filteredSuggestions : suggestionGroups).map(
+                          ({ href, icon: Icon, label, description }) => (
+                            <button
+                              key={href}
+                              type="button"
+                              onClick={() => {
+                                setSearchFocused(false);
+                                setSearchQuery("");
+                                router.push(href);
+                              }}
+                              className="flex w-full items-start gap-3 rounded-2xl border border-transparent px-3 py-3 text-left transition-all hover:border-orange-200 hover:bg-orange-50/60"
+                            >
+                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-blue-600">
+                                <Icon className="h-[18px] w-[18px]" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">{label}</p>
+                                <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+                              </div>
+                            </button>
+                          )
+                        )}
+                      </div>
 
-                  <AnimatePresence>
-                    {profileOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                        transition={{ duration: 0.12 }}
-                        className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden z-50"
-                      >
-                        {/* User header */}
-                        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-                          <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                            {displayName}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                            {user.email}
-                          </p>
-                        </div>
-
-                        <div className="py-1">
-                          <Link
-                            href="/dashboard"
-                            onClick={() => setProfileOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                          >
-                            <GraduationCap className="w-4 h-4 text-slate-400" />
-                            My Learning
-                          </Link>
-                          <Link
-                            href="/certificates"
-                            onClick={() => setProfileOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                          >
-                            <Award className="w-4 h-4 text-slate-400" />
-                            Certificates
-                          </Link>
-                          <Link
-                            href="/settings"
-                            onClick={() => setProfileOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                          >
-                            <Settings className="w-4 h-4 text-slate-400" />
-                            Settings
-                          </Link>
-                        </div>
-
-                        <div className="border-t border-slate-100 dark:border-slate-800 py-1">
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {featuredSearches.map((term) => (
                           <button
+                            key={term}
                             type="button"
-                            onClick={handleSignOut}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                            onClick={() => {
+                              setSearchQuery(term);
+                              submitSearch(term);
+                            }}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-700 transition-all hover:border-blue-200 hover:text-blue-700"
                           >
-                            <LogOut className="w-4 h-4" />
-                            Sign out
+                            {term}
                           </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              ) : (
-                /* Unauthenticated */
-                <div className="hidden sm:flex items-center gap-2 ml-1">
-                  <Link
-                    href="/login"
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    href="/signup"
-                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm"
-                  >
-                    Sign Up Free
-                  </Link>
-                </div>
-              )}
-
-              {/* Mobile hamburger */}
-              <button
-                type="button"
-                onClick={() => setMobileOpen(!mobileOpen)}
-                className="md:hidden p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ml-1"
-                aria-label="Toggle menu"
-              >
-                {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-              </button>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </div>
-          </div>
-        </div>
 
-        {/* Mobile menu */}
-        <AnimatePresence>
-          {mobileOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="md:hidden overflow-hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
-            >
-              <div className="px-4 py-4 space-y-1">
-                {navLinks.map((link) => (
+            <div className="flex items-center gap-1">
+              {desktopLinks.map((link) => {
+                const active = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
+
+                return (
                   <Link
                     key={link.href}
                     href={link.href}
-                    onClick={() => setMobileOpen(false)}
                     className={cn(
-                      "block px-4 py-3 rounded-lg text-sm font-medium transition-colors",
-                      pathname === link.href
-                        ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40"
-                        : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                      "rounded-full px-3.5 py-2 text-sm font-semibold transition-all",
+                      active ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
                     )}
                   >
                     {link.label}
                   </Link>
-                ))}
+                );
+              })}
+            </div>
 
-                {!user ? (
-                  <div className="pt-4 flex flex-col gap-2 border-t border-slate-100 dark:border-slate-800 mt-2">
-                    <Link
-                      href="/login"
-                      onClick={() => setMobileOpen(false)}
-                      className="block text-center px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium transition-colors"
-                    >
-                      Log in
-                    </Link>
-                    <Link
-                      href="/signup"
-                      onClick={() => setMobileOpen(false)}
-                      className="block text-center px-4 py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors"
-                    >
-                      Sign Up Free
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="pt-3 mt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
-                    <div className="px-4 py-2 mb-1">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{displayName}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
-                    </div>
-                    <Link
-                      href="/dashboard"
-                      onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <GraduationCap className="w-4 h-4" /> My Learning
-                    </Link>
-                    <Link
-                      href="/certificates"
-                      onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <Award className="w-4 h-4" /> Certificates
-                    </Link>
-                    <Link
-                      href="/settings"
-                      onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <Settings className="w-4 h-4" /> Settings
-                    </Link>
-                    <Link
-                      href="/leaderboard"
-                      onClick={() => setMobileOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
-                      <Trophy className="w-4 h-4" /> Leaderboard
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={handleSignOut}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                    >
-                      <LogOut className="w-4 h-4" /> Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </nav>
+            <div className="ml-auto flex items-center gap-2">
+              <Link
+                href="/wishlist"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
+                aria-label="Wishlist"
+              >
+                <Heart className="h-[18px] w-[18px]" />
+              </Link>
 
-      {/* Search modal */}
-      <AnimatePresence>
-        {searchOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-start justify-center pt-24 px-4"
-            onClick={(e) => { if (e.target === e.currentTarget) setSearchOpen(false); }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: -16, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -16, scale: 0.96 }}
-              transition={{ duration: 0.15 }}
-              className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-4"
-            >
-              <div className="flex items-center gap-3">
-                <Search className="w-5 h-5 text-blue-600 shrink-0" />
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder="Search courses, topics, instructors..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && searchQuery.trim()) {
-                      router.push(`/courses?q=${encodeURIComponent(searchQuery.trim())}`);
-                      setSearchOpen(false);
-                      setSearchQuery("");
-                    }
-                    if (e.key === "Escape") setSearchOpen(false);
-                  }}
-                  className="flex-1 bg-transparent text-slate-900 dark:text-white placeholder-slate-400 outline-none text-lg"
-                />
+              {mounted ? (
                 <button
                   type="button"
-                  onClick={() => setSearchOpen(false)}
-                  className="text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                  onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  aria-label="Toggle theme"
                 >
-                  <X className="w-5 h-5" />
+                  {resolvedTheme === "dark" ? <SunMedium className="h-[18px] w-[18px]" /> : <MoonStar className="h-[18px] w-[18px]" />}
                 </button>
+              ) : null}
+
+              <Link
+                href="/cart"
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                aria-label="Shopping cart"
+              >
+                <ShoppingCart className="h-[18px] w-[18px]" />
+                {cartCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
+                    {cartCount}
+                  </span>
+                ) : null}
+              </Link>
+
+              {user ? (
+                <div className="relative" ref={profileRef}>
+                  <button
+                    type="button"
+                    onClick={() => setProfileOpen((current) => !current)}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-[0_10px_26px_-24px_rgba(15,23,42,0.35)] transition-all hover:border-blue-300"
+                  >
+                    <span className="max-w-[88px] truncate">{firstName}</span>
+                    <ChevronDown className={cn("h-3.5 w-3.5 text-slate-500 transition-transform", profileOpen && "rotate-180")} />
+                  </button>
+
+                  <AnimatePresence>
+                    {profileOpen ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                        transition={{ duration: 0.14 }}
+                        className="absolute right-0 top-full z-20 mt-3 w-72 overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-[0_28px_80px_-38px_rgba(15,23,42,0.4)]"
+                      >
+                        <div className="border-b border-slate-100 bg-gradient-to-br from-blue-50 via-white to-orange-50 px-5 py-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Signed in
+                          </p>
+                          <p className="mt-2 text-base font-bold text-slate-950">{displayName}</p>
+                          <p className="mt-1 text-sm text-slate-500">{user.email}</p>
+                        </div>
+
+                        <div className="p-3">
+                          {profileLinks.map(({ href, icon: Icon, label }) => (
+                            <Link
+                              key={href}
+                              href={href}
+                              onClick={() => setProfileOpen(false)}
+                              className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 hover:text-slate-950"
+                            >
+                              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-100 text-blue-600">
+                                <Icon className="h-[18px] w-[18px]" />
+                              </span>
+                              {label}
+                            </Link>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={handleSignOut}
+                            className="mt-1 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium text-rose-600 transition-all hover:bg-rose-50"
+                          >
+                            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
+                              <LogOut className="h-[18px] w-[18px]" />
+                            </span>
+                            Logout
+                          </button>
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className="inline-flex h-10 items-center rounded-full bg-orange-500 px-4 text-sm font-bold text-white shadow-[0_18px_40px_-24px_rgba(249,115,22,0.95)] transition-all hover:bg-orange-400"
+                >
+                  Login
+                </Link>
+              )}
+
+              <Dialog.Trigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-50"
+                  aria-label="Open menu"
+                >
+                  <Menu className="h-[18px] w-[18px]" />
+                </button>
+              </Dialog.Trigger>
+            </div>
+          </div>
+
+          <div className="space-y-3 py-3 lg:hidden">
+            <div className="flex items-center gap-2">
+              <Link href="/" className="flex min-w-0 flex-1 items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 text-white">
+                  <Brain className="h-[17px] w-[17px]" />
+                </div>
+                <span className="truncate text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 sm:text-[13px]">
+                  AI LEARNING CLASS
+                </span>
+              </Link>
+
+              <Link href="/wishlist" className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700" aria-label="Wishlist">
+                <Heart className="h-4 w-4" />
+              </Link>
+              {mounted ? (
+                <button
+                  type="button"
+                  onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700"
+                  aria-label="Toggle theme"
+                >
+                  {resolvedTheme === "dark" ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
+                </button>
+              ) : null}
+              <Link href="/cart" className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700" aria-label="Cart">
+                <ShoppingCart className="h-4 w-4" />
+                {cartCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[9px] font-bold text-white">
+                    {cartCount}
+                  </span>
+                ) : null}
+              </Link>
+
+              {user ? (
+                <Link
+                  href="/dashboard"
+                  className="inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800"
+                >
+                  <span className="max-w-[48px] truncate">{firstName}</span>
+                </Link>
+              ) : (
+                <Link href="/login" className="inline-flex h-9 items-center rounded-full bg-orange-500 px-3 text-xs font-bold text-white">
+                  Login
+                </Link>
+              )}
+
+              <Dialog.Trigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700"
+                  aria-label="Open menu"
+                >
+                  <Menu className="h-4 w-4" />
+                </button>
+              </Dialog.Trigger>
+            </div>
+
+            <div ref={mobileSearchRef} className="relative">
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitSearch();
+                }}
+                className="group flex h-11 items-center gap-3 rounded-full border border-slate-200 bg-white px-4 shadow-[0_12px_26px_-24px_rgba(15,23,42,0.35)]"
+              >
+                <Search className="h-[17px] w-[17px] shrink-0 text-slate-400 group-focus-within:text-blue-500" />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onFocus={() => setSearchFocused(true)}
+                  placeholder="Search courses, blogs, AI tools..."
+                  className="h-full flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                />
+              </form>
+
+              <AnimatePresence>
+                {showSearchSuggestions ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: 0.14 }}
+                    className="absolute inset-x-0 top-full mt-3 z-20 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_22px_64px_-34px_rgba(15,23,42,0.32)]"
+                  >
+                    <div className="p-4">
+                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Popular searches
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {featuredSearches.map((term) => (
+                          <button
+                            key={term}
+                            type="button"
+                            onClick={() => {
+                              setSearchQuery(term);
+                              submitSearch(term);
+                            }}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-700"
+                          >
+                            {term}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[118] bg-slate-950/55 backdrop-blur-sm" />
+          <Dialog.Content className="fixed inset-y-0 right-0 z-[119] w-[88vw] max-w-sm border-l border-slate-200 bg-white shadow-[0_40px_120px_-48px_rgba(15,23,42,0.4)] focus:outline-none">
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                  <Dialog.Title className="text-sm font-black uppercase tracking-[0.18em] text-slate-950">
+                    AI Learning Class
+                  </Dialog.Title>
+                  <Dialog.Description className="mt-1 text-sm text-slate-500">
+                    Explore every key page from one clean menu.
+                  </Dialog.Description>
+                </div>
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all hover:bg-slate-50"
+                    aria-label="Close menu"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </Dialog.Close>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3 font-medium uppercase tracking-wide">
-                  Popular searches
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {["Machine Learning", "GPT-4", "Python AI", "LangChain", "Computer Vision", "MLOps"].map((tag) => (
-                    <Link
-                      key={tag}
-                      href={`/courses?q=${encodeURIComponent(tag)}`}
-                      onClick={() => setSearchOpen(false)}
-                      className="px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
-                    >
-                      {tag}
-                    </Link>
-                  ))}
+              <div className="flex-1 overflow-y-auto px-5 py-5">
+                <div className="space-y-2">
+                  {drawerLinks.map((link) => {
+                    const active = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold transition-all",
+                          active ? "bg-blue-50 text-blue-700" : "bg-slate-50 text-slate-800 hover:bg-slate-100"
+                        )}
+                      >
+                        {link.label}
+                        <span className="text-slate-400">/</span>
+                      </Link>
+                    );
+                  })}
                 </div>
+
+                {user ? (
+                  <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Signed in as
+                    </p>
+                    <p className="mt-2 text-base font-bold text-slate-950">{displayName}</p>
+                    <p className="mt-1 text-sm text-slate-500">{user.email}</p>
+
+                    <div className="mt-4 space-y-2">
+                      {profileLinks.map(({ href, label }) => (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setMenuOpen(false)}
+                          className="flex rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-100"
+                        >
+                          {label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+
+              <div className="border-t border-slate-200 px-5 py-4">
+                {user ? (
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-slate-800"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                  </button>
+                ) : (
+                  <Link
+                    href="/login"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-orange-400"
+                  >
+                    Login
+                  </Link>
+                )}
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </nav>
+    </Dialog.Root>
   );
 }

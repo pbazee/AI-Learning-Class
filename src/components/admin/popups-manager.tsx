@@ -21,7 +21,7 @@ import {
   FieldLabel,
   StatusPill,
 } from "@/components/admin/ui";
-import { useToast } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/ToastProvider";
 
 type PopupRow = {
   id: string;
@@ -62,8 +62,8 @@ export function PopupsManager({ popups }: { popups: PopupRow[] }) {
     content: "",
     imageUrl: "",
     imagePath: "",
-    buttonText: "Shop now",
-    link: "/products",
+    buttonText: "Explore courses",
+    link: "/courses",
     showOn: "HOMEPAGE_ONLY" as PopupRow["showOn"],
     delaySeconds: 4,
     startsAt: "",
@@ -80,8 +80,8 @@ export function PopupsManager({ popups }: { popups: PopupRow[] }) {
       content: "",
       imageUrl: "",
       imagePath: "",
-      buttonText: "Shop now",
-      link: "/products",
+      buttonText: "Explore courses",
+      link: "/courses",
       showOn: "HOMEPAGE_ONLY",
       delaySeconds: 4,
       startsAt: "",
@@ -98,8 +98,8 @@ export function PopupsManager({ popups }: { popups: PopupRow[] }) {
       content: popup.content,
       imageUrl: popup.imageUrl || "",
       imagePath: popup.imagePath || "",
-      buttonText: popup.buttonText || "Shop now",
-      link: popup.link || "/products",
+      buttonText: popup.buttonText || "Explore courses",
+      link: popup.link || "/courses",
       showOn: popup.showOn,
       delaySeconds: popup.delaySeconds,
       startsAt: popup.startsAt || "",
@@ -221,17 +221,27 @@ export function PopupsManager({ popups }: { popups: PopupRow[] }) {
       <AdminModal
         open={open}
         onClose={() => setOpen(false)}
-        title="Create popup"
-        description="Publish promotional popups with a controlled delay and CTA."
+        title={form.id ? "Edit popup" : "Create popup"}
+        description="Publish promotional popups with a controlled delay, strong CTA placement, and shared Supabase media storage."
         size="xl"
         footer={
-          <div className="flex justify-end gap-3">
-            <AdminButton type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
-            </AdminButton>
-            <AdminButton type="button" busy={busy} onClick={handleSave}>
-              {form.id ? "Save popup" : "Create popup"}
-            </AdminButton>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+              Saves directly to the `popups` table.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <AdminButton type="button" variant="secondary" onClick={() => setOpen(false)}>
+                Cancel
+              </AdminButton>
+              <AdminButton
+                type="button"
+                busy={busy}
+                onClick={handleSave}
+                className="w-full bg-blue-600 px-7 py-3 text-base shadow-[0_24px_50px_-24px_rgba(37,99,235,0.95)] sm:w-auto"
+              >
+                Save Popup
+              </AdminButton>
+            </div>
           </div>
         }
       >
@@ -271,13 +281,27 @@ export function PopupsManager({ popups }: { popups: PopupRow[] }) {
                 <AdminInput type="number" min="0" value={String(form.delaySeconds)} onChange={(event) => setForm((current) => ({ ...current, delaySeconds: Number(event.target.value) }))} />
               </div>
             </div>
-            <div>
-              <FieldLabel>Expires at (optional)</FieldLabel>
-              <AdminInput type="datetime-local" value={form.endsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} />
+            <div className="grid gap-5 md:grid-cols-2">
+              <div>
+                <FieldLabel>Starts at (optional)</FieldLabel>
+                <AdminInput
+                  type="datetime-local"
+                  value={form.startsAt}
+                  onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))}
+                />
+              </div>
+              <div>
+                <FieldLabel>Expires at (optional)</FieldLabel>
+                <AdminInput
+                  type="datetime-local"
+                  value={form.endsAt}
+                  onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))}
+                />
+              </div>
             </div>
             <MediaUploader
               label="Popup Image (optional)"
-              hint="Upload a supporting image directly from your device."
+              hint="Upload a supporting image directly from your device into the shared Supabase admin bucket."
               folder="popups"
               accept="image/*"
               value={{
@@ -314,10 +338,23 @@ export function PopupsManager({ popups }: { popups: PopupRow[] }) {
               </p>
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button className="rounded-full bg-orange-500 px-4 py-2 text-sm font-semibold text-white">
-                  {form.buttonText || "Shop now"}
+                  {form.buttonText || "Explore courses"}
                 </button>
                 <StatusPill tone="info">{selectedShowOn}</StatusPill>
                 <StatusPill tone="warning">{form.delaySeconds}s delay</StatusPill>
+              </div>
+              <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Publish action
+                </p>
+                <AdminButton
+                  type="button"
+                  busy={busy}
+                  onClick={handleSave}
+                  className="mt-3 w-full justify-center bg-blue-600 px-6 py-3 text-base"
+                >
+                  Save Popup
+                </AdminButton>
               </div>
             </div>
           </AdminCard>

@@ -5,7 +5,7 @@ import { ArrowRight, Award, CreditCard, ShieldCheck, UserCircle2 } from "lucide-
 import { useRouter } from "next/navigation";
 import { getUserDetailsAction, updateUserRoleAction } from "@/app/admin/actions";
 import { AdminButton, AdminCard, AdminDrawer, AdminModal, AdminPageIntro, AdminStatCard, AdminStatGrid, StatusPill } from "@/components/admin/ui";
-import { useToast } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/ToastProvider";
 import { formatPrice } from "@/lib/utils";
 
 type UserRow = {

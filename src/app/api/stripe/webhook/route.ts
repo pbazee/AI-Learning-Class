@@ -1,6 +1,9 @@
 // src/app/api/stripe/webhook/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createAuditLog } from "@/lib/audit-log";
+import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
+import { evaluateAffiliateFraud } from "@/lib/growth-utils";
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -26,12 +29,34 @@ export async function POST(req: NextRequest) {
         if (affCode && totalAmount > 0) {
           const affiliate = await prisma.affiliate.findUnique({
             where: { affiliateCode: affCode },
+            include: {
+              user: {
+                select: {
+                  email: true,
+                },
+              },
+            },
           });
 
           if (affiliate && affiliate.status === "active") {
-            const program = await prisma.affiliateProgram.findFirst();
+            const existingConversion = await prisma.affiliateConversion.findFirst({
+              where: { orderId: session.id },
+            });
+
+            if (existingConversion) {
+              break;
+            }
+
+            const program = (await prisma.affiliateProgram.findFirst()) ?? DEFAULT_AFFILIATE_PROGRAM;
             const rate = program?.commissionRate ?? 20;
             const commission = parseFloat(((totalAmount * rate) / 100).toFixed(2));
+            const fraudAssessment = evaluateAffiliateFraud({
+              affiliateEmail: affiliate.user.email,
+              customerEmail,
+              enabled: program.fraudDetectionEnabled ?? true,
+            });
+            const eligibleAt = new Date(Date.now() + (program.payoutGraceDays ?? 30) * 86400000);
+            const creditedAt = fraudAssessment.fraudStatus === "clear" ? new Date() : null;
 
             await prisma.affiliateConversion.create({
               data: {
@@ -39,16 +64,44 @@ export async function POST(req: NextRequest) {
                 orderId: session.id,
                 amount: totalAmount,
                 commission,
-                status: "pending",
+                status: fraudAssessment.fraudStatus === "flagged" ? "flagged" : "pending",
+                fraudStatus: fraudAssessment.fraudStatus,
+                fraudReason: fraudAssessment.fraudReason,
+                eligibleAt,
+                creditedAt,
               },
             });
 
-            await prisma.affiliate.update({
-              where: { id: affiliate.id },
-              data: {
-                totalConversions: { increment: 1 },
-                totalEarnings: { increment: commission },
-                pendingPayout: { increment: commission },
+            if (creditedAt) {
+              await prisma.affiliate.update({
+                where: { id: affiliate.id },
+                data: {
+                  totalConversions: { increment: 1 },
+                  totalEarnings: { increment: commission },
+                  pendingPayout: { increment: commission },
+                },
+              });
+            }
+
+            await createAuditLog({
+              actorId: affiliate.userId,
+              action:
+                fraudAssessment.fraudStatus === "flagged"
+                  ? "affiliate_conversion.flagged"
+                  : "affiliate_conversion.tracked",
+              entityType: "AffiliateConversion",
+              entityId: session.id,
+              summary:
+                fraudAssessment.fraudStatus === "flagged"
+                  ? "Affiliate conversion was flagged for review."
+                  : "Affiliate conversion was tracked successfully.",
+              metadata: {
+                affiliateId: affiliate.id,
+                orderId: session.id,
+                amount: totalAmount,
+                commission,
+                eligibleAt: eligibleAt.toISOString(),
+                fraudReason: fraudAssessment.fraudReason,
               },
             });
           }

@@ -3,9 +3,13 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { AICopilot } from "@/components/courses/AICopilot";
+import { CourseReviewsSection } from "@/components/courses/CourseReviewsSection";
+import { useToast } from "@/components/ui/ToastProvider";
+import { enrollInFreeCourse } from "@/lib/course-enrollment";
 import { useCartStore } from "@/store/cart";
 import {
   Star,
@@ -22,6 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import {
   formatPrice,
@@ -31,29 +36,67 @@ import {
   levelLabel,
   cn,
 } from "@/lib/utils";
-import type { Course } from "@/types";
+import type { Course, CourseAccessState } from "@/types";
 
 const thumbnailFallback =
   "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop";
 
-export function CourseDetailClient({ course }: { course: Course }) {
+export function CourseDetailClient({
+  course,
+  viewer,
+  courseAccess,
+}: {
+  course: Course;
+  viewer: { id: string; name?: string | null } | null;
+  courseAccess?: CourseAccessState;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
   const modules = course.modules ?? [];
   const [expandedModule, setExpandedModule] = useState<string | null>(modules[0]?.id ?? null);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
   const { addItem, isInCart } = useCartStore();
   const inCart = isInCart(course.id);
+  const isFreeCourse = course.price === 0 || course.isFree;
+  const hasAccess = Boolean(courseAccess?.hasAccess);
+  const canInstantEnroll = Boolean(viewer?.id) && isFreeCourse;
 
-  function handleEnroll() {
+  function addCourseToCart() {
     if (!inCart) {
       addItem({
         courseId: course.id,
         title: course.title,
         price: course.price,
         originalPrice: course.originalPrice,
-        thumbnailUrl: course.thumbnailUrl,
+        thumbnailUrl: course.imageUrl || course.thumbnailUrl,
         instructorName: course.instructorName,
       });
     }
+  }
+
+  async function handlePrimaryAction() {
+    if (hasAccess && courseAccess?.lessonHref) {
+      router.push(courseAccess.lessonHref);
+      return;
+    }
+
+    if (canInstantEnroll) {
+      try {
+        setEnrolling(true);
+        const payload = await enrollInFreeCourse(course.id);
+        toast("Enrollment confirmed. Opening your course.", "success");
+        router.push(payload.redirectTo);
+        router.refresh();
+      } catch (error) {
+        toast(error instanceof Error ? error.message : "Unable to enroll right now.", "error");
+      } finally {
+        setEnrolling(false);
+      }
+      return;
+    }
+
+    addCourseToCart();
   }
 
   const discount =
@@ -64,16 +107,16 @@ export function CourseDetailClient({ course }: { course: Course }) {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="pt-16">
-        <div className="border-b border-blue-100 bg-gradient-to-b from-blue-50 via-white to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-950">
+      <div>
+        <div className="border-b border-primary-blue/10 bg-gradient-to-b from-primary-blue/10 via-white to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-950">
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <div className="mb-4 flex items-center gap-2">
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  <span className="text-sm font-medium text-primary-blue">
                     {course.categoryName}
                   </span>
-                  <span className="text-slate-600">›</span>
+                  <span className="text-slate-600">&gt;</span>
                   <span
                     className={cn(
                       "rounded-full border px-2.5 py-0.5 text-xs font-medium",
@@ -128,31 +171,32 @@ export function CourseDetailClient({ course }: { course: Course }) {
                         alt={course.instructorName}
                         width={44}
                         height={44}
-                        className="rounded-full ring-2 ring-blue-500/30"
+                        quality={100}
+                        className="rounded-full ring-2 ring-primary-blue/30"
                       />
                     )}
                     <div>
                       <p className="text-xs text-slate-500">Created by</p>
-                      <p className="font-semibold text-white">{course.instructorName}</p>
+                      <p className="font-semibold text-foreground">{course.instructorName}</p>
                     </div>
                   </div>
                 )}
 
                 <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1.5">
-                    <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <Clock className="h-4 w-4 text-primary-blue" />
                     {formatDuration(course.totalDuration)} total
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <BookOpen className="h-4 w-4 text-primary-blue" />
                     {course.totalLessons} lessons
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <Award className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <Award className="h-4 w-4 text-primary-blue" />
                     Certificate of completion
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <BarChart3 className="h-4 w-4 text-primary-blue" />
                     Lifetime access
                   </span>
                 </div>
@@ -165,6 +209,7 @@ export function CourseDetailClient({ course }: { course: Course }) {
                       src={course.thumbnailUrl || thumbnailFallback}
                       alt={course.title}
                       fill
+                      quality={100}
                       className="object-cover opacity-60 transition-all group-hover:opacity-80"
                     />
                     <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm transition-all group-hover:bg-white/30">
@@ -176,8 +221,14 @@ export function CourseDetailClient({ course }: { course: Course }) {
                   </div>
 
                   <div className="p-6">
-                    {course.isFree ? (
-                      <div className="mb-2 text-3xl font-black text-emerald-600 dark:text-emerald-400">
+                    {hasAccess ? (
+                      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {courseAccess?.statusLabel}
+                      </div>
+                    ) : null}
+                    {isFreeCourse ? (
+                      <div className="mb-2 text-3xl font-black text-primary-blue">
                         Free
                       </div>
                     ) : (
@@ -191,7 +242,7 @@ export function CourseDetailClient({ course }: { course: Course }) {
                           </span>
                         )}
                         {discount && (
-                          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                          <span className="text-sm font-bold text-primary-blue">
                             {discount}% off
                           </span>
                         )}
@@ -199,31 +250,49 @@ export function CourseDetailClient({ course }: { course: Course }) {
                     )}
 
                     {discount && (
-                      <p className="mb-4 text-xs text-rose-600 dark:text-rose-400">
+                      <p className="mb-4 text-xs text-primary-blue">
                         Flash sale - {discount}% off. Expires soon!
                       </p>
                     )}
 
                     <div className="space-y-3">
-                      {inCart ? (
+                      {hasAccess ? (
+                        <button
+                          type="button"
+                          onClick={handlePrimaryAction}
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90"
+                        >
+                          {courseAccess?.actionLabel ?? "Continue Learning"}
+                        </button>
+                      ) : canInstantEnroll ? (
+                        <button
+                          type="button"
+                          onClick={handlePrimaryAction}
+                          disabled={enrolling}
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90 disabled:opacity-70"
+                        >
+                          {enrolling ? "Enrolling..." : "Enroll for Free"}
+                        </button>
+                      ) : inCart ? (
                         <Link
                           href="/cart"
-                          className="block rounded-xl border border-emerald-200 bg-emerald-50 py-3.5 text-center font-semibold text-emerald-700 transition-all hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-400 dark:hover:bg-emerald-500/30"
+                          className="block rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3.5 text-center font-semibold text-primary-blue transition-all hover:bg-primary-blue/15"
                         >
                           <Check className="mr-2 inline h-4 w-4" /> Go to Cart
                         </Link>
                       ) : (
                         <button
-                          onClick={handleEnroll}
-                          className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition-colors hover:bg-blue-700"
+                          type="button"
+                          onClick={handlePrimaryAction}
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90"
                         >
-                          {course.isFree ? "Enroll for Free" : "Add to Cart"}
+                          Add to Cart
                         </button>
                       )}
 
                       <button
                         onClick={() => setCopilotOpen(true)}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-medium text-blue-700 transition-all hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-950/50"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3 text-sm font-medium text-primary-blue transition-all hover:bg-primary-blue/15"
                       >
                         <Sparkles className="h-4 w-4" /> Ask AI Copilot about this course
                       </button>
@@ -245,7 +314,7 @@ export function CourseDetailClient({ course }: { course: Course }) {
                           "Lifetime access",
                         ].map((item) => (
                           <li key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Check className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                            <Check className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
                             {item}
                           </li>
                         ))}
@@ -265,7 +334,7 @@ export function CourseDetailClient({ course }: { course: Course }) {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {course.whatYouLearn.map((item) => (
                   <div key={item} className="flex items-start gap-3 text-sm text-muted-foreground">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-blue" />
                     {item}
                   </div>
                 ))}
@@ -275,7 +344,7 @@ export function CourseDetailClient({ course }: { course: Course }) {
             <div>
               <h2 className="mb-2 text-2xl font-black text-foreground">Course Curriculum</h2>
               <p className="mb-6 text-sm text-muted-foreground">
-                {course.totalLessons} lessons · {formatDuration(course.totalDuration)} total length
+                {course.totalLessons} lessons / {formatDuration(course.totalDuration)} total length
               </p>
 
               {modules.length === 0 ? (
@@ -296,7 +365,7 @@ export function CourseDetailClient({ course }: { course: Course }) {
                         className="flex w-full items-center justify-between p-4 text-left transition-all hover:bg-muted/50"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-xs font-bold text-blue-600 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary-blue/20 bg-primary-blue/10 text-xs font-bold text-primary-blue">
                             {moduleIndex + 1}
                           </div>
                           <div>
@@ -323,18 +392,18 @@ export function CourseDetailClient({ course }: { course: Course }) {
                               <div className="flex items-center gap-3">
                                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted">
                                   {lesson.type === "QUIZ" ? (
-                                    <BarChart3 className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                                    <BarChart3 className="h-3.5 w-3.5 text-primary-blue" />
                                   ) : lesson.type === "PROJECT" || lesson.type === "ASSIGNMENT" ? (
                                     <Award className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                                   ) : lesson.type === "PDF" || lesson.type === "TEXT" ? (
-                                    <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                                    <FileText className="h-3.5 w-3.5 text-primary-blue" />
                                   ) : (
                                     <Play className="h-3.5 w-3.5 text-muted-foreground" />
                                   )}
                                 </div>
                                 <span className="text-sm text-foreground">{lesson.title}</span>
                                 {lesson.isPreview && (
-                                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                                  <span className="rounded-full bg-primary-blue/10 px-2 py-0.5 text-xs text-primary-blue">
                                     Preview
                                   </span>
                                 )}
@@ -356,6 +425,13 @@ export function CourseDetailClient({ course }: { course: Course }) {
                 </div>
               )}
             </div>
+
+            <CourseReviewsSection
+              courseId={course.id}
+              courseSlug={course.slug}
+              reviews={course.reviews ?? []}
+              viewer={viewer}
+            />
 
             <div>
               <h3 className="mb-4 text-lg font-bold text-foreground">Tags</h3>
@@ -380,3 +456,4 @@ export function CourseDetailClient({ course }: { course: Course }) {
     </div>
   );
 }
+

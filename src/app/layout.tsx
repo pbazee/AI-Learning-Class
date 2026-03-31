@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
-import { Toaster } from "@/components/ui/toaster";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 import { AnnouncementBarWrapper } from "@/components/landing/AnnouncementBarWrapper";
 
 const inter = Inter({
@@ -47,9 +47,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AnnouncementBarWrapper />
-          {children}
-          <Toaster />
+          <ToastProvider>
+            <AnnouncementBarWrapper />
+            {children}
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

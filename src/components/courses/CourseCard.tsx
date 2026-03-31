@@ -1,37 +1,78 @@
 "use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Star, Clock, Users, BookOpen, ShoppingCart, Check, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Loader2, Play, ShoppingCart, Star } from "lucide-react";
+import { resolveMediaUrl } from "@/lib/media";
+import { enrollInFreeCourse } from "@/lib/course-enrollment";
 import { useCartStore } from "@/store/cart";
-import { formatPrice, formatDuration, formatNumber, levelBadgeColor, levelLabel, cn } from "@/lib/utils";
-import type { Course } from "@/types";
+import { useToast } from "@/components/ui/ToastProvider";
+import { cn, formatDuration, formatNumber, formatPrice, levelBadgeColor, levelLabel } from "@/lib/utils";
+import type { Course, CourseAccessState } from "@/types";
 
 interface CourseCardProps {
   course: Course;
   index?: number;
+  viewerId?: string | null;
+  courseAccess?: CourseAccessState;
 }
 
-export function CourseCard({ course, index = 0 }: CourseCardProps) {
+export function CourseCard({ course, index = 0, viewerId, courseAccess }: CourseCardProps) {
+  const router = useRouter();
+  const { toast } = useToast();
   const { addItem, isInCart } = useCartStore();
+  const [enrolling, setEnrolling] = useState(false);
   const inCart = isInCart(course.id);
+  const isFreeCourse = course.price === 0 || course.isFree;
+  const hasAccess = Boolean(courseAccess?.hasAccess);
+  const canInstantEnroll = Boolean(viewerId) && isFreeCourse;
+  const heroImage = resolveMediaUrl({
+    url: course.imageUrl || course.thumbnailUrl,
+    path: course.imagePath,
+    fallback: "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200&h=1600&fit=crop",
+  });
+  const durationLabel = course.totalDuration > 0 ? formatDuration(course.totalDuration) : "Self-paced";
 
-  function handleAddToCart(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  async function handlePrimaryAction(event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (canInstantEnroll) {
+      try {
+        setEnrolling(true);
+        const payload = await enrollInFreeCourse(course.id);
+        toast("Enrollment confirmed. Opening your course.", "success");
+        router.push(payload.redirectTo);
+        router.refresh();
+      } catch (error) {
+        toast(error instanceof Error ? error.message : "Unable to enroll right now.", "error");
+      } finally {
+        setEnrolling(false);
+      }
+      return;
+    }
+
     addItem({
       courseId: course.id,
       title: course.title,
       price: course.price,
       originalPrice: course.originalPrice,
-      thumbnailUrl: course.thumbnailUrl,
+      thumbnailUrl: course.imageUrl || course.thumbnailUrl,
       instructorName: course.instructorName,
     });
   }
 
-  const discount = course.originalPrice && course.originalPrice > course.price
-    ? Math.round((1 - course.price / course.originalPrice) * 100)
-    : null;
+  function handleResumeLearning(event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (courseAccess?.lessonHref) {
+      router.push(courseAccess.lessonHref);
+    }
+  }
 
   return (
     <motion.div
@@ -41,132 +82,124 @@ export function CourseCard({ course, index = 0 }: CourseCardProps) {
       className="group"
     >
       <Link href={`/courses/${course.slug}`} className="block h-full">
-        <div className="relative h-full bg-card rounded-2xl overflow-hidden border border-border hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-300 hover:shadow-md flex flex-col">
+        <div className="relative flex h-full min-h-[520px] flex-col overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_28px_80px_-40px_rgba(2,6,23,0.95)] transition-all duration-500 hover:scale-[1.02] hover:border-primary-blue/35 hover:shadow-[0_36px_120px_-44px_rgba(59,130,246,0.38)]">
+          <Image
+            src={heroImage}
+            alt={course.title}
+            fill
+            quality={100}
+            sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-slate-950/20" />
+          <div className="absolute inset-x-0 bottom-0 h-[54%] bg-gradient-to-t from-slate-950 via-slate-950/96 via-45% to-transparent" />
 
-          {/* Thumbnail */}
-          <div className="relative aspect-video overflow-hidden">
-            <Image
-              src={course.thumbnailUrl || "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop"}
-              alt={course.title}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-
-            {/* Badges */}
-            <div className="absolute top-3 left-3 flex items-center gap-2">
-              {course.isTrending && (
-                <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-500 text-white">
-                  <Zap className="w-3 h-3" /> Trending
+          <div className="relative z-10 flex h-full flex-col p-5 text-white sm:p-6">
+            <div className="flex flex-wrap items-center gap-2">
+              {hasAccess ? (
+                <span className="rounded-[10px] border border-primary-blue/30 bg-primary-blue/12 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary-blue backdrop-blur-md">
+                  {courseAccess?.statusLabel}
                 </span>
-              )}
-              {course.isNew && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-600 text-white">
-                  New
-                </span>
-              )}
-              {course.isFree && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500 text-white">
-                  Free
-                </span>
-              )}
-            </div>
-
-            {/* Level */}
-            <div className="absolute bottom-3 left-3">
-              <span className={cn("px-2.5 py-1 rounded-full text-xs font-medium border backdrop-blur-sm", levelBadgeColor(course.level))}>
-                {levelLabel(course.level)}
-              </span>
-            </div>
-
-            {/* Discount */}
-            {discount && (
-              <div className="absolute top-3 right-3 w-10 h-10 rounded-full bg-rose-500 flex items-center justify-center">
-                <span className="text-xs font-black text-white">-{discount}%</span>
-              </div>
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="flex flex-col flex-1 p-5">
-            {/* Category */}
-            <span className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-2">{course.categoryName}</span>
-
-            {/* Title */}
-            <h3 className="font-bold text-foreground leading-snug mb-3 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-              {course.title}
-            </h3>
-
-            {/* Instructor */}
-            {course.instructorName && (
-              <p className="text-xs text-muted-foreground mb-3">{course.instructorName}</p>
-            )}
-
-            {/* Rating */}
-            <div className="flex items-center gap-2 mb-3">
-              <div className="flex items-center gap-0.5">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    className={cn(
-                      "w-3.5 h-3.5",
-                      i < Math.floor(course.rating)
-                        ? "text-amber-400 fill-amber-400"
-                        : "text-slate-300 dark:text-slate-600"
-                    )}
-                  />
-                ))}
-              </div>
-              <span className="text-sm font-semibold text-amber-500">{course.rating}</span>
-              <span className="text-xs text-muted-foreground">({formatNumber(course.totalRatings)})</span>
-            </div>
-
-            {/* Meta */}
-            <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
-              <span className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                {formatDuration(course.totalDuration)}
-              </span>
-              <span className="flex items-center gap-1">
-                <BookOpen className="w-3.5 h-3.5" />
-                {course.totalLessons} lessons
-              </span>
-              <span className="flex items-center gap-1">
-                <Users className="w-3.5 h-3.5" />
-                {formatNumber(course.totalStudents)}
-              </span>
-            </div>
-
-            {/* Price + Cart */}
-            <div className="flex items-center justify-between mt-auto pt-4 border-t border-border">
-              <div>
-                {course.isFree ? (
-                  <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">Free</span>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-black text-foreground">{formatPrice(course.price)}</span>
-                    {course.originalPrice && course.originalPrice > course.price && (
-                      <span className="text-sm text-muted-foreground line-through">{formatPrice(course.originalPrice)}</span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={handleAddToCart}
+              ) : null}
+              <span
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors",
-                  inCart
-                    ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800"
-                    : "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-950/60"
+                  "rounded-[10px] border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] backdrop-blur-md",
+                  levelBadgeColor(course.level)
                 )}
               >
-                {inCart ? (
-                  <><Check className="w-4 h-4" /> Added</>
-                ) : (
-                  <><ShoppingCart className="w-4 h-4" /> Add</>
-                )}
-              </button>
+                {levelLabel(course.level)}
+              </span>
+              {course.categoryName ? (
+                <span className="max-w-[11rem] truncate rounded-[10px] border border-white/12 bg-black/38 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-white/82 backdrop-blur-md">
+                  {course.categoryName}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-auto max-w-[16.5rem] space-y-3 pt-24 sm:pt-28">
+              <div className="space-y-3">
+                {/* Updated: smaller title + quieter pricing keep the catalog easier to scan. */}
+                <h3 className="line-clamp-2 text-[1.18rem] font-black leading-tight text-white drop-shadow-[0_4px_14px_rgba(2,6,23,0.84)] sm:text-[1.28rem]">
+                  {course.title}
+                </h3>
+
+                <div className="grid grid-cols-2 gap-3 text-xs text-slate-100 sm:text-sm">
+                  <div className="space-y-1">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-semibold">{course.rating.toFixed(1)}</span>
+                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                    </span>
+                    <p className="text-slate-200/88">{formatNumber(course.totalStudents)} students</p>
+                  </div>
+
+                  <div className="space-y-1 text-right">
+                    <p>{durationLabel}</p>
+                    <p className="text-slate-200/88">{course.totalLessons} lessons</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-end justify-between gap-2.5 border-t border-white/12 pt-3">
+                <div className="min-w-0">
+                  {isFreeCourse ? (
+                    <span className="text-[1.35rem] font-semibold leading-none text-primary-blue drop-shadow-[0_4px_14px_rgba(59,130,246,0.4)]">
+                      Free
+                    </span>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[1.25rem] font-semibold leading-none text-white drop-shadow-[0_4px_14px_rgba(2,6,23,0.8)]">
+                        {formatPrice(course.price)}
+                      </span>
+                      {course.originalPrice && course.originalPrice > course.price ? (
+                        <span className="text-xs text-slate-300/72 line-through">{formatPrice(course.originalPrice)}</span>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={hasAccess ? handleResumeLearning : handlePrimaryAction}
+                  disabled={enrolling && !hasAccess}
+                  className={cn(
+                    "inline-flex min-w-[116px] items-center justify-center gap-2 rounded-[16px] border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] transition-all duration-300 disabled:opacity-70",
+                    hasAccess
+                      ? "border-primary-blue bg-primary-blue text-white shadow-[0_16px_32px_-18px_rgba(59,130,246,0.9)] hover:bg-primary-blue/90"
+                      : canInstantEnroll
+                      ? "border-primary-blue bg-primary-blue text-white shadow-[0_16px_32px_-18px_rgba(59,130,246,0.9)] hover:bg-primary-blue/90"
+                      : inCart
+                        ? "border-primary-blue/25 bg-primary-blue/12 text-white"
+                        : "border-primary-blue bg-primary-blue text-white shadow-[0_16px_32px_-18px_rgba(59,130,246,0.9)] hover:bg-primary-blue/90"
+                  )}
+                >
+                  {hasAccess ? (
+                    <>
+                      <Play className="h-3.5 w-3.5" />
+                      {courseAccess?.actionLabel ?? "Continue Learning"}
+                    </>
+                  ) : enrolling ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Enrolling
+                    </>
+                  ) : canInstantEnroll ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      Enroll Free
+                    </>
+                  ) : inCart ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      Added
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-3.5 w-3.5" />
+                      Add to Cart
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { AnnouncementBar } from "./AnnouncementBar";
-import type { Announcement } from "@/types";
 
 export function AnnouncementBarWrapper() {
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const pathname = usePathname();
 
   useEffect(() => {
-    fetch("/api/announcements")
-      .then((res) => res.json())
-      .then((data) => setAnnouncements(data))
-      .catch(() => {});
-  }, []);
+    if (pathname.startsWith("/admin")) {
+      document.documentElement.style.setProperty("--announcement-height", "0px");
+    }
+  }, [pathname]);
 
-  return <AnnouncementBar announcements={announcements} />;
+  if (pathname.startsWith("/admin")) {
+    return null;
+  }
+
+  return <AnnouncementBar />;
 }

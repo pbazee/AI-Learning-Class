@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { AICopilot } from "@/components/courses/AICopilot";
+import { useToast } from "@/components/ui/ToastProvider";
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,17 +22,160 @@ import {
   Flag,
   Volume2,
   ExternalLink,
+  Loader2,
+  NotebookText,
+  Clock3,
+  Save,
+  Grip,
+  Maximize2,
 } from "lucide-react";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { Course } from "@/types";
+
+type LessonPlayerNote = {
+  id: string;
+  content: string;
+  timestamp: string;
+};
+
+type NotesPanelPosition = {
+  x: number;
+  y: number;
+};
+
+type NotesPanelSize = {
+  width: number;
+  height: number;
+};
+
+const savedAtFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const NOTES_PANEL_OPEN_KEY = "ai-learning-class:lesson-notes-panel-open";
+const NOTES_PANEL_POSITION_KEY = "ai-learning-class:lesson-notes-panel-position";
+const NOTES_PANEL_SIZE_KEY = "ai-learning-class:lesson-notes-panel-size";
+const DESKTOP_BREAKPOINT = 1024;
+const DESKTOP_PANEL_MIN_WIDTH = 340;
+const DESKTOP_PANEL_MIN_HEIGHT = 320;
+const DESKTOP_PANEL_DEFAULT_SIZE: NotesPanelSize = {
+  width: 420,
+  height: 460,
+};
+
+function formatSavedAt(value: string) {
+  return savedAtFormatter.format(new Date(value));
+}
+
+function isDesktopViewport() {
+  return typeof window !== "undefined" && window.innerWidth >= DESKTOP_BREAKPOINT;
+}
+
+function getDefaultPanelPosition(size: NotesPanelSize): NotesPanelPosition {
+  if (typeof window === "undefined") {
+    return { x: 24, y: 96 };
+  }
+
+  const margin = 24;
+  return {
+    x: Math.max(margin, window.innerWidth - size.width - margin),
+    y: 96,
+  };
+}
+
+function clampPanelPosition(position: NotesPanelPosition, size: NotesPanelSize) {
+  if (typeof window === "undefined") {
+    return position;
+  }
+
+  const horizontalMargin = 16;
+  const topMargin = 88;
+  const maxX = Math.max(horizontalMargin, window.innerWidth - size.width - horizontalMargin);
+  const maxY = Math.max(topMargin, window.innerHeight - size.height - horizontalMargin);
+
+  return {
+    x: Math.min(Math.max(position.x, horizontalMargin), maxX),
+    y: Math.min(Math.max(position.y, topMargin), maxY),
+  };
+}
+
+function readStoredPanelSize() {
+  if (typeof window === "undefined") {
+    return DESKTOP_PANEL_DEFAULT_SIZE;
+  }
+
+  const rawValue = window.localStorage.getItem(NOTES_PANEL_SIZE_KEY);
+
+  if (!rawValue) {
+    return DESKTOP_PANEL_DEFAULT_SIZE;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<NotesPanelSize>;
+    return {
+      width: Math.max(DESKTOP_PANEL_MIN_WIDTH, Math.round(parsed.width ?? DESKTOP_PANEL_DEFAULT_SIZE.width)),
+      height: Math.max(
+        DESKTOP_PANEL_MIN_HEIGHT,
+        Math.round(parsed.height ?? DESKTOP_PANEL_DEFAULT_SIZE.height)
+      ),
+    };
+  } catch {
+    return DESKTOP_PANEL_DEFAULT_SIZE;
+  }
+}
+
+function readStoredPanelPosition(size: NotesPanelSize) {
+  if (typeof window === "undefined") {
+    return getDefaultPanelPosition(size);
+  }
+
+  const rawValue = window.localStorage.getItem(NOTES_PANEL_POSITION_KEY);
+
+  if (!rawValue) {
+    return getDefaultPanelPosition(size);
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<NotesPanelPosition>;
+    return clampPanelPosition(
+      {
+        x: Math.round(parsed.x ?? getDefaultPanelPosition(size).x),
+        y: Math.round(parsed.y ?? getDefaultPanelPosition(size).y),
+      },
+      size
+    );
+  } catch {
+    return getDefaultPanelPosition(size);
+  }
+}
+
+function readStoredPanelOpenState() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(NOTES_PANEL_OPEN_KEY) === "true";
+}
 
 export function LessonPlayerClient({
   course,
   initialLessonId,
+  viewerId,
+  initialCompletedLessonIds,
+  initialNotes,
+  initialNoteContent,
 }: {
   course: Course;
   initialLessonId: string;
+  viewerId: string | null;
+  initialCompletedLessonIds: string[];
+  initialNotes: LessonPlayerNote[];
+  initialNoteContent: string;
 }) {
+  const { toast } = useToast();
   const modules = course.modules ?? [];
   const allLessons = useMemo(() => modules.flatMap((module) => module.lessons), [modules]);
   const currentLesson = allLessons.find((lesson) => lesson.id === initialLessonId) ?? allLessons[0];
@@ -54,16 +198,331 @@ export function LessonPlayerClient({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [tab, setTab] = useState<"overview" | "notes" | "resources">("overview");
-  const [completed, setCompleted] = useState(false);
+  const [completedLessonIds, setCompletedLessonIds] = useState(initialCompletedLessonIds);
+  const [completionPending, setCompletionPending] = useState(false);
+  const [noteContent, setNoteContent] = useState(initialNoteContent);
+  const [savedNoteContent, setSavedNoteContent] = useState(initialNoteContent);
+  const [savedNotes, setSavedNotes] = useState(initialNotes);
+  const [noteState, setNoteState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">(
+    initialNoteContent ? "saved" : "idle"
+  );
+  const [notesPanelOpen, setNotesPanelOpen] = useState(readStoredPanelOpenState);
+  const [isDesktopPanel, setIsDesktopPanel] = useState(isDesktopViewport);
+  const [notesPanelSize, setNotesPanelSize] = useState<NotesPanelSize>(readStoredPanelSize);
+  const [notesPanelPosition, setNotesPanelPosition] = useState<NotesPanelPosition>(() =>
+    readStoredPanelPosition(readStoredPanelSize())
+  );
+  const [isDraggingNotesPanel, setIsDraggingNotesPanel] = useState(false);
+  const notesPanelRef = useRef<HTMLDivElement | null>(null);
+  const notesPanelDragStateRef = useRef<{
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
 
   useEffect(() => {
-    setCompleted(false);
-  }, [currentLesson.id]);
+    setCompletedLessonIds(initialCompletedLessonIds);
+  }, [initialCompletedLessonIds]);
 
-  const progress =
-    allLessons.length > 0 && currentIndex >= 0
-      ? Math.round(((currentIndex + 1) / allLessons.length) * 100)
-      : 0;
+  useEffect(() => {
+    setNoteContent(initialNoteContent);
+    setSavedNoteContent(initialNoteContent);
+    setSavedNotes(initialNotes);
+    setNoteState(initialNoteContent ? "saved" : "idle");
+  }, [currentLesson.id, initialNoteContent, initialNotes]);
+
+  useEffect(() => {
+    if (noteState === "saving") {
+      return;
+    }
+
+    if (noteContent !== savedNoteContent) {
+      setNoteState("dirty");
+      return;
+    }
+
+    setNoteState(savedNoteContent.trim().length > 0 ? "saved" : "idle");
+  }, [noteContent, noteState, savedNoteContent]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncViewport = () => {
+      const nextIsDesktop = isDesktopViewport();
+      setIsDesktopPanel(nextIsDesktop);
+
+      if (nextIsDesktop) {
+        setNotesPanelPosition((current) => clampPanelPosition(current, notesPanelSize));
+      }
+    };
+
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+
+    return () => window.removeEventListener("resize", syncViewport);
+  }, [notesPanelSize]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(NOTES_PANEL_OPEN_KEY, String(notesPanelOpen));
+  }, [notesPanelOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(NOTES_PANEL_SIZE_KEY, JSON.stringify(notesPanelSize));
+  }, [notesPanelSize]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(NOTES_PANEL_POSITION_KEY, JSON.stringify(notesPanelPosition));
+  }, [notesPanelPosition]);
+
+  useEffect(() => {
+    if (!notesPanelOpen || !isDesktopPanel || !notesPanelRef.current || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const panelEntry = entries[0];
+      if (!panelEntry) {
+        return;
+      }
+
+      const nextSize = {
+        width: Math.max(DESKTOP_PANEL_MIN_WIDTH, Math.round(panelEntry.contentRect.width)),
+        height: Math.max(DESKTOP_PANEL_MIN_HEIGHT, Math.round(panelEntry.contentRect.height)),
+      };
+
+      setNotesPanelSize((current) =>
+        current.width === nextSize.width && current.height === nextSize.height ? current : nextSize
+      );
+      setNotesPanelPosition((current) => clampPanelPosition(current, nextSize));
+    });
+
+    observer.observe(notesPanelRef.current);
+    return () => observer.disconnect();
+  }, [isDesktopPanel, notesPanelOpen]);
+
+  useEffect(() => {
+    if (!isDraggingNotesPanel) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const dragState = notesPanelDragStateRef.current;
+      if (!dragState) {
+        return;
+      }
+
+      setNotesPanelPosition(
+        clampPanelPosition(
+          {
+            x: event.clientX - dragState.offsetX,
+            y: event.clientY - dragState.offsetY,
+          },
+          notesPanelSize
+        )
+      );
+    };
+
+    const handlePointerUp = () => {
+      notesPanelDragStateRef.current = null;
+      setIsDraggingNotesPanel(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [isDraggingNotesPanel, notesPanelSize]);
+
+  useEffect(() => {
+    if (!viewerId) {
+      return;
+    }
+
+    // Updated: touching the lesson on open keeps resume links pointed at the learner's latest classroom location.
+    void fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ touchOnly: true }),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.progress?.completedLessonIds) {
+          return;
+        }
+
+        setCompletedLessonIds(payload.progress.completedLessonIds);
+      })
+      .catch(() => {});
+  }, [currentLesson.id, viewerId]);
+
+  const completedLessonSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
+  const completedCount = completedLessonSet.size;
+  const progress = allLessons.length > 0 ? Math.round((completedCount / allLessons.length) * 100) : 0;
+  const currentLessonCompleted = completedLessonSet.has(currentLesson.id);
+  const noteHasChanges = noteContent !== savedNoteContent;
+  const noteCanSave = noteContent.trim().length > 0 && noteHasChanges;
+
+  const updateCompletedLessonIds = useCallback((lessonId: string, isCompleted: boolean) => {
+    setCompletedLessonIds((current) => {
+      if (isCompleted) {
+        return current.includes(lessonId) ? current : [...current, lessonId];
+      }
+
+      return current.filter((entry) => entry !== lessonId);
+    });
+  }, []);
+
+  const persistLessonCompletion = useCallback(
+    async (isCompleted: boolean) => {
+      if (!viewerId) {
+        toast("Please sign in to track lesson progress.", "error");
+        return;
+      }
+
+      const previousLessonIds = completedLessonIds;
+      updateCompletedLessonIds(currentLesson.id, isCompleted);
+      setCompletionPending(true);
+
+      try {
+        const response = await fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ isCompleted }),
+        });
+
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Unable to update lesson progress.");
+        }
+
+        setCompletedLessonIds(payload.progress.completedLessonIds);
+        toast(isCompleted ? "Lesson marked complete." : "Lesson marked incomplete.", "success");
+      } catch (error) {
+        setCompletedLessonIds(previousLessonIds);
+        toast(
+          error instanceof Error ? error.message : "Unable to update lesson progress.",
+          "error"
+        );
+      } finally {
+        setCompletionPending(false);
+      }
+    },
+    [completedLessonIds, currentLesson.id, toast, updateCompletedLessonIds, viewerId]
+  );
+
+  const saveNote = useCallback(async () => {
+    if (!viewerId) {
+      toast("Please sign in to save notes to your workspace.", "error");
+      return false;
+    }
+
+    if (!noteContent.trim()) {
+      setNoteState("error");
+      toast("Add a few words before saving your notes.", "error");
+      return false;
+    }
+
+    if (!noteHasChanges) {
+      setNoteState(savedNoteContent ? "saved" : "idle");
+      toast("Your latest notes are already saved.", "success");
+      return false;
+    }
+
+    setNoteState("saving");
+
+    try {
+      const response = await fetch(`/api/learn/lessons/${currentLesson.id}/notes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: noteContent }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to save notes right now.");
+      }
+
+      setSavedNotes((current) => [payload.note, ...current]);
+      setSavedNoteContent(noteContent);
+      setNoteState("saved");
+      toast("Notes saved to this lesson.", "success");
+      return true;
+    } catch (error) {
+      setNoteState("error");
+      toast(error instanceof Error ? error.message : "Unable to save notes right now.", "error");
+      return false;
+    }
+  }, [currentLesson.id, noteContent, noteHasChanges, savedNoteContent, toast, viewerId]);
+
+  const openNotesPanel = useCallback(() => {
+    setNotesPanelOpen(true);
+    setTab("notes");
+  }, []);
+
+  const resetNotesPanelLayout = useCallback(() => {
+    setNotesPanelSize(DESKTOP_PANEL_DEFAULT_SIZE);
+    setNotesPanelPosition(getDefaultPanelPosition(DESKTOP_PANEL_DEFAULT_SIZE));
+  }, []);
+
+  const beginNotesPanelDrag = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!isDesktopPanel) {
+        return;
+      }
+
+      const target = event.target as HTMLElement;
+      if (target.closest("button")) {
+        return;
+      }
+
+      notesPanelDragStateRef.current = {
+        offsetX: event.clientX - notesPanelPosition.x,
+        offsetY: event.clientY - notesPanelPosition.y,
+      };
+      setIsDraggingNotesPanel(true);
+      event.preventDefault();
+    },
+    [isDesktopPanel, notesPanelPosition.x, notesPanelPosition.y]
+  );
+
+  const notesStatusLabel =
+    noteState === "saving"
+      ? "Saving notes..."
+      : noteState === "saved"
+        ? savedNotes[0]
+          ? `Saved ${formatSavedAt(savedNotes[0].timestamp)}`
+          : "Saved"
+        : noteState === "error"
+          ? "Save failed"
+          : noteState === "dirty"
+            ? "Unsaved changes"
+            : "No saved notes yet";
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -71,7 +530,7 @@ export function LessonPlayerClient({
         <div className="flex items-center gap-3">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="rounded-xl border border-border p-2 text-muted-foreground hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+            className="rounded-xl border border-border p-2 text-muted-foreground hover:border-primary-blue/30 hover:bg-primary-blue/10 hover:text-primary-blue"
           >
             {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
@@ -84,17 +543,39 @@ export function LessonPlayerClient({
           </Link>
         </div>
 
+        {/* Updated: course progress is driven by the learner's real completed lesson count. */}
         <div className="hidden items-center gap-3 md:flex">
-          <div className="h-2 w-36 overflow-hidden rounded-full bg-muted">
-            <div className="progress-glow h-full rounded-full" style={{ width: `${progress}%` }} />
+          <div className="h-2 w-44 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary-blue transition-[width] duration-300 ease-out"
+              style={{ width: `${progress}%` }}
+            />
           </div>
-          <span className="text-xs font-medium text-muted-foreground">{progress}% through course</span>
+          <div className="text-right">
+            <p className="text-xs font-semibold text-foreground">{progress}% through course</p>
+            <p className="text-[11px] text-muted-foreground">
+              {completedCount} / {allLessons.length} completed
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setNotesPanelOpen((current) => !current)}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
+              notesPanelOpen
+                ? "border-primary-blue bg-primary-blue text-white"
+                : "border-primary-blue/20 bg-primary-blue/10 text-primary-blue hover:bg-primary-blue/15"
+            )}
+          >
+            <NotebookText className="h-3.5 w-3.5" />
+            <span className="hidden sm:block">{notesPanelOpen ? "Hide Notes" : "Open Notes"}</span>
+          </button>
+
+          <button
             onClick={() => setCopilotOpen(!copilotOpen)}
-            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            className="inline-flex items-center gap-2 rounded-xl border border-primary-blue/20 bg-primary-blue/10 px-3 py-2 text-xs font-semibold text-primary-blue hover:bg-primary-blue/15"
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span className="hidden sm:block">AI Copilot</span>
@@ -103,13 +584,13 @@ export function LessonPlayerClient({
           {nextLesson ? (
             <Link
               href={`/learn/${course.slug}/${nextLesson.id}`}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary-blue px-3 py-2 text-xs font-semibold text-white hover:bg-primary-blue/90"
             >
               Next
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-primary-blue/20 bg-primary-blue/10 px-3 py-2 text-xs font-semibold text-primary-blue">
               <Award className="h-3.5 w-3.5" />
               Completed
             </span>
@@ -128,11 +609,24 @@ export function LessonPlayerClient({
               className="shrink-0 overflow-y-auto border-r border-border bg-card"
             >
               <div className="p-5">
-                <div className="mb-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    Course content
-                  </p>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Course content
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {completedCount} of {allLessons.length} lessons complete
+                    </p>
+                  </div>
+                  <Link
+                    href="/dashboard#workspace-notes"
+                    className="inline-flex items-center gap-1 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-blue hover:bg-primary-blue/15"
+                  >
+                    <NotebookText className="h-3 w-3" />
+                    My Workspace Notes
+                  </Link>
                 </div>
+
                 <div className="space-y-4">
                   {modules.map((module) => (
                     <div key={module.id} className="rounded-2xl border border-border bg-background/60 p-4">
@@ -143,27 +637,30 @@ export function LessonPlayerClient({
                       <div className="space-y-1.5">
                         {module.lessons.map((lesson) => {
                           const isActive = lesson.id === currentLesson.id;
+                          const isCompleted = completedLessonSet.has(lesson.id);
 
                           return (
                             <Link
                               key={lesson.id}
                               href={`/learn/${course.slug}/${lesson.id}`}
                               className={cn(
-                                "flex items-center gap-2 rounded-xl px-3 py-2 text-xs transition-all",
+                                "flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition-all",
                                 isActive
-                                  ? "border border-blue-200 bg-blue-50 text-blue-700"
-                                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  ? "border-primary-blue/20 bg-primary-blue/10 text-primary-blue"
+                                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
                               )}
                             >
                               <span className="shrink-0">
-                                {lesson.type === "QUIZ" ? (
-                                  <BarChart2 className="h-3.5 w-3.5 text-blue-600" />
+                                {isCompleted ? (
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-primary-blue" />
+                                ) : lesson.type === "QUIZ" ? (
+                                  <BarChart2 className="h-3.5 w-3.5 text-primary-blue" />
                                 ) : lesson.type === "PROJECT" || lesson.type === "ASSIGNMENT" ? (
                                   <Award className="h-3.5 w-3.5 text-amber-500" />
                                 ) : lesson.type === "AUDIO" ? (
-                                  <Volume2 className="h-3.5 w-3.5 text-cyan-500" />
+                                  <Volume2 className="h-3.5 w-3.5 text-primary-blue" />
                                 ) : lesson.type === "PDF" || lesson.type === "TEXT" ? (
-                                  <FileText className="h-3.5 w-3.5 text-blue-400" />
+                                  <FileText className="h-3.5 w-3.5 text-primary-blue" />
                                 ) : isActive ? (
                                   <Play className="h-3.5 w-3.5" />
                                 ) : (
@@ -172,7 +669,7 @@ export function LessonPlayerClient({
                               </span>
                               <span className="flex-1 line-clamp-1">{lesson.title}</span>
                               {lesson.isPreview && (
-                                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">
+                                <span className="rounded-full bg-primary-blue/10 px-2 py-0.5 text-[10px] text-primary-blue">
                                   Preview
                                 </span>
                               )}
@@ -196,15 +693,29 @@ export function LessonPlayerClient({
         <main className="flex-1 overflow-y-auto">
           <div className="border-b border-border bg-card">
             <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+              <div className="mb-4 flex items-center justify-between gap-4 md:hidden">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">{progress}% through course</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {completedCount} / {allLessons.length} completed
+                  </p>
+                </div>
+                <div className="h-2 w-32 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary-blue" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+
               <div className="overflow-hidden rounded-[28px] border border-slate-900 bg-slate-950 shadow-lg">
                 <div className="relative flex aspect-video w-full items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900">
                   {currentLesson.type === "VIDEO" && primaryAssetUrl ? (
                     <video controls className="h-full w-full bg-black" src={primaryAssetUrl} />
                   ) : currentLesson.type === "AUDIO" && primaryAssetUrl ? (
                     <div className="relative z-10 w-full max-w-2xl px-8 text-center">
-                      <Volume2 className="mx-auto mb-4 h-16 w-16 text-cyan-300" />
+                      <Volume2 className="mx-auto mb-4 h-16 w-16 text-primary-blue" />
                       <h3 className="mb-3 text-2xl font-bold text-white">{currentLesson.title}</h3>
-                      <p className="mb-6 text-slate-300">{currentLesson.description || "Listen directly inside the platform."}</p>
+                      <p className="mb-6 text-slate-300">
+                        {currentLesson.description || "Listen directly inside the platform."}
+                      </p>
                       <audio controls className="mx-auto w-full max-w-xl" src={primaryAssetUrl} />
                     </div>
                   ) : currentLesson.type === "PDF" && primaryAssetUrl ? (
@@ -215,12 +726,12 @@ export function LessonPlayerClient({
                     />
                   ) : currentLesson.type === "QUIZ" ? (
                     <div className="relative z-10 p-8 text-center">
-                      <BarChart2 className="mx-auto mb-4 h-16 w-16 text-blue-400" />
+                      <BarChart2 className="mx-auto mb-4 h-16 w-16 text-primary-blue" />
                       <h3 className="mb-2 text-2xl font-bold text-white">Module Quiz</h3>
                       <p className="mb-6 text-slate-300">
                         Test your understanding of the lesson material.
                       </p>
-                      <button className="rounded-xl bg-blue-600 px-8 py-3 font-semibold text-white hover:bg-blue-700">
+                      <button className="rounded-xl bg-primary-blue px-8 py-3 font-semibold text-white hover:bg-primary-blue/90">
                         Start quiz
                       </button>
                     </div>
@@ -238,7 +749,7 @@ export function LessonPlayerClient({
                           href={primaryAssetUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="rounded-xl bg-blue-600 px-8 py-3 font-semibold text-white hover:bg-blue-700"
+                          className="rounded-xl bg-primary-blue px-8 py-3 font-semibold text-white hover:bg-primary-blue/90"
                         >
                           Open assignment asset
                         </a>
@@ -246,7 +757,7 @@ export function LessonPlayerClient({
                     </div>
                   ) : (
                     <div className="relative z-10 max-w-2xl p-8 text-center">
-                      <FileText className="mx-auto mb-4 h-16 w-16 text-blue-400" />
+                      <FileText className="mx-auto mb-4 h-16 w-16 text-primary-blue" />
                       <h3 className="mb-2 text-2xl font-bold text-white">{currentLesson.title}</h3>
                       <p className="text-slate-300">
                         {currentLesson.content?.slice(0, 220) ||
@@ -265,22 +776,36 @@ export function LessonPlayerClient({
               <div>
                 <h1 className="mb-1 text-2xl font-black text-foreground">{currentLesson.title}</h1>
                 <p className="text-sm text-muted-foreground">
-                  {course.title} · {currentModule?.title}
+                  {course.title} / {currentModule?.title}
                 </p>
               </div>
 
-              <button
-                onClick={() => setCompleted(!completed)}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all",
-                  completed
-                    ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border border-border bg-card text-muted-foreground hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                )}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                {completed ? "Completed" : "Mark complete"}
-              </button>
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                {currentLessonCompleted ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-xs font-semibold text-primary-blue">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Completed
+                  </span>
+                ) : null}
+
+                <button
+                  onClick={() => void persistLessonCompletion(!currentLessonCompleted)}
+                  disabled={completionPending}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70",
+                    currentLessonCompleted
+                      ? "border border-border bg-card text-muted-foreground hover:border-primary-blue/20 hover:bg-primary-blue/10 hover:text-primary-blue"
+                      : "bg-primary-blue text-white hover:bg-primary-blue/90"
+                  )}
+                >
+                  {completionPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  {currentLessonCompleted ? "Mark incomplete" : "Mark complete"}
+                </button>
+              </div>
             </div>
 
             <div className="mb-8 flex items-center justify-between border-b border-border pb-6">
@@ -300,14 +825,17 @@ export function LessonPlayerClient({
               {nextLesson ? (
                 <Link
                   href={`/learn/${course.slug}/${nextLesson.id}`}
-                  className="group flex items-center gap-2 text-sm font-medium text-blue-700 hover:text-blue-800"
+                  className="group flex items-center gap-2 text-sm font-medium text-primary-blue hover:text-primary-blue/80"
                 >
                   <span className="hidden max-w-[220px] truncate sm:block">{nextLesson.title}</span>
                   <span className="sm:hidden">Next</span>
                   <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </Link>
               ) : (
-                <Link href={`/courses/${course.slug}`} className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+                <Link
+                  href={`/courses/${course.slug}`}
+                  className="flex items-center gap-2 text-sm font-medium text-primary-blue"
+                >
                   <Award className="h-4 w-4" />
                   Back to course
                 </Link>
@@ -318,10 +846,17 @@ export function LessonPlayerClient({
               {(["overview", "notes", "resources"] as const).map((entry) => (
                 <button
                   key={entry}
-                  onClick={() => setTab(entry)}
+                  onClick={() => {
+                    setTab(entry);
+                    if (entry === "notes") {
+                      setNotesPanelOpen(true);
+                    }
+                  }}
                   className={cn(
-                    "rounded-xl px-4 py-2 text-sm font-medium capitalize",
-                    tab === entry ? "bg-blue-600 text-white" : "text-muted-foreground hover:text-foreground"
+                    "rounded-xl px-4 py-2 text-sm font-medium capitalize transition-colors",
+                    tab === entry
+                      ? "bg-primary-blue text-white"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {entry}
@@ -344,11 +879,11 @@ export function LessonPlayerClient({
                   <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                     Was this helpful?
                   </span>
-                  <button className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700">
+                  <button className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:border-primary-blue/30 hover:bg-primary-blue/10 hover:text-primary-blue">
                     <ThumbsUp className="h-3.5 w-3.5" />
                     Yes
                   </button>
-                  <button className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600">
+                  <button className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:border-primary-blue/30 hover:bg-primary-blue/10 hover:text-primary-blue">
                     <Flag className="h-3.5 w-3.5" />
                     Report
                   </button>
@@ -357,19 +892,87 @@ export function LessonPlayerClient({
             )}
 
             {tab === "notes" && (
-              <div className="surface-card p-6">
-                <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-foreground">
-                  <FileText className="h-4 w-4 text-blue-600" />
-                  My notes
-                </h3>
-                <textarea
-                  placeholder="Take notes for this lesson. They can be saved to your workspace."
-                  rows={10}
-                  className="input-surface w-full resize-none"
-                />
-                <button className="mt-3 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-                  Save notes
-                </button>
+              <div className="space-y-5">
+                <div className="surface-card p-6">
+                  {/* Updated: lesson notes now live in a floating workspace so they stay available across every player tab. */}
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+                        <NotebookText className="h-4 w-4 text-primary-blue" />
+                        Floating lesson notes
+                      </h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Keep the panel open while you switch tabs. Notes save only when you click the blue Save Notes button.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openNotesPanel}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                    >
+                      <NotebookText className="h-4 w-4" />
+                      {notesPanelOpen ? "Focus Notes Panel" : "Open Notes Panel"}
+                    </button>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                        Current draft
+                      </p>
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                        {noteContent.trim().length > 0
+                          ? noteContent
+                          : viewerId
+                            ? "Open the floating notes panel to start writing for this lesson."
+                            : "Sign in to save notes for this lesson."}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        Save status
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-muted-foreground">{notesStatusLabel}</p>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        {savedNotes[0]
+                          ? `Latest lesson snapshot: ${formatSavedAt(savedNotes[0].timestamp)}`
+                          : "Saved note snapshots for this lesson will appear as you study."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="surface-card p-6" id="lesson-saved-notes">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h4 className="text-base font-bold text-foreground">Saved notes</h4>
+                    <Link
+                      href="/dashboard#workspace-notes"
+                      className="text-sm font-medium text-primary-blue hover:text-primary-blue/80"
+                    >
+                      View all workspace notes
+                    </Link>
+                  </div>
+
+                  {savedNotes.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Your saved note snapshots for this lesson will appear here.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {savedNotes.map((note) => (
+                        <div key={note.id} className="rounded-2xl border border-border bg-background/80 p-4">
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                            {formatSavedAt(note.timestamp)}
+                          </p>
+                          <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                            {note.content}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -388,14 +991,14 @@ export function LessonPlayerClient({
                       rel="noreferrer"
                       className="surface-card flex items-center gap-4 p-4"
                     >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
                         <Download className="h-4 w-4" />
                       </div>
                       <div className="flex-1">
                         <p className="text-sm font-medium text-foreground">{resource.name}</p>
                         <p className="text-xs text-muted-foreground">{resource.type.toUpperCase()}</p>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700">
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary-blue">
                         Open <ExternalLink className="h-3 w-3" />
                       </span>
                     </a>
@@ -419,6 +1022,132 @@ export function LessonPlayerClient({
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {notesPanelOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 12 }}
+            transition={{ duration: 0.18 }}
+            className="pointer-events-none fixed inset-0 z-40"
+          >
+            <div
+              ref={notesPanelRef}
+              className={cn(
+                "pointer-events-auto fixed overflow-hidden rounded-[28px] border border-border bg-card/96 shadow-[0_32px_90px_-40px_rgba(15,23,42,0.72)] backdrop-blur-xl",
+                isDesktopPanel
+                  ? "resize overflow-auto"
+                  : "inset-x-3 bottom-3 top-[5.25rem]"
+              )}
+              style={
+                isDesktopPanel
+                  ? {
+                      left: notesPanelPosition.x,
+                      top: notesPanelPosition.y,
+                      width: notesPanelSize.width,
+                      height: notesPanelSize.height,
+                      minWidth: DESKTOP_PANEL_MIN_WIDTH,
+                      minHeight: DESKTOP_PANEL_MIN_HEIGHT,
+                    }
+                  : undefined
+              }
+            >
+              {/* Updated: floating notes panel is draggable on desktop and stays open while the learner navigates the player. */}
+              <div
+                onPointerDown={beginNotesPanelDrag}
+                className={cn(
+                  "flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3",
+                  isDesktopPanel ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
+                    <NotebookText className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-foreground">Notes for {currentLesson.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">{notesStatusLabel}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {isDesktopPanel ? (
+                    <button
+                      type="button"
+                      onClick={resetNotesPanelLayout}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted-foreground hover:border-primary-blue/20 hover:bg-primary-blue/10 hover:text-primary-blue"
+                      aria-label="Reset notes panel layout"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setNotesPanelOpen(false)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted-foreground hover:border-primary-blue/20 hover:bg-primary-blue/10 hover:text-primary-blue"
+                    aria-label="Close notes panel"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex h-[calc(100%-4.25rem)] flex-col">
+                <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Grip className="h-3.5 w-3.5 text-primary-blue" />
+                    {isDesktopPanel ? "Drag from the header and resize from the corner." : "Floating notes panel"}
+                  </div>
+                  <Link
+                    href="/dashboard#workspace-notes"
+                    className="text-xs font-semibold text-primary-blue hover:text-primary-blue/80"
+                  >
+                    Workspace Notes
+                  </Link>
+                </div>
+
+                <div className="flex flex-1 flex-col gap-4 p-4">
+                  <textarea
+                    value={noteContent}
+                    onChange={(event) => setNoteContent(event.target.value)}
+                    placeholder={
+                      viewerId
+                        ? "Capture what matters from this lesson. Your save creates a timestamped snapshot for this lesson."
+                        : "Sign in to save notes for this lesson."
+                    }
+                    disabled={!viewerId}
+                    className="input-surface min-h-[220px] w-full flex-1 resize-none disabled:cursor-not-allowed disabled:opacity-70"
+                  />
+
+                  <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-xs text-muted-foreground">
+                      {noteHasChanges
+                        ? "You have unsaved changes for this lesson."
+                        : savedNotes[0]
+                          ? `Latest lesson snapshot: ${formatSavedAt(savedNotes[0].timestamp)}`
+                          : "No saved lesson snapshot yet."}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void saveNote()}
+                      disabled={!viewerId || !noteCanSave || noteState === "saving"}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {noteState === "saving" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                      Save Notes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

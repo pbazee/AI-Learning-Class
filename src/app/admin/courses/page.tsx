@@ -70,6 +70,8 @@ export default async function AdminCoursesPage() {
         slug: course.slug,
         description: course.description,
         shortDescription: course.shortDescription,
+        imageUrl: course.imageUrl,
+        imagePath: course.imagePath,
         categoryId: course.categoryId,
         categoryName: course.category.name,
         instructorId: course.instructorId,

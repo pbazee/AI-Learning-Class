@@ -14,6 +14,8 @@ export interface Course {
   slug: string;
   description: string;
   shortDescription?: string;
+  imageUrl?: string;
+  imagePath?: string;
   thumbnailUrl?: string;
   previewVideoUrl?: string;
   categoryId: string;
@@ -40,6 +42,19 @@ export interface Course {
   language?: string;
   modules?: Module[];
   assets?: CourseAsset[];
+  reviews?: CourseReview[];
+}
+
+export interface CourseAccessState {
+  courseId: string;
+  hasAccess: boolean;
+  statusLabel: "Owned" | "Enrolled";
+  actionLabel: "Continue Learning" | "Go to Classroom";
+  lessonHref: string;
+  progress: number;
+  completedLessons: number;
+  totalLessons: number;
+  lastLessonTitle?: string;
 }
 
 export interface Category {
@@ -47,6 +62,8 @@ export interface Category {
   name: string;
   slug: string;
   description?: string;
+  imageUrl?: string;
+  imagePath?: string;
   icon?: string;
   color?: string;
   isActive?: boolean;
@@ -90,6 +107,16 @@ export interface CourseAsset {
   mimeType?: string;
   sizeBytes?: number;
   order: number;
+}
+
+export interface CourseReview {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  rating: number;
+  title?: string;
+  body: string;
+  createdAt: string;
 }
 
 export interface User {

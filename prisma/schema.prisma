@@ -12,30 +12,36 @@ datasource db {
 
 // ====================== USERS ======================
 model User {
-  id               String    @id @default(uuid())
-  email            String    @unique
-  name             String?
-  avatarUrl        String?
-  role             Role      @default(STUDENT)
-  bio              String?
-  country          String?
+  id                String   @id @default(uuid())
+  email             String   @unique
+  name              String?
+  avatarUrl         String?
+  role              Role     @default(STUDENT)
+  bio               String?
+  country           String?
   preferredCurrency String   @default("USD")
-  stripeCustomerId String?   @unique
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  stripeCustomerId  String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  coursesTaught    Course[]           @relation("InstructorCourses")
-  enrollments      Enrollment[]
-  orders           Order[]
-  certificates     Certificate[]
-  reviews          Review[]
-  progress         LessonProgress[]
-  quizResults      QuizResult[]
-  aiChatSessions   AIChatSession[]
-  blogPosts        BlogPost[]         @relation("BlogAuthor")
-  blogComments     BlogComment[]
-  subscriptions    UserSubscription[]
-  affiliate        Affiliate?
+  coursesTaught      Course[]           @relation("InstructorCourses")
+  enrollments        Enrollment[]
+  orders             Order[]
+  certificates       Certificate[]
+  reviews            Review[]
+  progress           LessonProgress[]
+  quizResults        QuizResult[]
+  aiChatSessions     AIChatSession[]
+  blogPosts          BlogPost[]         @relation("BlogAuthor")
+  blogComments       BlogComment[]
+  subscriptions      UserSubscription[]
+  affiliate          Affiliate?
+  referralCode       String?            @unique
+  referredById       String?
+  earnedDiscountCode String?
+  referrals          Referral[]         @relation("ReferrerReferrals")
+  referredBy         Referral?          @relation("ReferredReferral")
+  auditLogs          AuditLog[]
 }
 
 enum Role {
@@ -47,13 +53,15 @@ enum Role {
 
 // ====================== CATEGORIES ======================
 model Category {
-  id          String     @id @default(uuid())
-  name        String     @unique
-  slug        String     @unique
-  description String?
-  icon        String?
-  color       String?
-  isActive    Boolean    @default(true)
+    id          String     @id @default(uuid())
+    name        String     @unique
+    slug        String     @unique
+    description String?
+    imageUrl    String?    @map("image_url")
+    imagePath   String?    @map("image_path")
+    icon        String?
+    color       String?
+    isActive    Boolean    @default(true)
   parentId    String?
   parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children    Category[] @relation("CategoryTree")
@@ -64,50 +72,52 @@ model Category {
 
 // ====================== COURSES ======================
 model Course {
-  id              String       @id @default(uuid())
-  title           String
-  slug            String       @unique
-  description     String
+  id               String   @id @default(uuid())
+  title            String
+  slug             String   @unique
+  description      String
   shortDescription String?
-  thumbnailUrl    String?
-  thumbnailPath   String?
-  previewVideoUrl String?
-  categoryId      String
-  category        Category     @relation(fields: [categoryId], references: [id])
-  instructorId    String
-  instructor      User         @relation("InstructorCourses", fields: [instructorId], references: [id])
-  level           Level        @default(BEGINNER)
-  language        String       @default("English")
-  price           Float        @default(0)
-  originalPrice   Float?
-  currency        String       @default("USD")
-  isFree          Boolean      @default(false)
-  isPublished     Boolean      @default(false)
-  isFeatured      Boolean      @default(false)
-  isTrending      Boolean      @default(false)
-  isRecommended   Boolean      @default(false)
-  isNew           Boolean      @default(true)
-  totalDuration   Int          @default(0) // in minutes
-  totalLessons    Int          @default(0)
-  totalStudents   Int          @default(0)
-  rating          Float        @default(0)
-  totalRatings    Int          @default(0)
-  tags            String[]
-  whatYouLearn    String[]
-  requirements    String[]
-  targetAudience  String[]
-  certificateType String?
-  metaTitle       String?
-  metaDescription String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  imageUrl         String?  @map("image_url")
+  imagePath        String?  @map("image_path")
+  thumbnailUrl     String?
+  thumbnailPath    String?
+  previewVideoUrl  String?
+  categoryId       String
+  category         Category @relation(fields: [categoryId], references: [id])
+  instructorId     String
+  instructor       User     @relation("InstructorCourses", fields: [instructorId], references: [id])
+  level            Level    @default(BEGINNER)
+  language         String   @default("English")
+  price            Float    @default(0)
+  originalPrice    Float?
+  currency         String   @default("USD")
+  isFree           Boolean  @default(false)
+  isPublished      Boolean  @default(false)
+  isFeatured       Boolean  @default(false)
+  isTrending       Boolean  @default(false)
+  isRecommended    Boolean  @default(false)
+  isNew            Boolean  @default(true)
+  totalDuration    Int      @default(0) // in minutes
+  totalLessons     Int      @default(0)
+  totalStudents    Int      @default(0)
+  rating           Float    @default(0)
+  totalRatings     Int      @default(0)
+  tags             String[]
+  whatYouLearn     String[]
+  requirements     String[]
+  targetAudience   String[]
+  certificateType  String?
+  metaTitle        String?
+  metaDescription  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  modules         Module[]
-  assets          CourseAsset[]
-  enrollments     Enrollment[]
-  reviews         Review[]
-  certificates    Certificate[]
-  orderItems      OrderItem[]
+  modules      Module[]
+  assets       CourseAsset[]
+  enrollments  Enrollment[]
+  reviews      Review[]
+  certificates Certificate[]
+  orderItems   OrderItem[]
 }
 
 enum Level {
@@ -118,19 +128,19 @@ enum Level {
 }
 
 model CourseAsset {
-  id         String          @id @default(uuid())
-  courseId   String
-  course     Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  type       CourseAssetType
-  title      String
-  fileName   String
+  id          String          @id @default(uuid())
+  courseId    String
+  course      Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  type        CourseAssetType
+  title       String
+  fileName    String
   storagePath String
-  url        String
-  mimeType   String?
-  sizeBytes  Int?
-  order      Int             @default(0)
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  url         String
+  mimeType    String?
+  sizeBytes   Int?
+  order       Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 }
 
 enum CourseAssetType {
@@ -150,31 +160,31 @@ model Module {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  lessons     Lesson[]
+  lessons Lesson[]
 }
 
 model Lesson {
-  id           String          @id @default(uuid())
-  moduleId     String
-  module       Module          @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  title        String
-  description  String?
-  type         LessonType      @default(VIDEO)
-  videoUrl     String?
-  assetUrl     String?
-  assetPath    String?
-  duration     Int?            // in seconds
-  content      String?         // for text/markdown lessons
-  isPreview    Boolean         @default(false)
-  allowDownload Boolean        @default(false)
-  sellSeparately Boolean       @default(false)
-  order        Int
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id             String     @id @default(uuid())
+  moduleId       String
+  module         Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  type           LessonType @default(VIDEO)
+  videoUrl       String?
+  assetUrl       String?
+  assetPath      String?
+  duration       Int? // in seconds
+  content        String? // for text/markdown lessons
+  isPreview      Boolean    @default(false)
+  allowDownload  Boolean    @default(false)
+  sellSeparately Boolean    @default(false)
+  order          Int
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
-  progress     LessonProgress[]
-  quizzes      Quiz[]
-  aiPrompts    AIPrompt[]
+  progress  LessonProgress[]
+  quizzes   Quiz[]
+  aiPrompts AIPrompt[]
 }
 
 enum LessonType {
@@ -200,24 +210,24 @@ model Quiz {
 }
 
 model Question {
-  id       String   @id @default(uuid())
-  quizId   String
-  quiz     Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  text     String
-  options  String[]
-  answer   Int      // index of correct option
+  id          String   @id @default(uuid())
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  text        String
+  options     String[]
+  answer      Int // index of correct option
   explanation String?
-  order    Int
+  order       Int
 }
 
 model QuizResult {
-  id        String   @id @default(uuid())
-  quizId    String
-  quiz      Quiz     @relation(fields: [quizId], references: [id])
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  score     Float
-  answers   Json
+  id          String   @id @default(uuid())
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  score       Float
+  answers     Json
   completedAt DateTime @default(now())
 }
 
@@ -233,15 +243,15 @@ model AIPrompt {
 
 // ====================== PROGRESS ======================
 model LessonProgress {
-  id          String    @id @default(uuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  lessonId    String
-  lesson      Lesson    @relation(fields: [lessonId], references: [id])
-  isCompleted Boolean   @default(false)
-  watchedSeconds Int    @default(0)
-  completedAt DateTime?
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  lessonId       String
+  lesson         Lesson    @relation(fields: [lessonId], references: [id])
+  isCompleted    Boolean   @default(false)
+  watchedSeconds Int       @default(0)
+  completedAt    DateTime?
+  updatedAt      DateTime  @updatedAt
 
   @@unique([userId, lessonId])
 }
@@ -270,30 +280,30 @@ enum EnrollmentStatus {
 
 // ====================== CERTIFICATES ======================
 model Certificate {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  courseId    String
-  course      Course   @relation(fields: [courseId], references: [id])
-  code        String   @unique
-  pdfUrl      String?
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  courseId       String
+  course         Course   @relation(fields: [courseId], references: [id])
+  code           String   @unique
+  pdfUrl         String?
   blockchainHash String?
-  issuedAt    DateTime @default(now())
+  issuedAt       DateTime @default(now())
 }
 
 // ====================== REVIEWS ======================
 model Review {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id])
-  rating    Int      // 1-5
-  title     String?
-  body      String
-  isApproved Boolean @default(false)
-  isFeatured Boolean @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  courseId   String
+  course     Course   @relation(fields: [courseId], references: [id])
+  rating     Int // 1-5
+  title      String?
+  body       String
+  isApproved Boolean  @default(false)
+  isFeatured Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   @@unique([userId, courseId])
 }
@@ -306,13 +316,13 @@ model Order {
   status          OrderStatus @default(PENDING)
   totalAmount     Float
   currency        String      @default("USD")
-  paymentMethod   String?     // stripe | paypal | paystack
+  paymentMethod   String? // stripe | paypal | paystack
   paymentIntentId String?
   receiptUrl      String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  items           OrderItem[]
+  items OrderItem[]
 }
 
 enum OrderStatus {
@@ -323,48 +333,48 @@ enum OrderStatus {
 }
 
 model OrderItem {
-  id        String  @id @default(uuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id])
-  courseId  String
-  course    Course  @relation(fields: [courseId], references: [id])
-  price     Float
-  currency  String  @default("USD")
+  id       String @id @default(uuid())
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id])
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id])
+  price    Float
+  currency String @default("USD")
 }
 
 // ====================== SUBSCRIPTIONS ======================
 model SubscriptionPlan {
-  id           String   @id @default(uuid())
-  name         String
-  slug         String   @unique
-  description  String?
-  price        Float
-  yearlyPrice  Float?
-  currency     String   @default("USD")
-  features     String[]
-  coursesIncluded String[] // course IDs or "ALL"
-  isPopular    Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  stripePriceId String?
+  id                  String   @id @default(uuid())
+  name                String
+  slug                String   @unique
+  description         String?
+  price               Float
+  yearlyPrice         Float?
+  currency            String   @default("USD")
+  features            String[]
+  coursesIncluded     String[] // course IDs or "ALL"
+  isPopular           Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  stripePriceId       String?
   stripeYearlyPriceId String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   subscriptions UserSubscription[]
 }
 
 model UserSubscription {
-  id         String             @id @default(uuid())
-  userId     String
-  user       User               @relation(fields: [userId], references: [id])
-  planId     String
-  plan       SubscriptionPlan   @relation(fields: [planId], references: [id])
-  status     SubscriptionStatus @default(ACTIVE)
-  billingCycle String           @default("monthly")
+  id                   String             @id @default(uuid())
+  userId               String
+  user                 User               @relation(fields: [userId], references: [id])
+  planId               String
+  plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
+  status               SubscriptionStatus @default(ACTIVE)
+  billingCycle         String             @default("monthly")
   stripeSubscriptionId String?
-  currentPeriodStart DateTime
-  currentPeriodEnd   DateTime
-  createdAt  DateTime           @default(now())
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  createdAt            DateTime           @default(now())
 }
 
 enum SubscriptionStatus {
@@ -386,42 +396,42 @@ model HeroSlide {
   ctaLink           String?
   order             Int      @default(0)
   isActive          Boolean  @default(true)
-  autoSlideInterval Int?     // seconds; null = use global default (6s)
+  autoSlideInterval Int? // seconds; null = use global default (6s)
   createdAt         DateTime @default(now())
 }
 
 model Announcement {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   text      String
   link      String?
   linkText  String?
-  bgColor   String   @default("#7c3aed")
-  isActive  Boolean  @default(true)
+  bgColor   String    @default("#7c3aed")
+  isActive  Boolean   @default(true)
   startsAt  DateTime?
   endsAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }
 
 model BlogPost {
-  id          String        @id @default(uuid())
-  title       String
-  slug        String        @unique
-  excerpt     String?
-  content     String
-  coverImage  String?
+  id             String        @id @default(uuid())
+  title          String
+  slug           String        @unique
+  excerpt        String?
+  content        String
+  coverImage     String?
   coverImagePath String?
-  authorId    String
-  author      User          @relation("BlogAuthor", fields: [authorId], references: [id])
-  categoryId  String?
-  category    Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  tags        String[]
-  status      ContentStatus @default(DRAFT)
-  isPublished Boolean       @default(false)
-  publishedAt DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  authorId       String
+  author         User          @relation("BlogAuthor", fields: [authorId], references: [id])
+  categoryId     String?
+  category       Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags           String[]
+  status         ContentStatus @default(DRAFT)
+  isPublished    Boolean       @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  comments    BlogComment[]
+  comments BlogComment[]
 }
 
 enum ContentStatus {
@@ -431,21 +441,21 @@ enum ContentStatus {
 }
 
 model BlogComment {
-  id        String   @id @default(uuid())
-  postId    String
-  post      BlogPost @relation(fields: [postId], references: [id])
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  content   String
-  isApproved Boolean @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  postId     String
+  post       BlogPost @relation(fields: [postId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  content    String
+  isApproved Boolean  @default(false)
+  createdAt  DateTime @default(now())
 }
 
 model NewsletterSubscriber {
-  id          String   @id @default(uuid())
-  email       String   @unique
-  name        String?
-  isActive    Boolean  @default(true)
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  isActive     Boolean  @default(true)
   subscribedAt DateTime @default(now())
 }
 
@@ -469,21 +479,21 @@ enum CouponDiscountType {
 }
 
 model Popup {
-  id           String   @id @default(uuid())
+  id           String      @id @default(uuid())
   title        String
   content      String
   imageUrl     String?
   imagePath    String?
   buttonText   String?
   link         String?
-  isActive     Boolean  @default(false)
+  isActive     Boolean     @default(false)
   showOn       PopupShowOn @default(HOMEPAGE_ONLY)
-  delaySeconds Int      @default(4)
+  delaySeconds Int         @default(4)
   triggerRules Json?
   startsAt     DateTime?
   endsAt       DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 }
 
 enum PopupShowOn {
@@ -494,13 +504,13 @@ enum PopupShowOn {
 }
 
 model FAQ {
-  id         String   @id @default(uuid())
-  question   String
-  answer     String
-  sortOrder  Int      @default(0)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model SiteSettings {
@@ -514,34 +524,77 @@ model SiteSettings {
   faviconUrl        String?
   socialLinks       Json?
   maintenanceMode   Boolean  @default(false)
-  heroSlideInterval Int      @default(6)  // seconds between auto-slides
+  heroSlideInterval Int      @default(6) // seconds between auto-slides
   updatedAt         DateTime @updatedAt
+}
+
+model HomepageParagraph {
+  id         String   @id @default(uuid())
+  sectionKey String   @unique @map("section_key")
+  content    String
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("homepage_paragraphs")
+}
+
+// ====================== REFERRALS ======================
+model ReferralProgram {
+  id                    String   @id @default(cuid())
+  isActive              Boolean  @default(true)
+  minReferrals          Int      @default(5)
+  discountType          String   @default("percent")
+  discountValue         Float    @default(20)
+  discountExpiry        Int      @default(30)
+  doubleSidedRewards    Boolean  @default(true)
+  friendDiscountType    String   @default("percent")
+  friendDiscountValue   Float    @default(10)
+  fraudDetectionEnabled Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Referral {
+  id                 String   @id @default(cuid())
+  referrerId         String
+  referredId         String   @unique
+  status             String   @default("pending")
+  rewardIssued       Boolean  @default(false)
+  fraudStatus        String   @default("clear")
+  fraudReason        String?
+  referrerRewardCode String?
+  friendRewardCode   String?
+  createdAt          DateTime @default(now())
+  referrer           User     @relation("ReferrerReferrals", fields: [referrerId], references: [id])
+  referred           User     @relation("ReferredReferral", fields: [referredId], references: [id])
 }
 
 // ====================== AFFILIATE ======================
 model AffiliateProgram {
-  id             String   @id @default(cuid())
-  isActive       Boolean  @default(true)
-  commissionRate Float    @default(20)
-  minPayout      Float    @default(10)
-  cookieDays     Int      @default(30)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                        String   @id @default(cuid())
+  isActive                  Boolean  @default(true)
+  commissionRate            Float    @default(20)
+  minPayout                 Float    @default(10)
+  cookieDays                Int      @default(30)
+  payoutGraceDays           Int      @default(30)
+  fraudDetectionEnabled     Boolean  @default(true)
+  allowRecurringCommissions Boolean  @default(false)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 }
 
 model Affiliate {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  status           String   @default("pending")
-  affiliateCode    String   @unique
-  totalClicks      Int      @default(0)
-  totalConversions Int      @default(0)
-  totalEarnings    Float    @default(0)
-  pendingPayout    Float    @default(0)
-  paidOut          Float    @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id])
+  id               String                @id @default(cuid())
+  userId           String                @unique
+  status           String                @default("pending")
+  affiliateCode    String                @unique
+  totalClicks      Int                   @default(0)
+  totalConversions Int                   @default(0)
+  totalEarnings    Float                 @default(0)
+  pendingPayout    Float                 @default(0)
+  paidOut          Float                 @default(0)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  user             User                  @relation(fields: [userId], references: [id])
   conversions      AffiliateConversion[]
   payouts          AffiliatePayout[]
 }
@@ -553,29 +606,51 @@ model AffiliateConversion {
   amount      Float
   commission  Float
   status      String    @default("pending")
+  fraudStatus String    @default("clear")
+  fraudReason String?
+  eligibleAt  DateTime?
+  creditedAt  DateTime?
   createdAt   DateTime  @default(now())
   affiliate   Affiliate @relation(fields: [affiliateId], references: [id])
 }
 
 model AffiliatePayout {
-  id          String    @id @default(cuid())
-  affiliateId String
-  amount      Float
-  method      String
-  status      String    @default("pending")
-  notes       String?
-  createdAt   DateTime  @default(now())
-  affiliate   Affiliate @relation(fields: [affiliateId], references: [id])
+  id                 String    @id @default(cuid())
+  affiliateId        String
+  amount             Float
+  method             String
+  status             String    @default("pending")
+  notes              String?
+  destinationDetails Json?
+  eligibleAt         DateTime?
+  processedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  affiliate          Affiliate @relation(fields: [affiliateId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  action    String
+  entityType String
+  entityId  String?
+  summary   String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }
 
 // ====================== AI CHAT ======================
 model AIChatSession {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
   courseId  String?
   lessonId  String?
-  messages  Json      @default("[]")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

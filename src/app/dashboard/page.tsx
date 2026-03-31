@@ -12,10 +12,19 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle2,
+  NotebookText,
+  BadgeCheck,
 } from "lucide-react";
-import { getCurrentUserProfile, getUserCertificates, getUserEnrollments } from "@/lib/data";
+import {
+  getCurrentUserProfile,
+  getUserAffiliateStatus,
+  getUserCertificates,
+  getUserEnrollments,
+} from "@/lib/data";
+import { getUserWorkspaceNotes } from "@/lib/lesson-player";
 import { prisma } from "@/lib/prisma";
 import { formatDuration } from "@/lib/utils";
+import { ReferEarnCard } from "@/components/dashboard/refer-earn-card";
 
 const thumbnailFallback =
   "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop";
@@ -27,9 +36,10 @@ export default async function DashboardPage() {
     redirect("/login?redirect=/dashboard");
   }
 
-  const [enrollments, certificates, completedLessons] = await Promise.all([
+  const [enrollments, certificates, workspaceNotes, completedLessons, affiliateStatus] = await Promise.all([
     getUserEnrollments(user.id),
     getUserCertificates(user.id),
+    getUserWorkspaceNotes(user.id, 8),
     prisma.lessonProgress.findMany({
       where: {
         userId: user.id,
@@ -54,6 +64,7 @@ export default async function DashboardPage() {
       orderBy: { updatedAt: "desc" },
       take: 6,
     }),
+    getUserAffiliateStatus(user.id),
   ]);
 
   const totalCompletedSeconds = completedLessons.reduce(
@@ -67,6 +78,7 @@ export default async function DashboardPage() {
           enrollments.reduce((sum, enrollment) => sum + enrollment.progress, 0) / enrollments.length
         )
       : 0;
+
   const recentActivity = [
     ...completedLessons.map((item) => ({
       id: item.id,
@@ -89,32 +101,32 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="pt-20 pb-20">
+      <div className="pb-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 flex flex-col gap-4 pt-8 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="mb-1 text-2xl font-black text-foreground">
-                Welcome back, <span className="text-blue-600">{user.name || "Learner"}</span>
+              <h1 className="mb-1 text-2xl font-black text-foreground sm:text-3xl">
+                Welcome back, <span className="text-primary-blue">{user.name || "Learner"}</span>
               </h1>
-              <p className="text-sm text-muted-foreground">
-                Your dashboard is now powered by live enrollment, lesson progress, and certificate data.
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Your dashboard is now powered by live enrollment, lesson progress, certificates, and workspace notes.
               </p>
             </div>
 
             <Link
               href="/courses"
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
             >
               Explore more courses <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
 
-          <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Courses Enrolled", value: `${enrollments.length}`, icon: BookOpen, tone: "text-blue-600 dark:text-blue-400" },
-              { label: "Hours Learned", value: `${totalHours}h`, icon: Clock, tone: "text-violet-600 dark:text-violet-400" },
-              { label: "Certificates", value: `${certificates.length}`, icon: Award, tone: "text-amber-600 dark:text-amber-400" },
-              { label: "Average Progress", value: `${averageProgress}%`, icon: TrendingUp, tone: "text-emerald-600 dark:text-emerald-400" },
+              { label: "Courses Enrolled", value: `${enrollments.length}`, icon: BookOpen, tone: "text-primary-blue" },
+              { label: "Hours Learned", value: `${totalHours}h`, icon: Clock, tone: "text-primary-blue" },
+              { label: "Certificates", value: `${certificates.length}`, icon: Award, tone: "text-primary-blue" },
+              { label: "Average Progress", value: `${averageProgress}%`, icon: TrendingUp, tone: "text-primary-blue" },
             ].map((stat) => (
               <div key={stat.label} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <stat.icon className={`mb-3 h-6 w-6 ${stat.tone}`} />
@@ -127,14 +139,14 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-2">
               <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-                <div className="mb-5 flex items-center justify-between">
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-base font-bold text-foreground">My courses</h2>
                     <p className="text-xs text-muted-foreground">
-                      Real progress pulled from your current enrollment records.
+                      Continue from your latest lesson or jump straight into the classroom.
                     </p>
                   </div>
-                  <Link href="/courses" className="text-sm font-medium text-blue-600 hover:underline">
+                  <Link href="/courses" className="text-sm font-medium text-primary-blue hover:underline">
                     View catalog
                   </Link>
                 </div>
@@ -146,7 +158,7 @@ export default async function DashboardPage() {
                     </p>
                     <Link
                       href="/courses"
-                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
                     >
                       Browse courses <ArrowRight className="h-4 w-4" />
                     </Link>
@@ -155,35 +167,35 @@ export default async function DashboardPage() {
                   <div className="space-y-4">
                     {enrollments.map((enrollment) => (
                       <div key={enrollment.id} className="rounded-2xl border border-border p-5">
-                        <div className="flex items-start gap-4">
-                          <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                          <div className="relative h-44 w-full overflow-hidden rounded-xl sm:h-16 sm:w-24 sm:shrink-0">
                             <Image
                               src={enrollment.course.thumbnailUrl || thumbnailFallback}
                               alt={enrollment.course.title}
                               fill
+                              quality={100}
                               className="object-cover"
                             />
                           </div>
                           <div className="min-w-0 flex-1">
                             <Link
                               href={`/courses/${enrollment.course.slug}`}
-                              className="line-clamp-1 text-sm font-bold text-foreground transition-colors hover:text-blue-600 dark:hover:text-blue-400"
+                              className="line-clamp-1 text-sm font-bold text-foreground transition-colors hover:text-primary-blue"
                             >
                               {enrollment.course.title}
                             </Link>
                             <p className="mt-1 text-xs text-muted-foreground">
                               {enrollment.lastLessonTitle
                                 ? `Latest progress: ${enrollment.lastLessonTitle}`
-                                : "No completed lessons yet"}
+                                : "Start the classroom from your first lesson."}
                             </p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {enrollment.completedLessons}/{enrollment.totalLessons} lessons completed ·{" "}
-                              {formatDuration(enrollment.remainingMinutes)} left
+                              {enrollment.completedLessons}/{enrollment.totalLessons} lessons completed / {formatDuration(enrollment.remainingMinutes)} left
                             </p>
                             <div className="mt-3 flex items-center gap-3">
                               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                                 <div
-                                  className="h-full rounded-full bg-blue-600"
+                                  className="h-full rounded-full bg-primary-blue"
                                   style={{ width: `${enrollment.progress}%` }}
                                 />
                               </div>
@@ -193,10 +205,11 @@ export default async function DashboardPage() {
                             </div>
                           </div>
                           <Link
-                            href={`/courses/${enrollment.course.slug}`}
-                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-950/60"
+                            href={enrollment.lessonHref}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90 sm:self-start"
                           >
-                            <Play className="ml-0.5 h-4 w-4" />
+                            <Play className="h-4 w-4" />
+                            {enrollment.actionLabel}
                           </Link>
                         </div>
                       </div>
@@ -207,7 +220,7 @@ export default async function DashboardPage() {
 
               <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                 <div className="mb-4 flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <Sparkles className="h-5 w-5 text-primary-blue" />
                   <h2 className="text-base font-bold text-foreground">Recent activity</h2>
                 </div>
 
@@ -223,7 +236,7 @@ export default async function DashboardPage() {
                         href={activity.href}
                         className="flex items-start gap-3 rounded-xl border border-border p-4 transition-colors hover:bg-muted/40"
                       >
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-blue/10 text-primary-blue">
                           <CheckCircle2 className="h-4 w-4" />
                         </div>
                         <div>
@@ -238,6 +251,65 @@ export default async function DashboardPage() {
             </div>
 
             <div className="space-y-6">
+              <ReferEarnCard />
+
+              {affiliateStatus.hasJoined ? (
+                <div id="affiliate-program" className="rounded-2xl border border-primary-blue/20 bg-primary-blue/10 p-5 shadow-sm">
+                  <div className="mb-3 flex items-center gap-2">
+                    <BadgeCheck className="h-4 w-4 text-primary-blue" />
+                    <h2 className="text-sm font-bold text-foreground">Affiliate workspace</h2>
+                  </div>
+                  <p className="mb-4 text-xs leading-5 text-muted-foreground">
+                    Your affiliate account is ready. Open the partner dashboard to copy your link, review payouts, and track conversions.
+                  </p>
+                  <Link
+                    href="/affiliate/dashboard"
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                  >
+                    Open Affiliate Dashboard <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              ) : null}
+
+              <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <div id="workspace-notes" className="mb-4 flex items-center gap-2">
+                  <NotebookText className="h-4 w-4 text-primary-blue" />
+                  <h2 className="text-sm font-bold text-foreground">My workspace notes</h2>
+                </div>
+
+                {workspaceNotes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Saved lesson-note snapshots will appear here as you study.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {workspaceNotes.map((note) => (
+                      <Link
+                        key={note.id}
+                        href={`/learn/${note.courseSlug}/${note.lessonId}`}
+                        className="block rounded-xl border border-border p-3 transition-colors hover:border-primary-blue/20 hover:bg-primary-blue/5"
+                      >
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                          {note.courseTitle}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-foreground">{note.lessonTitle}</p>
+                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                          {note.content}
+                        </p>
+                        <p className="mt-2 text-[11px] text-muted-foreground">
+                          {new Intl.DateTimeFormat("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          }).format(new Date(note.timestamp))}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-foreground">
                   <Award className="h-4 w-4 text-amber-500" /> My certificates
@@ -266,15 +338,15 @@ export default async function DashboardPage() {
 
                 <Link
                   href="/certificates"
-                  className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+                  className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-primary-blue hover:underline"
                 >
                   View all certificates <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5 dark:border-violet-800 dark:bg-violet-950/20">
+              <div className="rounded-2xl border border-primary-blue/20 bg-primary-blue/10 p-5">
                 <div className="mb-3 flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  <Sparkles className="h-4 w-4 text-primary-blue" />
                   <h2 className="text-sm font-bold text-foreground">AI Tutor</h2>
                 </div>
                 <p className="mb-4 text-xs text-muted-foreground">
@@ -282,7 +354,7 @@ export default async function DashboardPage() {
                 </p>
                 <Link
                   href="/courses"
-                  className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-4 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-950/60"
+                  className="inline-flex items-center gap-2 rounded-xl border border-primary-blue/20 bg-white px-4 py-2.5 text-sm font-medium text-primary-blue hover:bg-primary-blue/10"
                 >
                   Open a course <ArrowRight className="h-4 w-4" />
                 </Link>

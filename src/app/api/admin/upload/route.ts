@@ -36,7 +36,8 @@ export async function POST(request: Request) {
       supabase.storage.from(bucket).upload(storagePath, buffer, {
         contentType: file.type || "application/octet-stream",
         upsert: false,
-        cacheControl: "3600",
+        // Updated: keep uploaded assets at their original fidelity and cache aggressively.
+        cacheControl: "31536000",
       });
 
     let { error: uploadError } = await uploadFile();

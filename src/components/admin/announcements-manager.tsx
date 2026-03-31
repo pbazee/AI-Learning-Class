@@ -63,6 +63,10 @@ export function AnnouncementsManager({ announcements }: { announcements: Announc
       })}
       onSave={saveAnnouncementAction}
       onDelete={deleteAnnouncementAction}
+      dialogSize="lg"
+      dialogScrollBody
+      dialogStickyFooter
+      dialogBodyClassName="pb-8"
       fields={[
         { name: "text", label: "Announcement Text", type: "textarea", rows: 3, colSpan: 2 },
         { name: "link", label: "Link", type: "url", placeholder: "/courses" },

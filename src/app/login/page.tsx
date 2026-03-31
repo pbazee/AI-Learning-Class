@@ -3,7 +3,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Brain, Mail, Lock, Eye, EyeOff, Chrome, ArrowRight, AlertCircle } from "lucide-react";
+import { Brain, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 
 const DEFAULT_AFTER_LOGIN = "/dashboard";
@@ -43,6 +43,29 @@ async function syncSignedInUser() {
   }
 
   return response.json() as Promise<{ user: { role: string } }>;
+}
+
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path
+        d="M21.6 12.23c0-.76-.07-1.49-.2-2.2H12v4.16h5.38a4.6 4.6 0 0 1-1.99 3.02v2.5h3.22c1.89-1.74 2.99-4.31 2.99-7.48Z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 22c2.7 0 4.96-.9 6.61-2.43l-3.22-2.5c-.9.6-2.05.96-3.39.96-2.6 0-4.81-1.76-5.6-4.12H3.07v2.58A9.98 9.98 0 0 0 12 22Z"
+        fill="#34A853"
+      />
+      <path
+        d="M6.4 13.91A5.98 5.98 0 0 1 6.09 12c0-.66.11-1.31.31-1.91V7.5H3.07a9.98 9.98 0 0 0 0 9l3.33-2.59Z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 5.97c1.47 0 2.78.5 3.81 1.48l2.86-2.86C16.95 2.98 14.69 2 12 2a9.98 9.98 0 0 0-8.93 5.5l3.33 2.59c.79-2.36 3-4.12 5.6-4.12Z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
 }
 
 // Wrap useSearchParams in its own component so Suspense boundary works correctly
@@ -174,7 +197,7 @@ function LoginPageInner() {
             {loading && !magicSent ? (
               <div className="w-5 h-5 border-2 border-muted-foreground/30 border-t-foreground rounded-full animate-spin" />
             ) : (
-              <Chrome className="w-5 h-5" />
+              <GoogleIcon className="h-5 w-5" />
             )}
             Continue with Google
           </button>
@@ -243,7 +266,7 @@ function LoginPageInner() {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-medium text-muted-foreground">Password</label>
-                    <Link href="/forgot-password" className="text-xs text-blue-600 hover:underline">Forgot?</Link>
+                    <Link href="/forgot-password" className="text-xs text-blue-600 hover:underline">Forgot password</Link>
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

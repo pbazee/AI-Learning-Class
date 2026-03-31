@@ -8,6 +8,8 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Loader2, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -298,6 +300,10 @@ export function AdminModal({
   children,
   footer,
   size = "xl",
+  bodyClassName,
+  footerClassName,
+  scrollBody = false,
+  stickyFooter = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -306,22 +312,68 @@ export function AdminModal({
   children: ReactNode;
   footer?: ReactNode;
   size?: "md" | "lg" | "xl" | "2xl";
+  bodyClassName?: string;
+  footerClassName?: string;
+  scrollBody?: boolean;
+  stickyFooter?: boolean;
 }) {
-  if (!open) {
-    return null;
-  }
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open || !mounted) return null;
 
   const width = {
     md: "max-w-2xl",
-    lg: "max-w-4xl",
-    xl: "max-w-5xl",
-    "2xl": "max-w-7xl",
+    lg: "max-w-3xl",
+    xl: "max-w-4xl",
+    "2xl": "max-w-4xl",
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 sm:p-6">
-      <div className={cn("my-8 w-full rounded-[32px] border border-white/10 bg-[#04070d] shadow-2xl", width[size])}>
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
+  const modal = (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 p-3 sm:p-6"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className={cn(
+          "flex max-h-[90vh] w-[95vw] flex-col rounded-[32px] border border-white/10 bg-[#04070d] shadow-2xl",
+          scrollBody ? "overflow-hidden" : "overflow-y-auto",
+          width[size]
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
             <h3 className="text-xl font-black text-slate-50">{title}</h3>
             {description ? <p className="mt-2 text-sm text-slate-400">{description}</p> : null}
@@ -334,11 +386,25 @@ export function AdminModal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[calc(100vh-220px)] overflow-y-auto px-6 py-6">{children}</div>
-        {footer ? <div className="border-t border-white/10 px-6 py-5">{footer}</div> : null}
+        {/* Scrollable body */}
+        <div className={cn("min-h-0 flex-1 px-6 py-6", scrollBody && "overflow-y-auto", bodyClassName)}>{children}</div>
+        {/* Footer */}
+        {footer ? (
+          <div
+            className={cn(
+              "shrink-0 border-t border-white/10 px-6 py-5",
+              stickyFooter && "sticky bottom-0 z-10 bg-[#04070d]/95 backdrop-blur-xl",
+              footerClassName
+            )}
+          >
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
 
 export function AdminDrawer({
@@ -358,9 +424,10 @@ export function AdminDrawer({
   footer?: ReactNode;
   size?: "lg" | "xl" | "full";
 }) {
-  if (!open) {
-    return null;
-  }
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!open || !mounted) return null;
 
   const width = {
     lg: "w-full max-w-3xl",
@@ -368,8 +435,8 @@ export function AdminDrawer({
     full: "w-full max-w-[92rem]",
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/70 backdrop-blur-sm">
+  const drawer = (
+    <div className="fixed inset-0 z-[9999] flex justify-end bg-slate-950/70 backdrop-blur-sm">
       <div className={cn("flex h-full flex-col border-l border-white/10 bg-[#050811] shadow-2xl", width[size])}>
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
@@ -389,4 +456,6 @@ export function AdminDrawer({
       </div>
     </div>
   );
+
+  return createPortal(drawer, document.body);
 }

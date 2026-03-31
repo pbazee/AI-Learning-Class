@@ -20,7 +20,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="pt-16">
+      <div>
         <div className="relative">
           {post.coverImage && (
             <div className="relative aspect-[3/1] max-h-80 overflow-hidden">

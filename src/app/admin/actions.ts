@@ -13,6 +13,8 @@ import {
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { normalizeEmail } from "@/lib/admin-email";
+import { syncCourseReviewMetrics } from "@/lib/course-reviews";
+import { HOMEPAGE_PARAGRAPH_SECTION_KEYS } from "@/lib/homepage-paragraphs";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 import { deleteAdminStorageObjects } from "@/lib/supabase-admin";
 
@@ -35,6 +37,8 @@ const categorySchema = z.object({
   name: z.string().min(2, "Category name is required."),
   slug: z.string().optional(),
   description: z.string().optional(),
+  imageUrl: z.string().optional(),
+  imagePath: z.string().optional(),
   icon: z.string().optional(),
   color: z.string().optional(),
   isActive: z.boolean().optional().default(true),
@@ -85,6 +89,8 @@ const courseSchema = z.object({
   slug: z.string().optional(),
   description: z.string().min(10, "Course description is required."),
   shortDescription: z.string().optional(),
+  imageUrl: z.string().optional(),
+  imagePath: z.string().optional(),
   thumbnailUrl: z.string().optional(),
   thumbnailPath: z.string().optional(),
   categoryId: z.string().min(1, "Select a category."),
@@ -250,6 +256,15 @@ const settingsSchema = z.object({
   supportAddress: z.string().optional(),
   maintenanceMode: z.boolean().optional().default(false),
   socialLinks: z.record(z.string()).optional().default({}),
+});
+
+const homepageParagraphSchema = z.object({
+  sectionKey: z.enum(HOMEPAGE_PARAGRAPH_SECTION_KEYS),
+  content: z.string().trim().min(1, "Paragraph content is required.").max(500, "Keep the paragraph under 500 characters."),
+});
+
+const homepageParagraphDeleteSchema = z.object({
+  sectionKey: z.enum(HOMEPAGE_PARAGRAPH_SECTION_KEYS),
 });
 
 const newsletterSchema = z.object({
@@ -543,6 +558,8 @@ export async function saveCategoryAction(input: z.input<typeof categorySchema>) 
           name: values.name.trim(),
           slug,
           description: optionalString(values.description),
+          imageUrl: optionalString(values.imageUrl),
+          imagePath: optionalString(values.imagePath),
           icon: optionalString(values.icon),
           color: optionalString(values.color),
           isActive: Boolean(values.isActive),
@@ -552,6 +569,8 @@ export async function saveCategoryAction(input: z.input<typeof categorySchema>) 
           name: values.name.trim(),
           slug,
           description: optionalString(values.description),
+          imageUrl: optionalString(values.imageUrl),
+          imagePath: optionalString(values.imagePath),
           icon: optionalString(values.icon),
           color: optionalString(values.color),
           isActive: Boolean(values.isActive),
@@ -569,6 +588,94 @@ export async function deleteCategoryAction(id: string) {
     ["/admin", "/admin/categories", "/courses", "/blog", "/"],
     async () => prisma.category.delete({ where: { id } }),
     "Category deleted successfully."
+  );
+}
+
+export async function refundOrderAction(orderId: string) {
+  return runAdminAction(
+    "refundOrder",
+    ["/admin", "/admin/orders", "/admin/users"],
+    async () => {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!order) {
+        throw new Error("Order not found.");
+      }
+
+      if (order.status !== "COMPLETED") {
+        throw new Error("Only paid orders can be refunded.");
+      }
+
+      return prisma.order.update({
+        where: { id: orderId },
+        data: {
+          status: "REFUNDED",
+        },
+      });
+    },
+    "Order refunded successfully."
+  );
+}
+
+export async function grantOrderAccessAction(orderId: string) {
+  return runAdminAction(
+    "grantOrderAccess",
+    ["/admin", "/admin/orders", "/admin/users"],
+    async () => {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          items: {
+            select: {
+              courseId: true,
+            },
+          },
+        },
+      });
+
+      if (!order) {
+        throw new Error("Order not found.");
+      }
+
+      if (order.status !== "COMPLETED") {
+        throw new Error("Only paid orders can grant access.");
+      }
+
+      if (order.items.length === 0) {
+        throw new Error("This order does not include any course items.");
+      }
+
+      await Promise.all(
+        order.items.map((item) =>
+          prisma.enrollment.upsert({
+            where: {
+              userId_courseId: {
+                userId: order.userId,
+                courseId: item.courseId,
+              },
+            },
+            update: {
+              status: "ACTIVE",
+              expiresAt: null,
+            },
+            create: {
+              userId: order.userId,
+              courseId: item.courseId,
+              status: "ACTIVE",
+            },
+          })
+        )
+      );
+
+      return order;
+    },
+    "Course access granted successfully."
   );
 }
 
@@ -882,6 +989,8 @@ export async function saveCourseAction(input: z.input<typeof courseSchema>) {
         slug,
         description: values.description.trim(),
         shortDescription: optionalString(values.shortDescription),
+        imageUrl: optionalString(values.imageUrl),
+        imagePath: optionalString(values.imagePath),
         thumbnailUrl: optionalString(values.thumbnailUrl),
         thumbnailPath: optionalString(values.thumbnailPath),
         categoryId: values.categoryId,
@@ -960,6 +1069,7 @@ export async function deleteCourseAction(id: string) {
       });
 
       await deleteAdminStorageObjects([
+        course?.imagePath,
         course?.thumbnailPath,
         ...((course?.assets || []).map((asset) => asset.storagePath) ?? []),
         ...((course?.modules || []).flatMap((module) => module.lessons.map((lesson) => lesson.assetPath)) ?? []),
@@ -1363,8 +1473,8 @@ export async function saveReviewAction(input: z.input<typeof reviewSchema>) {
     input,
     "saveReview",
     ["/admin/reviews", "/courses", "/"],
-    async (values) =>
-      prisma.review.upsert({
+    async (values) => {
+      const review = await prisma.review.upsert({
         where: { id: values.id || "__new__" },
         update: {
           userId: values.userId,
@@ -1384,7 +1494,11 @@ export async function saveReviewAction(input: z.input<typeof reviewSchema>) {
           isApproved: Boolean(values.isApproved),
           isFeatured: Boolean(values.isFeatured),
         },
-      }),
+      });
+
+      await syncCourseReviewMetrics(review.courseId);
+      return review;
+    },
     "Review saved successfully."
   );
 }
@@ -1393,7 +1507,11 @@ export async function deleteReviewAction(id: string) {
   return runAdminAction(
     "deleteReview",
     ["/admin/reviews", "/courses", "/"],
-    async () => prisma.review.delete({ where: { id } }),
+    async () => {
+      const review = await prisma.review.delete({ where: { id } });
+      await syncCourseReviewMetrics(review.courseId);
+      return review;
+    },
     "Review deleted successfully."
   );
 }
@@ -1504,6 +1622,41 @@ export async function saveSiteSettingsAction(input: z.input<typeof settingsSchem
         },
       }),
     "Settings saved successfully."
+  );
+}
+
+export async function saveHomepageParagraphAction(input: z.input<typeof homepageParagraphSchema>) {
+  return runValidatedAdminAction(
+    homepageParagraphSchema,
+    input,
+    "saveHomepageParagraph",
+    ["/", "/admin/paragraphs"],
+    async (values) =>
+      prisma.homepageParagraph.upsert({
+        where: { sectionKey: values.sectionKey },
+        update: {
+          content: values.content.trim(),
+        },
+        create: {
+          sectionKey: values.sectionKey,
+          content: values.content.trim(),
+        },
+      }),
+    "Homepage paragraph saved successfully."
+  );
+}
+
+export async function deleteHomepageParagraphAction(input: z.input<typeof homepageParagraphDeleteSchema>) {
+  return runValidatedAdminAction(
+    homepageParagraphDeleteSchema,
+    input,
+    "deleteHomepageParagraph",
+    ["/", "/admin/paragraphs"],
+    async (values) =>
+      prisma.homepageParagraph.deleteMany({
+        where: { sectionKey: values.sectionKey },
+      }),
+    "Homepage paragraph reset to default copy."
   );
 }
 

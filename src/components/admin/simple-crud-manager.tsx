@@ -3,7 +3,7 @@
 import { startTransition, useMemo, useState, type ReactNode } from "react";
 import { Edit3, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/ToastProvider";
 import {
   AdminButton,
   AdminCard,
@@ -80,6 +80,11 @@ export function SimpleCrudManager<T extends { id: string }, FormState extends Re
   buildPayload,
   onSave,
   onDelete,
+  dialogSize = "xl",
+  dialogScrollBody = false,
+  dialogStickyFooter = false,
+  dialogBodyClassName,
+  dialogFooterClassName,
 }: {
   title: string;
   description: string;
@@ -96,6 +101,11 @@ export function SimpleCrudManager<T extends { id: string }, FormState extends Re
   buildPayload: (form: FormState) => any;
   onSave: (payload: any) => CrudActionResult;
   onDelete: (id: string) => CrudActionResult;
+  dialogSize?: "md" | "lg" | "xl" | "2xl";
+  dialogScrollBody?: boolean;
+  dialogStickyFooter?: boolean;
+  dialogBodyClassName?: string;
+  dialogFooterClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(getEmptyForm());
@@ -222,6 +232,11 @@ export function SimpleCrudManager<T extends { id: string }, FormState extends Re
         onClose={() => setOpen(false)}
         title={dialogTitle}
         description="Update the fields below, then save your changes."
+        size={dialogSize}
+        scrollBody={dialogScrollBody}
+        stickyFooter={dialogStickyFooter}
+        bodyClassName={dialogBodyClassName}
+        footerClassName={dialogFooterClassName}
         footer={
           <div className="flex justify-end gap-3">
             <AdminButton type="button" variant="secondary" onClick={() => setOpen(false)}>

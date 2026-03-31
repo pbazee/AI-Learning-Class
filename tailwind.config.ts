@@ -1,5 +1,8 @@
 import type { Config } from "tailwindcss";
 
+const primaryBlue = "#3B82F6";
+const primaryBlueTint = (opacity: number) => `rgb(59 130 246 / ${opacity})`;
+
 const config: Config = {
   darkMode: ["class"],
   content: [
@@ -22,6 +25,8 @@ const config: Config = {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        // Updated: one shared application blue sourced from the pricing-page Pro plan.
+        "primary-blue": primaryBlue,
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -52,16 +57,16 @@ const config: Config = {
         },
         // Professional brand palette (Coursera-style)
         brand: {
-          50: "#eff6ff",
-          100: "#dbeafe",
-          200: "#bfdbfe",
-          300: "#93c5fd",
-          400: "#60a5fa",
-          500: "#3b82f6",
-          600: "#2563eb",
-          700: "#1d4ed8",
-          800: "#1e40af",
-          900: "#1e3a8a",
+          50: primaryBlueTint(0.08),
+          100: primaryBlueTint(0.12),
+          200: primaryBlueTint(0.18),
+          300: primaryBlueTint(0.24),
+          400: primaryBlue,
+          500: primaryBlue,
+          600: primaryBlue,
+          700: primaryBlue,
+          800: primaryBlue,
+          900: primaryBlue,
         },
       },
       borderRadius: {

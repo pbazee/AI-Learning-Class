@@ -8,6 +8,9 @@
   --font-inter: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --radius: 0.9rem;
+  --announcement-height: 0px;
+  --navbar-height: 0px;
+  --primary-blue-rgb: 59 130 246;
 
   /* Professional Blue Theme - Light Mode */
   --background: 0 0% 100%;
@@ -19,7 +22,8 @@
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
 
-  --primary: 211 100% 50%; /* #007BFF */
+  /* Updated: align the shared primary token with the pricing-page Pro plan blue. */
+  --primary: 217 91% 60%; /* #3B82F6 */
   --primary-foreground: 0 0% 100%;
 
   --secondary: 210 40% 96.1%;
@@ -36,7 +40,7 @@
 
   --border: 214 32% 91.4%;
   --input: 214 32% 91.4%;
-  --ring: 211 100% 50%;
+  --ring: 217 91% 60%;
 }
 
 .dark {
@@ -50,8 +54,8 @@
   --popover: 222 40% 12%;
   --popover-foreground: 210 40% 98%;
 
-  --primary: 211 100% 60%; /* Lighter blue for dark mode */
-  --primary-foreground: 222 47% 11%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
 
   --secondary: 217 32.6% 17.5%;
   --secondary-foreground: 210 40% 98%;
@@ -67,7 +71,7 @@
 
   --border: 217 25% 25%;
   --input: 217 25% 25%;
-  --ring: 211 100% 60%;
+  --ring: 217 91% 60%;
 }
 
 * {

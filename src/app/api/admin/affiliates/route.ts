@@ -18,11 +18,23 @@ export async function GET(req: NextRequest) {
   }
 
   const status = req.nextUrl.searchParams.get("status");
+  const query = req.nextUrl.searchParams.get("q")?.trim();
 
   const affiliates = await prisma.affiliate.findMany({
-    where: status ? { status } : undefined,
+    where: {
+      ...(status && status !== "all" ? { status } : {}),
+      ...(query
+        ? {
+            OR: [
+              { affiliateCode: { contains: query, mode: "insensitive" } },
+              { user: { name: { contains: query, mode: "insensitive" } } },
+              { user: { email: { contains: query, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    },
     include: {
-      user: { select: { name: true, email: true, avatarUrl: true } },
+      user: { select: { name: true, email: true, avatarUrl: true, country: true } },
       _count: { select: { conversions: true, payouts: true } },
     },
     orderBy: { createdAt: "desc" },

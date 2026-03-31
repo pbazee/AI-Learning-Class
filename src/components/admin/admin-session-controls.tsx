@@ -1,41 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
+import { useState } from "react";
 import { Loader2, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/ToastProvider";
 import { createClient } from "@/lib/supabase";
 
-function getUserInitial(user: User | null) {
-  const displayName =
-    user?.user_metadata?.full_name ||
-    user?.user_metadata?.name ||
-    user?.email ||
-    "Admin";
-
-  return displayName.trim().charAt(0).toUpperCase() || "A";
-}
-
 export function AdminSessionControls() {
-  const [user, setUser] = useState<User | null>(null);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-
-  useEffect(() => {
-    const supabase = createClient();
-
-    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -58,10 +32,7 @@ export function AdminSessionControls() {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 text-xs font-bold text-white">
-        {getUserInitial(user)}
-      </div>
+    <div className="flex items-center">
       <button
         type="button"
         onClick={handleSignOut}

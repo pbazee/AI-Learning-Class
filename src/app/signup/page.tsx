@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brain, Mail, Lock, Eye, EyeOff, Chrome, User, ArrowRight, Check, Sparkles, AlertCircle } from "lucide-react";
@@ -47,7 +47,8 @@ const roadmapSuggestions: Record<string, string[]> = {
 };
 
 export default function SignupPage() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const referralCode = searchParams.get("ref") || "";
   const [step, setStep] = useState<"account" | "quiz" | "roadmap">("account");
   const [showPassword, setShowPassword] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
@@ -119,6 +120,13 @@ export default function SignupPage() {
 
     // Auto-confirmed (email confirmation disabled in Supabase) → proceed to quiz
     console.log("[signup] Account created and auto-confirmed, proceeding to quiz");
+    if (referralCode) {
+      fetch("/api/referrals/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referralCode }),
+      }).catch(() => {});
+    }
     setLoading(false);
     setStep("quiz");
   }

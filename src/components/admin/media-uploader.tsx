@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { FileAudio, FileImage, FileText, FileVideo, Trash2, UploadCloud } from "lucide-react";
 import { AdminButton, AdminCard } from "@/components/admin/ui";
-import { useToast } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/ToastProvider";
 
 export type UploadedAsset = {
   bucket: string;
@@ -76,6 +76,7 @@ export function MediaUploader({
       }
 
       onUploaded(payload as UploadedAsset);
+      toast("File uploaded successfully.", "success");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Upload failed. Please try again.", "error");
     } finally {
@@ -92,6 +93,7 @@ export function MediaUploader({
     try {
       await deleteUploadedFile(value?.path || undefined);
       onRemoved?.();
+      toast("File removed successfully.", "success");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Unable to remove the file right now.", "error");
     } finally {
@@ -113,7 +115,13 @@ export function MediaUploader({
         <AdminCard className="flex items-center gap-4 p-4">
           <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-muted">
             {isImage ? (
-              <Image src={value.url} alt={value.fileName || "Uploaded file"} fill className="object-cover" />
+              <Image
+                src={value.url}
+                alt={value.fileName || "Uploaded file"}
+                fill
+                quality={100}
+                className="object-cover"
+              />
             ) : (
               <FileIcon className="h-6 w-6 text-blue-600" />
             )}
@@ -149,7 +157,7 @@ export function MediaUploader({
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">Upload to Supabase Storage</p>
-              <p className="mt-1 text-xs text-muted-foreground">Files are stored in the shared admin bucket.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Files are stored in the shared admin bucket at original quality.</p>
             </div>
             <AdminButton
               type="button"

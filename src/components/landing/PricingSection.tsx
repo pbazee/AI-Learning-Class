@@ -33,7 +33,7 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
               onClick={() => setYearly(false)}
               className={cn(
                 "rounded-xl px-5 py-2 text-sm font-medium",
-                !yearly ? "bg-blue-600 text-white" : "text-muted-foreground hover:text-foreground"
+                !yearly ? "bg-primary-blue text-white" : "text-muted-foreground hover:text-foreground"
               )}
             >
               Monthly
@@ -42,11 +42,16 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
               onClick={() => setYearly(true)}
               className={cn(
                 "flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-medium",
-                yearly ? "bg-blue-600 text-white" : "text-muted-foreground hover:text-foreground"
+                yearly ? "bg-primary-blue text-white" : "text-muted-foreground hover:text-foreground"
               )}
             >
               Yearly
-              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", yearly ? "bg-white/20" : "bg-blue-50 text-blue-700")}>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                  yearly ? "bg-white/20" : "bg-primary-blue/10 text-primary-blue"
+                )}
+              >
                 Save 30%
               </span>
             </button>
@@ -64,19 +69,19 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
               className={cn(
                 "relative flex flex-col rounded-[30px] border p-8 shadow-sm",
                 plan.isPopular
-                  ? "border-blue-300 bg-gradient-to-b from-blue-600 to-blue-700 text-white shadow-[0_24px_60px_rgba(0,86,210,0.22)]"
+                  ? "border-primary-blue bg-primary-blue text-white shadow-[0_24px_60px_rgba(59,130,246,0.24)]"
                   : "bg-card text-foreground"
               )}
             >
               {plan.isPopular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-1 text-xs font-bold uppercase tracking-[0.16em] text-blue-700">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-1 text-xs font-bold uppercase tracking-[0.16em] text-primary-blue">
                   Most popular
                 </div>
               )}
 
               <div className="mb-6">
                 <h3 className="mb-1 text-xl font-bold">{plan.name}</h3>
-                <p className={cn("text-sm leading-6", plan.isPopular ? "text-blue-100" : "text-muted-foreground")}>
+                <p className={cn("text-sm leading-6", plan.isPopular ? "text-white/80" : "text-muted-foreground")}>
                   {plan.description}
                 </p>
               </div>
@@ -86,12 +91,12 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
                   <span className="text-4xl font-black">
                     {formatPrice(yearly && plan.yearlyPrice ? Math.round(plan.yearlyPrice / 12) : plan.price)}
                   </span>
-                  <span className={cn("mb-1 text-sm", plan.isPopular ? "text-blue-100" : "text-muted-foreground")}>
+                  <span className={cn("mb-1 text-sm", plan.isPopular ? "text-white/80" : "text-muted-foreground")}>
                     /month
                   </span>
                 </div>
                 {yearly && plan.yearlyPrice && (
-                  <p className={cn("mt-2 text-xs", plan.isPopular ? "text-blue-100" : "text-blue-700")}>
+                  <p className={cn("mt-2 text-xs", plan.isPopular ? "text-white/80" : "text-primary-blue")}>
                     Billed {formatPrice(plan.yearlyPrice)}/year
                   </p>
                 )}
@@ -103,12 +108,12 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
                     <div
                       className={cn(
                         "mt-0.5 flex h-5 w-5 items-center justify-center rounded-full",
-                        plan.isPopular ? "bg-white/20" : "bg-blue-50 text-blue-700"
+                        plan.isPopular ? "bg-white/20" : "bg-primary-blue/10 text-primary-blue"
                       )}
                     >
                       <Check className="h-3.5 w-3.5" />
                     </div>
-                    <span className={plan.isPopular ? "text-blue-50" : "text-muted-foreground"}>{feature}</span>
+                    <span className={plan.isPopular ? "text-white" : "text-muted-foreground"}>{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -118,8 +123,8 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
                 className={cn(
                   "rounded-2xl px-4 py-3.5 text-center text-sm font-semibold",
                   plan.isPopular
-                    ? "bg-white text-blue-700 hover:bg-blue-50"
-                    : "border border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100"
+                    ? "bg-white text-primary-blue hover:bg-primary-blue/10"
+                    : "border border-primary-blue/20 bg-primary-blue/10 text-primary-blue hover:border-primary-blue/30 hover:bg-primary-blue/15"
                 )}
               >
                 Get started with {plan.name}
@@ -130,7 +135,7 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
 
         <p className="mt-8 text-center text-sm text-muted-foreground">
           All plans include a 14-day money-back guarantee.
-          <Link href="/pricing" className="ml-1 font-medium text-blue-700 hover:underline">
+          <Link href="/pricing" className="ml-1 font-medium text-primary-blue hover:underline">
             Compare full features
           </Link>
         </p>

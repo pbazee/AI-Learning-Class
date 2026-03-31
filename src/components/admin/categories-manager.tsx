@@ -3,15 +3,18 @@
 import { startTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteCategoryAction, saveCategoryAction } from "@/app/admin/actions";
+import { MediaUploader } from "@/components/admin/media-uploader";
 import { SimpleCrudManager } from "@/components/admin/simple-crud-manager";
-import { AdminSwitch, StatusPill } from "@/components/admin/ui";
-import { useToast } from "@/components/ui/toaster";
+import { AdminCard, AdminInput, AdminSwitch, FieldLabel, StatusPill } from "@/components/admin/ui";
+import { useToast } from "@/components/ui/ToastProvider";
 
 type CategoryRow = {
   id: string;
   name: string;
   slug: string;
   description?: string | null;
+  imageUrl?: string | null;
+  imagePath?: string | null;
   icon?: string | null;
   color?: string | null;
   isActive: boolean;
@@ -40,6 +43,8 @@ export function CategoriesManager({
           name: category.name,
           slug: category.slug,
           description: category.description || "",
+          imageUrl: category.imageUrl || "",
+          imagePath: category.imagePath || "",
           icon: category.icon || "",
           color: category.color || "#2563eb",
           parentId: category.parentId || null,
@@ -76,6 +81,8 @@ export function CategoriesManager({
         name: "",
         slug: "",
         description: "",
+        imageUrl: "",
+        imagePath: "",
         icon: "",
         color: "#2563eb",
         isActive: true,
@@ -86,6 +93,8 @@ export function CategoriesManager({
         name: item.name,
         slug: item.slug,
         description: item.description || "",
+        imageUrl: item.imageUrl || "",
+        imagePath: item.imagePath || "",
         icon: item.icon || "",
         color: item.color || "#2563eb",
         isActive: item.isActive,
@@ -96,6 +105,8 @@ export function CategoriesManager({
         name: form.name,
         slug: form.slug,
         description: form.description,
+        imageUrl: form.imageUrl,
+        imagePath: form.imagePath,
         icon: form.icon,
         color: form.color,
         isActive: Boolean(form.isActive),
@@ -106,6 +117,88 @@ export function CategoriesManager({
       fields={[
         { name: "name", label: "Name", type: "text", placeholder: "Machine Learning" },
         { name: "slug", label: "Slug", type: "text", placeholder: "machine-learning", hint: "Leave blank to auto-generate." },
+        {
+          name: "imageUrl",
+          label: "Category Image",
+          type: "url",
+          colSpan: 2,
+          render: ({ form, updateForm }) => (
+            <div className="space-y-4">
+              <div>
+                <FieldLabel>Category Image</FieldLabel>
+                <p className="text-xs text-muted-foreground">
+                  Upload from device to the shared admin bucket or paste a direct image URL.
+                </p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_40px_minmax(0,0.9fr)] lg:items-start">
+                <MediaUploader
+                  label="Upload from device"
+                  hint="Recommended for managing category artwork in Supabase Storage."
+                  folder="categories"
+                  accept="image/*"
+                  value={{
+                    url: form.imageUrl,
+                    path: form.imagePath,
+                    fileName: form.name || "Category image",
+                    mimeType: "image/*",
+                  }}
+                  onUploaded={(file) =>
+                    updateForm({
+                      imageUrl: file.url,
+                      imagePath: file.path,
+                    })
+                  }
+                  onRemoved={() =>
+                    updateForm({
+                      imageUrl: "",
+                      imagePath: "",
+                    })
+                  }
+                />
+
+                <div className="hidden h-full items-center justify-center lg:flex">
+                  <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Or
+                  </span>
+                </div>
+
+                <AdminCard className="p-5">
+                  <FieldLabel>Use image URL</FieldLabel>
+                  <AdminInput
+                    type="url"
+                    placeholder="https://example.com/category-cover.jpg"
+                    value={form.imageUrl}
+                    onChange={(event) =>
+                      updateForm({
+                        imageUrl: event.target.value,
+                      })
+                    }
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Direct URLs are saved as the display image. Uploaded assets also keep their storage path.
+                  </p>
+
+                  {form.imageUrl ? (
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                      <div className="border-b border-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Preview
+                      </div>
+                      <div className="p-4">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={form.imageUrl}
+                          alt={form.name || "Category preview"}
+                          className="h-36 w-full rounded-2xl object-cover"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </AdminCard>
+              </div>
+            </div>
+          ),
+        },
         { name: "icon", label: "Lucide Icon", type: "text", placeholder: "Brain" },
         { name: "color", label: "Accent Color", type: "color" },
         { name: "isActive", label: "Active Category", type: "switch", hint: "Inactive categories stay hidden on the frontend." },

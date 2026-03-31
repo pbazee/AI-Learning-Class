@@ -13,7 +13,7 @@ import {
   FieldLabel,
   StatusPill,
 } from "@/components/admin/ui";
-import { useToast } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/ToastProvider";
 
 type MappingField =
   | "title"

@@ -14,7 +14,7 @@ import {
   FieldLabel,
   StatusPill,
 } from "@/components/admin/ui";
-import { useToast } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/ToastProvider";
 
 type SettingsState = {
   siteName: string;
@@ -34,7 +34,7 @@ type FaqRow = {
   isActive: boolean;
 };
 
-const tabs = ["general", "contact", "social", "faq"] as const;
+const tabs = ["general", "contact", "social", "footer-support", "faq"] as const;
 
 export function SettingsManager({
   initialSettings,
@@ -57,14 +57,61 @@ export function SettingsManager({
   const router = useRouter();
   const { toast } = useToast();
 
+  function readSocial(key: string) {
+    return settings.socialLinks?.[key] || "";
+  }
+
+  function updateSocial(key: string, value: string) {
+    setSettings((current) => ({
+      ...current,
+      socialLinks: {
+        ...current.socialLinks,
+        [key]: value,
+      },
+    }));
+  }
+
   function handleSaveSettings() {
     setBusy(true);
     startTransition(async () => {
-      const result = await saveSiteSettingsAction(settings);
-      setBusy(false);
-      toast(result.message, result.success ? "success" : "error");
-      if (result.success) {
-        router.refresh();
+      try {
+        if (tab === "footer-support") {
+          const response = await fetch("/api/admin/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              settings: {
+                supportEmail: settings.supportEmail,
+                supportPhone: settings.supportPhone,
+                whatsappNumber: readSocial("whatsapp"),
+                physicalAddress: settings.supportAddress,
+                facebookUrl: readSocial("facebook"),
+                twitterUrl: readSocial("x") || readSocial("twitter"),
+                instagramUrl: readSocial("instagram"),
+                linkedInUrl: readSocial("linkedin"),
+                youtubeUrl: readSocial("youtube"),
+                tiktokUrl: readSocial("tiktok"),
+              },
+            }),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data?.error || "Unable to save footer support settings.");
+          }
+          toast(data?.message || "Footer support settings saved.", "success");
+          router.refresh();
+          return;
+        }
+
+        const result = await saveSiteSettingsAction(settings);
+        toast(result.message, result.success ? "success" : "error");
+        if (result.success) {
+          router.refresh();
+        }
+      } catch (error) {
+        toast(error instanceof Error ? error.message : "Unable to save settings right now.", "error");
+      } finally {
+        setBusy(false);
       }
     });
   }
@@ -197,12 +244,25 @@ export function SettingsManager({
             <FieldLabel>Support Phone</FieldLabel>
             <AdminInput value={settings.supportPhone} onChange={(event) => setSettings((current) => ({ ...current, supportPhone: event.target.value }))} />
           </div>
+          <div>
+            <FieldLabel>WhatsApp Number</FieldLabel>
+            <AdminInput
+              value={settings.socialLinks?.whatsapp || ""}
+              placeholder="+254712345678"
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  socialLinks: { ...current.socialLinks, whatsapp: event.target.value },
+                }))
+              }
+            />
+          </div>
         </AdminCard>
       ) : null}
 
       {tab === "social" ? (
         <AdminCard className="grid gap-5 p-6 md:grid-cols-2">
-          {["x", "linkedin", "youtube", "instagram", "tiktok", "facebook", "github"].map((platform) => (
+          {["x", "linkedin", "youtube", "instagram", "tiktok", "facebook", "github", "whatsapp"].map((platform) => (
             <div key={platform}>
               <FieldLabel>{platform.toUpperCase()}</FieldLabel>
               <AdminInput
@@ -220,6 +280,68 @@ export function SettingsManager({
               />
             </div>
           ))}
+        </AdminCard>
+      ) : null}
+
+      {tab === "footer-support" ? (
+        <AdminCard className="grid gap-5 p-6 md:grid-cols-2">
+          <div>
+            <FieldLabel>Support Email</FieldLabel>
+            <AdminInput
+              value={settings.supportEmail}
+              onChange={(event) => setSettings((current) => ({ ...current, supportEmail: event.target.value }))}
+              placeholder="support@ailearningclass.com"
+            />
+          </div>
+          <div>
+            <FieldLabel>Support Phone</FieldLabel>
+            <AdminInput
+              value={settings.supportPhone}
+              onChange={(event) => setSettings((current) => ({ ...current, supportPhone: event.target.value }))}
+              placeholder="+1 555 123 4567"
+            />
+          </div>
+          <div>
+            <FieldLabel>WhatsApp Number</FieldLabel>
+            <AdminInput
+              value={readSocial("whatsapp")}
+              onChange={(event) => updateSocial("whatsapp", event.target.value)}
+              placeholder="+254712345678"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <FieldLabel>Physical Address</FieldLabel>
+            <textarea
+              value={settings.supportAddress}
+              onChange={(event) => setSettings((current) => ({ ...current, supportAddress: event.target.value }))}
+              className="min-h-[120px] w-full rounded-2xl border border-input bg-background px-4 py-3 text-sm text-foreground outline-none transition-all focus:border-blue-400 focus:ring-2 focus:ring-blue-400/15"
+              placeholder="123 Learning Avenue, Nairobi"
+            />
+          </div>
+          <div>
+            <FieldLabel>Facebook URL</FieldLabel>
+            <AdminInput value={readSocial("facebook")} onChange={(event) => updateSocial("facebook", event.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>Twitter/X URL</FieldLabel>
+            <AdminInput value={readSocial("x")} onChange={(event) => updateSocial("x", event.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>Instagram URL</FieldLabel>
+            <AdminInput value={readSocial("instagram")} onChange={(event) => updateSocial("instagram", event.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>LinkedIn URL</FieldLabel>
+            <AdminInput value={readSocial("linkedin")} onChange={(event) => updateSocial("linkedin", event.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>YouTube URL</FieldLabel>
+            <AdminInput value={readSocial("youtube")} onChange={(event) => updateSocial("youtube", event.target.value)} />
+          </div>
+          <div>
+            <FieldLabel>TikTok URL</FieldLabel>
+            <AdminInput value={readSocial("tiktok")} onChange={(event) => updateSocial("tiktok", event.target.value)} />
+          </div>
         </AdminCard>
       ) : null}
 
