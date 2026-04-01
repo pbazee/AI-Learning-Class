@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { Check, Loader2, Play, ShoppingCart, Star } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Check, Heart, Loader2, Play, ShoppingCart, Star } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/media";
 import { enrollInFreeCourse } from "@/lib/course-enrollment";
 import { useCartStore } from "@/store/cart";
@@ -18,13 +18,23 @@ interface CourseCardProps {
   index?: number;
   viewerId?: string | null;
   courseAccess?: CourseAccessState;
+  isWishlisted?: boolean;
 }
 
-export function CourseCard({ course, index = 0, viewerId, courseAccess }: CourseCardProps) {
+export function CourseCard({
+  course,
+  index = 0,
+  viewerId,
+  courseAccess,
+  isWishlisted = false,
+}: CourseCardProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
   const { addItem, isInCart } = useCartStore();
   const [enrolling, setEnrolling] = useState(false);
+  const [wishlistPending, setWishlistPending] = useState(false);
+  const [wishlisted, setWishlisted] = useState(isWishlisted);
   const inCart = isInCart(course.id);
   const isFreeCourse = course.price === 0 || course.isFree;
   const hasAccess = Boolean(courseAccess?.hasAccess);
@@ -35,6 +45,10 @@ export function CourseCard({ course, index = 0, viewerId, courseAccess }: Course
     fallback: "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200&h=1600&fit=crop",
   });
   const durationLabel = course.totalDuration > 0 ? formatDuration(course.totalDuration) : "Self-paced";
+
+  useEffect(() => {
+    setWishlisted(isWishlisted);
+  }, [isWishlisted]);
 
   async function handlePrimaryAction(event: React.MouseEvent) {
     event.preventDefault();
@@ -74,6 +88,46 @@ export function CourseCard({ course, index = 0, viewerId, courseAccess }: Course
     }
   }
 
+  async function handleWishlistToggle(event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!viewerId) {
+      toast("Please sign in to save courses to your wishlist.", "error");
+      return;
+    }
+
+    const previousValue = wishlisted;
+    setWishlisted((current) => !current);
+    setWishlistPending(true);
+
+    try {
+      const response = await fetch(`/api/wishlist/${course.id}`, {
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to update your wishlist right now.");
+      }
+
+      setWishlisted(Boolean(payload?.wishlisted));
+      toast(
+        payload?.wishlisted ? "Added to your wishlist." : "Removed from your wishlist.",
+        "success"
+      );
+
+      if (pathname === "/wishlist") {
+        router.refresh();
+      }
+    } catch (error) {
+      setWishlisted(previousValue);
+      toast(error instanceof Error ? error.message : "Unable to update your wishlist right now.", "error");
+    } finally {
+      setWishlistPending(false);
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -95,25 +149,43 @@ export function CourseCard({ course, index = 0, viewerId, courseAccess }: Course
           <div className="absolute inset-x-0 bottom-0 h-[54%] bg-gradient-to-t from-slate-950 via-slate-950/96 via-45% to-transparent" />
 
           <div className="relative z-10 flex h-full flex-col p-5 text-white sm:p-6">
-            <div className="flex flex-wrap items-center gap-2">
-              {hasAccess ? (
-                <span className="rounded-[10px] border border-primary-blue/30 bg-primary-blue/12 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary-blue backdrop-blur-md">
-                  {courseAccess?.statusLabel}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {hasAccess ? (
+                  <span className="rounded-[10px] border border-primary-blue/30 bg-primary-blue/12 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary-blue backdrop-blur-md">
+                    {courseAccess?.statusLabel}
+                  </span>
+                ) : null}
+                <span
+                  className={cn(
+                    "rounded-[10px] border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] backdrop-blur-md",
+                    levelBadgeColor(course.level)
+                  )}
+                >
+                  {levelLabel(course.level)}
                 </span>
-              ) : null}
-              <span
+                {course.categoryName ? (
+                  <span className="max-w-[11rem] truncate rounded-[10px] border border-white/12 bg-black/38 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-white/82 backdrop-blur-md">
+                    {course.categoryName}
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Updated: course cards now support direct wishlist toggling with a persistent heart action. */}
+              <button
+                type="button"
+                onClick={handleWishlistToggle}
+                disabled={wishlistPending}
+                aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
                 className={cn(
-                  "rounded-[10px] border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] backdrop-blur-md",
-                  levelBadgeColor(course.level)
+                  "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border backdrop-blur-md transition-colors disabled:cursor-not-allowed disabled:opacity-70",
+                  wishlisted
+                    ? "border-primary-blue/30 bg-primary-blue/20 text-primary-blue"
+                    : "border-white/15 bg-black/25 text-white hover:border-primary-blue/30 hover:bg-primary-blue/18 hover:text-primary-blue"
                 )}
               >
-                {levelLabel(course.level)}
-              </span>
-              {course.categoryName ? (
-                <span className="max-w-[11rem] truncate rounded-[10px] border border-white/12 bg-black/38 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-white/82 backdrop-blur-md">
-                  {course.categoryName}
-                </span>
-              ) : null}
+                <Heart className={cn("h-4 w-4", wishlisted && "fill-current")} />
+              </button>
             </div>
 
             <div className="mt-auto max-w-[16.5rem] space-y-3 pt-24 sm:pt-28">

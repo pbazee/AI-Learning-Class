@@ -19,6 +19,7 @@ import {
   type HomepageParagraphEntry,
   type HomepageParagraphSectionKey,
 } from "@/lib/homepage-paragraphs";
+import { getCompletedCourseCertificateRecords } from "@/lib/learner-records";
 import { isPrismaConnectionError, prisma } from "./prisma";
 import { createServerSupabaseClient } from "./supabase-server";
 import { syncAuthenticatedUser } from "./auth-user-sync";
@@ -1535,26 +1536,14 @@ export async function getUserEnrollments(userId: string): Promise<DashboardEnrol
 
 export async function getUserCertificates(userId: string): Promise<UserCertificateRecord[]> {
   return safeDatabaseRead("getUserCertificates", [] as UserCertificateRecord[], async () => {
-    const certificates = await prisma.certificate.findMany({
-      where: { userId },
-      include: {
-        course: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-          },
-        },
-      },
-      orderBy: { issuedAt: "desc" },
-    });
+    const certificates = await getCompletedCourseCertificateRecords(userId);
 
     return certificates.map((certificate) => ({
       id: certificate.id,
       code: certificate.code,
-      issuedAt: formatDate(certificate.issuedAt) || "",
-      pdfUrl: certificate.pdfUrl ?? undefined,
-      blockchainHash: certificate.blockchainHash ?? undefined,
+      issuedAt: certificate.issuedAt,
+      pdfUrl: certificate.pdfUrl,
+      blockchainHash: certificate.blockchainHash,
       course: certificate.course,
     }));
   });

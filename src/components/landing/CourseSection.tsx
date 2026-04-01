@@ -16,6 +16,7 @@ interface CourseSectionProps {
   maxItems?: number;
   viewerId?: string | null;
   courseAccessMap?: Record<string, CourseAccessState>;
+  wishlistCourseIds?: string[];
 }
 
 const badgeIcons = {
@@ -43,6 +44,7 @@ export function CourseSection({
   maxItems = 4,
   viewerId,
   courseAccessMap,
+  wishlistCourseIds,
 }: CourseSectionProps) {
   const Icon = badgeIcons[badgeIcon];
   const colorClass = badgeColors[badgeIcon];
@@ -88,6 +90,7 @@ export function CourseSection({
               index={i}
               viewerId={viewerId}
               courseAccess={courseAccessMap?.[course.id]}
+              isWishlisted={wishlistCourseIds?.includes(course.id)}
             />
           ))}
         </motion.div>

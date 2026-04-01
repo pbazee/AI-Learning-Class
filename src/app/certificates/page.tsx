@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Award, Download, ExternalLink, Shield } from "lucide-react";
+import { Award, Shield } from "lucide-react";
+import { CertificateCardActions } from "@/components/certificates/CertificateCardActions";
 import { getCurrentUserProfile, getUserCertificates } from "@/lib/data";
 
 export default async function CertificatesPage() {
@@ -45,7 +46,7 @@ export default async function CertificatesPage() {
               </p>
               <Link
                 href="/courses"
-                className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                className="rounded-xl bg-primary-blue px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-blue/90"
               >
                 Browse Courses
               </Link>
@@ -73,31 +74,14 @@ export default async function CertificatesPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {certificate.pdfUrl ? (
-                        <a
-                          href={certificate.pdfUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-950/60"
-                        >
-                          <Download className="h-4 w-4" /> PDF
-                        </a>
-                      ) : null}
-                      <a
-                        href={`/api/certificate/generate?code=${encodeURIComponent(certificate.code)}`}
-                        className="flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-                      >
-                        <ExternalLink className="h-4 w-4" /> Verify
-                      </a>
-                    </div>
+                    <CertificateCardActions code={certificate.code} pdfUrl={certificate.pdfUrl} />
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="mt-8 rounded-2xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-800 dark:bg-blue-950/20">
+          <div className="mt-8 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 p-5">
             <h4 className="mb-1 text-sm font-semibold text-foreground">About your certificates</h4>
             <p className="text-xs leading-relaxed text-muted-foreground">
               All AI Learning Class certificates are lifetime credentials. Share the certificate code with employers or on LinkedIn to verify authenticity.

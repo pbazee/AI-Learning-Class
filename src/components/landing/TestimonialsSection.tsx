@@ -10,8 +10,8 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
   }
 
   return (
-    <section className="section-shell relative overflow-hidden">
-      <div className="absolute inset-x-0 top-10 h-60 bg-blue-50/80 blur-3xl" />
+    <section className="section-shell relative overflow-hidden bg-white dark:bg-gray-950 dark:text-white">
+      <div className="absolute inset-x-0 top-10 h-60 bg-blue-50/80 blur-3xl dark:bg-primary-blue/10" />
 
       <div className="section-frame relative">
         <div className="mb-14 text-center">

@@ -7,6 +7,7 @@ import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { BlogSection } from "@/components/landing/BlogSection";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { AffiliateSection } from "@/components/landing/AffiliateSection";
+import { getUserWishlistCourseIds } from "@/lib/learner-records";
 import {
   getBlogPosts,
   getCategories,
@@ -45,6 +46,12 @@ export default async function HomePage() {
         getUserAffiliateStatus(viewer.id),
       ])
     : [{}, { hasJoined: false, status: null }];
+  const wishlistCourseIds = viewer
+    ? await getUserWishlistCourseIds(
+        viewer.id,
+        courses.map((course) => course.id)
+      )
+    : [];
 
   const featured = courses.filter((course) => course.isFeatured);
   const trending = courses.filter((course) => course.isTrending);
@@ -87,6 +94,7 @@ export default async function HomePage() {
         maxItems={4}
         viewerId={viewer?.id}
         courseAccessMap={courseAccessMap}
+        wishlistCourseIds={wishlistCourseIds}
       />
       <CourseSection
         title="Trending Now"
@@ -99,6 +107,7 @@ export default async function HomePage() {
         maxItems={4}
         viewerId={viewer?.id}
         courseAccessMap={courseAccessMap}
+        wishlistCourseIds={wishlistCourseIds}
       />
       <CourseSection
         title="Most Popular"
@@ -111,6 +120,7 @@ export default async function HomePage() {
         maxItems={4}
         viewerId={viewer?.id}
         courseAccessMap={courseAccessMap}
+        wishlistCourseIds={wishlistCourseIds}
       />
       <CourseSection
         title="New Releases"
@@ -123,6 +133,7 @@ export default async function HomePage() {
         maxItems={4}
         viewerId={viewer?.id}
         courseAccessMap={courseAccessMap}
+        wishlistCourseIds={wishlistCourseIds}
       />
       <TestimonialsSection testimonials={testimonials} />
       <BlogSection posts={posts} />

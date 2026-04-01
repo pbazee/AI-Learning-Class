@@ -48,6 +48,7 @@ export function CoursesCatalog({
   initialFilter,
   viewerId,
   courseAccessMap,
+  wishlistCourseIds,
 }: {
   courses: Course[];
   categories: Category[];
@@ -55,6 +56,7 @@ export function CoursesCatalog({
   initialFilter?: string;
   viewerId?: string | null;
   courseAccessMap?: Record<string, CourseAccessState>;
+  wishlistCourseIds?: string[];
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -269,6 +271,7 @@ export function CoursesCatalog({
                   index={index}
                   viewerId={viewerId}
                   courseAccess={courseAccessMap?.[course.id]}
+                  isWishlisted={wishlistCourseIds?.includes(course.id)}
                 />
               ))}
             </div>

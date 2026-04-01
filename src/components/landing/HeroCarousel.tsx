@@ -53,7 +53,7 @@ export function HeroCarousel({
 
   return (
     <section
-      className="relative min-h-[640px] overflow-hidden sm:h-[calc(100svh-var(--announcement-height)-var(--navbar-height))]"
+      className="relative h-[calc(100svh-var(--announcement-height)-var(--navbar-height))] overflow-hidden"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -83,7 +83,7 @@ export function HeroCarousel({
       </AnimatePresence>
 
       {/* Content */}
-      <div className="relative z-10 mx-auto flex h-full max-w-7xl items-center px-4 pb-28 pt-16 sm:px-6 sm:pb-28 lg:px-8">
+      <div className="relative z-10 mx-auto flex h-full max-w-7xl items-center px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="max-w-3xl">
           <AnimatePresence mode="wait">
             <motion.div
