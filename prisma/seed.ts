@@ -12,6 +12,14 @@ import { getPrimaryAdminEmail } from "../src/lib/admin-email";
 
 const prisma = new PrismaClient();
 const primaryAdminEmail = getPrimaryAdminEmail();
+const trustedLogos = [
+  { name: "OpenAI", imageUrl: "/trusted-logos/openai.svg", websiteUrl: "https://openai.com", order: 0 },
+  { name: "Google", imageUrl: "/trusted-logos/google.svg", websiteUrl: "https://google.com", order: 1 },
+  { name: "Microsoft", imageUrl: "/trusted-logos/microsoft.svg", websiteUrl: "https://microsoft.com", order: 2 },
+  { name: "Meta", imageUrl: "/trusted-logos/meta.svg", websiteUrl: "https://meta.com", order: 3 },
+  { name: "Midjourney", imageUrl: "/trusted-logos/midjourney.svg", websiteUrl: "https://midjourney.com", order: 4 },
+  { name: "NVIDIA", imageUrl: "/trusted-logos/nvidia.svg", websiteUrl: "https://nvidia.com", order: 5 },
+];
 
 async function main() {
   console.log("🌱 Seeding database...");
@@ -126,6 +134,24 @@ async function main() {
     });
   }
 
+  // Trusted logos
+  console.log("Seeding trusted logos...");
+  for (const logo of trustedLogos) {
+    await prisma.trustedLogo.upsert({
+      where: { name: logo.name },
+      update: {
+        imageUrl: logo.imageUrl,
+        websiteUrl: logo.websiteUrl,
+        order: logo.order,
+        isActive: true,
+      },
+      create: {
+        ...logo,
+        isActive: true,
+      },
+    });
+  }
+
   // Site settings
   await prisma.siteSettings.upsert({
     where: { id: "singleton" },
@@ -160,6 +186,7 @@ async function main() {
   console.log(`   🖼️  ${seedHeroSlides.length} hero slides`);
   console.log(`   📢 ${seedAnnouncements.length} announcements`);
   console.log(`   💳 ${seedSubscriptionPlans.length} subscription plans`);
+  console.log(`   trusted logos: ${trustedLogos.length}`);
 }
 
 main()

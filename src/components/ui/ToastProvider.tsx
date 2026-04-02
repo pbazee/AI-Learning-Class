@@ -27,14 +27,14 @@ const toneClasses: Record<ToastType, string> = {
   success: "border-l-4 border-l-emerald-400",
   error: "border-l-4 border-l-rose-400",
   warning: "border-l-4 border-l-amber-400",
-  info: "border-l-4 border-l-blue-400",
+  info: "border-l-4 border-l-primary-blue",
 };
 
 const toneIcons: Record<ToastType, ReactNode> = {
   success: <CheckCircle2 className="h-4 w-4 text-emerald-300" />,
   error: <AlertCircle className="h-4 w-4 text-rose-300" />,
   warning: <TriangleAlert className="h-4 w-4 text-amber-300" />,
-  info: <Info className="h-4 w-4 text-blue-300" />,
+  info: <Info className="h-4 w-4 text-primary-blue" />,
 };
 
 function createToastId() {

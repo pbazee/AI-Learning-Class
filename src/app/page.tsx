@@ -7,6 +7,7 @@ import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { BlogSection } from "@/components/landing/BlogSection";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { AffiliateSection } from "@/components/landing/AffiliateSection";
+import { TrustedLogosMarquee } from "@/components/landing/TrustedLogosMarquee";
 import { getUserWishlistCourseIds } from "@/lib/learner-records";
 import {
   getBlogPosts,
@@ -17,6 +18,7 @@ import {
   getHomepageParagraphContentMap,
   getSubscriptionPlans,
   getTestimonials,
+  getTrustedLogos,
   getUserAffiliateStatus,
   getUserCourseAccessMap,
 } from "@/lib/data";
@@ -27,7 +29,7 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 });
 
 export default async function HomePage() {
-  const [courses, categories, slides, testimonials, posts, plans, viewer, homepageParagraphs] = await Promise.all([
+  const [courses, categories, slides, testimonials, posts, plans, viewer, homepageParagraphs, trustedLogos] = await Promise.all([
     getCourses(),
     getCategories(),
     getHeroSlides(),
@@ -36,6 +38,7 @@ export default async function HomePage() {
     getSubscriptionPlans(),
     getCurrentUserProfile(),
     getHomepageParagraphContentMap(),
+    getTrustedLogos(),
   ]);
   const [courseAccessMap, affiliateStatus] = viewer
     ? await Promise.all([
@@ -78,6 +81,7 @@ export default async function HomePage() {
         stats={heroStats}
         averageRating={weightedRating > 0 ? weightedRating.toFixed(1) : undefined}
       />
+      <TrustedLogosMarquee logos={trustedLogos} />
       <CategoriesGrid
         categories={categories.slice(0, 4)}
         sectionDescription={homepageParagraphs.learning_paths_subtitle}

@@ -5,9 +5,9 @@ import { getUserWishlistCourseIds } from "@/lib/learner-records";
 export default async function CoursesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; filter?: string }>;
+  searchParams: Promise<{ category?: string; filter?: string; q?: string }>;
 }) {
-  const [{ category, filter }, courses, categories, viewer] = await Promise.all([
+  const [{ category, filter, q }, courses, categories, viewer] = await Promise.all([
     searchParams,
     getCourses(),
     getCategories(),
@@ -32,6 +32,7 @@ export default async function CoursesPage({
       categories={categories}
       initialCategory={category ?? "all"}
       initialFilter={filter}
+      initialSearch={q ?? ""}
       viewerId={viewer?.id}
       courseAccessMap={courseAccessMap}
       wishlistCourseIds={wishlistCourseIds}

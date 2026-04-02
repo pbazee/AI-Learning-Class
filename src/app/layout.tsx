@@ -5,6 +5,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { AnnouncementBarWrapper } from "@/components/landing/AnnouncementBarWrapper";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { RouteScrollReset } from "@/components/layout/RouteScrollReset";
 
 const inter = Inter({
@@ -52,6 +53,7 @@ export default function RootLayout({
             <AnnouncementBarWrapper />
             <RouteScrollReset />
             {children}
+            <MobileBottomNav />
           </ToastProvider>
         </ThemeProvider>
       </body>

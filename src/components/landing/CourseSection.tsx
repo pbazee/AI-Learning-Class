@@ -29,7 +29,7 @@ const badgeIcons = {
 const badgeColors = {
   flame: "border-orange-200 bg-orange-50 text-orange-700",
   star: "border-amber-200 bg-amber-50 text-amber-700",
-  spark: "border-blue-200 bg-blue-50 text-blue-700",
+  spark: "border-primary-blue/20 bg-primary-blue/10 text-primary-blue",
   clock: "border-slate-200 bg-slate-50 text-slate-700",
 };
 

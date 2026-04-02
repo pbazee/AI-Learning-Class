@@ -7,6 +7,7 @@ export type EnrollmentStatus = "ACTIVE" | "COMPLETED" | "SUSPENDED" | "EXPIRED";
 export type CourseAssetType = "AUDIO" | "VIDEO" | "PDF";
 export type ContentStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type PopupShowOn = "HOMEPAGE_ONLY" | "COURSE_PAGES" | "BLOG_PAGES" | "ALL_PAGES";
+export type ContactMessageStatus = "UNREAD" | "READ" | "REPLIED";
 
 export interface Course {
   id: string;
@@ -151,6 +152,46 @@ export interface HeroSlide {
   isActive: boolean;
   order: number;
   autoSlideInterval?: number | null;
+}
+
+export interface TrustedLogo {
+  id: string;
+  name: string;
+  imageUrl: string;
+  imagePath?: string;
+  websiteUrl?: string;
+  order: number;
+  isActive: boolean;
+}
+
+export interface CourseSearchSuggestion {
+  id: string;
+  slug: string;
+  title: string;
+  level: Level;
+  thumbnailUrl?: string;
+  categoryName?: string;
+}
+
+export interface ContactMessageReply {
+  id: string;
+  senderName?: string;
+  senderEmail?: string;
+  body: string;
+  isAdmin: boolean;
+  createdAt: string;
+}
+
+export interface ContactMessageThread {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: ContactMessageStatus;
+  createdAt: string;
+  updatedAt: string;
+  replies: ContactMessageReply[];
 }
 
 export interface Announcement {

@@ -46,6 +46,7 @@ export function CoursesCatalog({
   categories,
   initialCategory = "all",
   initialFilter,
+  initialSearch = "",
   viewerId,
   courseAccessMap,
   wishlistCourseIds,
@@ -54,13 +55,14 @@ export function CoursesCatalog({
   categories: Category[];
   initialCategory?: string;
   initialFilter?: string;
+  initialSearch?: string;
   viewerId?: string | null;
   courseAccessMap?: Record<string, CourseAccessState>;
   wishlistCourseIds?: string[];
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [category, setCategory] = useState(initialCategory);
   const [level, setLevel] = useState<Level | "ALL">("ALL");
   const [priceFilter, setPriceFilter] = useState<"all" | "free" | "paid">("all");
@@ -78,6 +80,10 @@ export function CoursesCatalog({
 
     return () => window.cancelAnimationFrame(frame);
   }, [routeSignature]);
+
+  useEffect(() => {
+    setSearch(initialSearch);
+  }, [initialSearch]);
 
   const filtered = useMemo(() => {
     let filteredCourses = [...courses];
@@ -163,12 +169,22 @@ export function CoursesCatalog({
       <Navbar />
       <div>
         <div className="border-b border-border bg-card">
-          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-            <h1 className="mb-2 text-3xl font-black text-foreground">
-              All <span className="text-primary-blue">AI Courses</span>
-            </h1>
+          <div className="bg-primary-blue">
+            <div className="mx-auto max-w-5xl px-4 py-10 text-center sm:px-6 lg:px-8">
+              <h1 className="mb-2 text-3xl font-black text-white">
+                All AI Courses
+              </h1>
+              <p className="text-white/82">
+                {filtered.length} course{filtered.length !== 1 ? "s" : ""} ready for hands-on AI building, career growth, and practical LLM mastery
+              </p>
+            </div>
+          </div>
+          <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+            <h2 className="mb-2 text-3xl font-black text-foreground">
+              Explore by search, level, category, and price
+            </h2>
             <p className="text-muted-foreground">
-              {filtered.length} course{filtered.length !== 1 ? "s" : ""} - learn from the world&apos;s best AI instructors
+              Filter the catalog instantly to find the right learning path for your next AI milestone.
             </p>
           </div>
         </div>

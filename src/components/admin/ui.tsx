@@ -34,7 +34,7 @@ export function AdminPageIntro({
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
         {eyebrow ? (
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-400">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-blue">
             {eyebrow}
           </p>
         ) : null}
@@ -116,8 +116,8 @@ export function AdminButton({
   ...props
 }: ButtonProps) {
   const styles = {
-    primary: "bg-blue-600 text-white shadow-[0_20px_40px_-20px_rgba(37,99,235,0.95)] hover:bg-blue-500",
-    secondary: "border border-white/10 bg-slate-900/70 text-slate-100 hover:border-blue-400/30 hover:bg-slate-900",
+    primary: "bg-primary-blue text-white shadow-[0_20px_40px_-20px_rgba(0,86,210,0.95)] hover:bg-primary-blue/90",
+    secondary: "border border-white/10 bg-slate-900/70 text-slate-100 hover:border-primary-blue/30 hover:bg-slate-900",
     ghost: "bg-transparent text-slate-400 hover:bg-white/5 hover:text-white",
     danger: "bg-rose-600 text-white hover:bg-rose-700",
   };
@@ -155,7 +155,7 @@ export function AdminInput(props: InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={cn(
-        "w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-500 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/15",
+        "w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-500 focus:border-primary-blue/60 focus:ring-2 focus:ring-primary-blue/15",
         props.className
       )}
     />
@@ -167,7 +167,7 @@ export function AdminTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>
     <textarea
       {...props}
       className={cn(
-        "min-h-[120px] w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-500 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/15",
+        "min-h-[120px] w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-slate-100 outline-none transition-all placeholder:text-slate-500 focus:border-primary-blue/60 focus:ring-2 focus:ring-primary-blue/15",
         props.className
       )}
     />
@@ -179,7 +179,7 @@ export function AdminSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
     <select
       {...props}
       className={cn(
-        "w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-slate-100 outline-none transition-all focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/15",
+        "w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-slate-100 outline-none transition-all focus:border-primary-blue/60 focus:ring-2 focus:ring-primary-blue/15",
         props.className
       )}
     />
@@ -207,7 +207,7 @@ export function AdminSwitch({
         <p className="text-sm font-semibold text-slate-100">{label}</p>
         {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
       </div>
-      <span className={cn("relative h-6 w-11 rounded-full transition-all", checked ? "bg-blue-600" : "bg-slate-800")}>
+      <span className={cn("relative h-6 w-11 rounded-full transition-all", checked ? "bg-primary-blue" : "bg-slate-800")}>
         <span
           className={cn(
             "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-lg transition-all",
@@ -239,7 +239,7 @@ export function AdminCheckbox({
       <span
         className={cn(
           "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all",
-          checked ? "border-blue-500 bg-blue-600 text-white" : "border-white/15 bg-black/30 text-transparent"
+          checked ? "border-primary-blue bg-primary-blue text-white" : "border-white/15 bg-black/30 text-transparent"
         )}
       >
         <Check className="h-3.5 w-3.5" />
@@ -263,7 +263,7 @@ export function StatusPill({
     success: "bg-emerald-500/15 text-emerald-300",
     warning: "bg-amber-500/15 text-amber-300",
     danger: "bg-rose-500/15 text-rose-300",
-    info: "bg-blue-500/15 text-blue-300",
+    info: "bg-primary-blue/15 text-primary-blue",
     neutral: "bg-white/5 text-slate-300",
   };
 
@@ -381,7 +381,7 @@ export function AdminModal({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-xl border border-white/10 p-2 text-slate-400 hover:border-blue-300/50 hover:text-white"
+            className="shrink-0 rounded-xl border border-white/10 p-2 text-slate-400 hover:border-primary-blue/40 hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>
@@ -446,7 +446,7 @@ export function AdminDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-white/10 p-2 text-slate-400 hover:border-blue-300/50 hover:text-white"
+            className="rounded-xl border border-white/10 p-2 text-slate-400 hover:border-primary-blue/40 hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>

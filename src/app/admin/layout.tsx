@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  BadgeCheck,
   BookOpen,
   Brain,
   ChevronLeft,
@@ -14,6 +15,7 @@ import {
   FileText,
   House,
   Image,
+  Inbox,
   Layers3,
   LayoutDashboard,
   Link2,
@@ -46,6 +48,8 @@ const navItems = [
   { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { label: "Announcements", href: "/admin/announcements", icon: Megaphone },
   { label: "Hero Slides", href: "/admin/hero-slides", icon: Image },
+  { label: "Trusted Logos", href: "/admin/trusted-logos", icon: BadgeCheck },
+  { label: "Messages", href: "/admin/messages", icon: Inbox },
   { label: "Paragraphs", href: "/admin/paragraphs", icon: FileText },
   { label: "Affiliates", href: "/admin/affiliates", icon: Link2 },
   { label: "Referrals", href: "/admin/referrals", icon: Share2 },
@@ -88,6 +92,14 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/admin/hero-slides": {
     title: "Hero Slides",
     subtitle: "Control the first impression of the homepage experience.",
+  },
+  "/admin/trusted-logos": {
+    title: "Trusted Logos",
+    subtitle: "Manage the marquee of brands and partners shown beneath the homepage hero.",
+  },
+  "/admin/messages": {
+    title: "Messages",
+    subtitle: "Reply to incoming contact messages and keep the support inbox organized.",
   },
   "/admin/paragraphs": {
     title: "Homepage Sections",

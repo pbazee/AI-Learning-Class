@@ -1,9 +1,18 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Sparkles, Users, Star, BookOpen } from "lucide-react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowRight,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  Star,
+  Users,
+} from "lucide-react";
 import type { HeroSlide } from "@/types";
 
 type HeroStat = {
@@ -12,6 +21,24 @@ type HeroStat = {
 };
 
 const statIcons = [Users, BookOpen, Star];
+
+function getMobileCtaText(label?: string) {
+  const fallback = "Explore Courses";
+  if (!label?.trim()) {
+    return fallback;
+  }
+
+  const normalized = label.trim();
+  if (/explore/i.test(normalized) && /course/i.test(normalized)) {
+    return "Explore Courses";
+  }
+
+  if (normalized.length <= 18) {
+    return normalized;
+  }
+
+  return fallback;
+}
 
 export function HeroCarousel({
   slides,
@@ -29,155 +56,250 @@ export function HeroCarousel({
   const slideCount = slides.length;
 
   const next = useCallback(() => {
-    if (slideCount === 0) return;
-    setCurrent((prev) => (prev + 1) % slideCount);
+    if (slideCount === 0) {
+      return;
+    }
+
+    setCurrent((previous) => (previous + 1) % slideCount);
   }, [slideCount]);
 
-  const prev = useCallback(() => {
-    if (slideCount === 0) return;
-    setCurrent((prev) => (prev - 1 + slideCount) % slideCount);
+  const previous = useCallback(() => {
+    if (slideCount === 0) {
+      return;
+    }
+
+    setCurrent((previousIndex) => (previousIndex - 1 + slideCount) % slideCount);
   }, [slideCount]);
 
   const currentSlide = slides[current] ?? slides[0];
   const intervalMs = ((currentSlide?.autoSlideInterval ?? globalInterval) || 6) * 1000;
 
   useEffect(() => {
-    if (paused || slideCount <= 1) return;
-    const timer = setInterval(next, intervalMs);
-    return () => clearInterval(timer);
-  }, [next, paused, slideCount, intervalMs]);
+    if (paused || slideCount <= 1) {
+      return;
+    }
 
-  if (slideCount === 0) return null;
+    const timer = window.setInterval(next, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [intervalMs, next, paused, slideCount]);
 
-  const slide = slides[current] ?? slides[0];
+  const heroCards = useMemo(() => {
+    const primaryStat = stats[0];
+    const secondaryStat = stats[1];
+
+    return [
+      {
+        eyebrow: "Featured Track",
+        title: currentSlide?.subtitle || "Master LLM Engineering",
+        body: "Live projects, prompt evaluation, retrieval workflows, and production-minded AI systems.",
+      },
+      {
+        eyebrow: primaryStat?.label || "Learner momentum",
+        title: primaryStat?.value || "Global",
+        body: "Ambitious builders learning practical AI every day.",
+      },
+      {
+        eyebrow: averageRating ? "Average Rating" : secondaryStat?.label || "Course library",
+        title: averageRating ? `${averageRating}/5` : secondaryStat?.value || "Fresh weekly",
+        body: averageRating ? "Backed by learner reviews across the platform." : "New labs, lessons, and guided pathways stay in rotation.",
+      },
+    ];
+  }, [averageRating, currentSlide?.subtitle, stats]);
+
+  if (slideCount === 0) {
+    return null;
+  }
 
   return (
     <section
-      className="relative h-screen overflow-hidden"
+      className="relative overflow-hidden"
+      style={{
+        minHeight:
+          "calc(100svh - var(--announcement-height) - var(--navbar-height) - var(--mobile-bottom-nav-height))",
+        height:
+          "calc(100dvh - var(--announcement-height) - var(--navbar-height) - var(--mobile-bottom-nav-height))",
+      }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {/* Full-background image */}
       <AnimatePresence mode="sync">
         <motion.div
-          key={`bg-${current}`}
-          className="absolute inset-0 z-0"
+          key={`hero-background-${current}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.7 }}
+          transition={{ duration: 0.6 }}
+          className="absolute inset-0"
         >
           <Image
-            src={slide.imageUrl}
-            alt={slide.title}
+            src={currentSlide.imageUrl}
+            alt={currentSlide.title}
             fill
-            quality={100}
             priority
+            quality={100}
             className="object-cover object-center"
             sizes="100vw"
           />
-          {/* Dark overlay so text is readable */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/82 via-black/56 to-black/28" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/68 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,86,210,0.28),transparent_42%)]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#020617]/92 via-[#020617]/76 to-[#020617]/42" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/72 via-transparent to-transparent" />
         </motion.div>
       </AnimatePresence>
 
-      {/* Content */}
-      <div className="relative z-10 mx-auto flex h-full max-w-7xl items-center px-4 py-8 sm:px-6 lg:px-8">
-        <div className="max-w-3xl pr-6 sm:pr-20 lg:pr-28">
+      <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-between px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="grid min-h-0 flex-1 items-center gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px] xl:gap-10">
           <AnimatePresence mode="wait">
             <motion.div
-              key={current}
-              initial={{ opacity: 0, y: 40 }}
+              key={`hero-copy-${current}`}
+              initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
-              className="space-y-5"
+              exit={{ opacity: 0, y: -18 }}
+              transition={{ duration: 0.42 }}
+              className="max-w-2xl"
             >
-              {slide.subtitle && (
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold text-white ring-1 ring-white/20 backdrop-blur-sm sm:text-sm">
-                  <Sparkles className="h-4 w-4 text-white" />
-                  <span>{slide.subtitle}</span>
-                </div>
-              )}
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/88 backdrop-blur-sm sm:text-xs">
+                <Sparkles className="h-3.5 w-3.5 text-white" />
+                {currentSlide.subtitle || "Master LLM Engineering"}
+              </div>
 
-              <h1 className="text-3xl font-black leading-[0.95] text-white drop-shadow-lg sm:text-5xl lg:text-6xl">
-                {slide.title}
+              <h1 className="mt-4 text-[2rem] font-black leading-[0.92] text-white sm:mt-5 sm:text-[3.2rem] lg:text-[4.35rem]">
+                {currentSlide.title}
               </h1>
 
-              {slide.description && (
-                <p className="max-w-2xl text-sm leading-relaxed text-white sm:text-lg">
-                  {slide.description}
+              {currentSlide.description ? (
+                <p className="mt-4 max-w-xl text-sm leading-7 text-white/84 sm:mt-5 sm:text-base lg:text-lg">
+                  {currentSlide.description}
                 </p>
-              )}
+              ) : null}
 
-              <div className="flex flex-wrap items-center gap-3 pt-1 sm:gap-4">
+              <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:flex-wrap">
                 <Link
-                  href={slide.ctaLink || "/courses"}
-                  className="group inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-primary-blue px-6 py-3.5 text-sm font-semibold text-white shadow-[0_20px_40px_rgba(15,23,42,0.3)] transition-all hover:bg-primary-blue/90 sm:w-auto sm:px-7 sm:text-base"
+                  href={currentSlide.ctaLink || "/courses"}
+                  className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white shadow-[0_22px_50px_-28px_rgba(0,86,210,0.9)] transition hover:bg-primary-blue/90 sm:px-6 sm:py-3.5 sm:text-base"
                 >
-                  {slide.ctaText || "Explore Courses"}
-                  <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  <span className="sm:hidden">{getMobileCtaText(currentSlide.ctaText || "Explore LLM Courses")}</span>
+                  <span className="hidden sm:inline">{currentSlide.ctaText || "Explore LLM Courses"}</span>
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </Link>
+
+                <Link
+                  href="/paths"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/18 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/14 sm:px-6 sm:py-3.5 sm:text-base"
+                >
+                  <span className="sm:hidden">View Paths</span>
+                  <span className="hidden sm:inline">See Learning Paths</span>
                 </Link>
               </div>
 
-              {averageRating && (
-                <div className="flex items-center gap-2 text-yellow-300">
-                  <Star className="h-4 w-4 fill-current sm:h-5 sm:w-5" />
-                  <span className="font-bold text-white">{averageRating}</span>
-                  <span className="text-sm text-white">average rating</span>
+              <div className="mt-5 grid gap-3 sm:mt-6 sm:grid-cols-3">
+                {stats.map((stat, index) => {
+                  const Icon = statIcons[index] ?? Sparkles;
+
+                  return (
+                    <div
+                      key={stat.label}
+                      className="rounded-[22px] border border-white/14 bg-white/10 px-4 py-3 backdrop-blur-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
+                          <Icon className="h-4 w-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-lg font-black leading-none text-white">{stat.value}</p>
+                          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-white/68">{stat.label}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {averageRating ? (
+                <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-white/88">
+                  <Star className="h-4 w-4 fill-current text-[#facc15]" />
+                  <span>{averageRating} average rating from active learners</span>
                 </div>
-              )}
+              ) : null}
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:hidden">
+                {heroCards.map((card) => (
+                  <div
+                    key={card.eyebrow}
+                    className="rounded-[24px] border border-white/14 bg-white/10 p-4 backdrop-blur-md"
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">{card.eyebrow}</p>
+                    <p className="mt-2 text-lg font-black text-white">{card.title}</p>
+                    <p className="mt-2 text-xs leading-6 text-white/78">{card.body}</p>
+                  </div>
+                ))}
+              </div>
             </motion.div>
           </AnimatePresence>
 
-          {/* Stats row */}
-          {stats.length > 0 && (
-            <div className="mt-8 grid gap-3 sm:mt-10 sm:grid-cols-3 sm:gap-4">
-              {stats.map(({ value, label }, index) => {
-                const Icon = statIcons[index] ?? Sparkles;
-                return (
-                  <div key={label} className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15">
-                      <Icon className="h-4 w-4 text-white" />
-                    </div>
-                    <div>
-                      <div className="text-base font-bold text-white leading-none">{value}</div>
-                      <div className="mt-0.5 text-xs text-white">{label}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <div className="relative hidden h-full min-h-[420px] lg:block">
+            {heroCards.map((card, index) => (
+              <motion.div
+                key={card.eyebrow}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{
+                  opacity: 1,
+                  y: [0, index % 2 === 0 ? -10 : 8, 0],
+                }}
+                transition={{
+                  duration: 7 + index,
+                  repeat: Number.POSITIVE_INFINITY,
+                  ease: "easeInOut",
+                }}
+                className={`absolute w-full rounded-[30px] border border-white/14 bg-white/12 p-6 text-white shadow-[0_26px_70px_-44px_rgba(2,6,23,0.95)] backdrop-blur-xl ${
+                  index === 0
+                    ? "right-0 top-[8%] max-w-[340px]"
+                    : index === 1
+                      ? "left-0 top-[42%] max-w-[280px]"
+                      : "right-5 bottom-[8%] max-w-[300px]"
+                }`}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/64">{card.eyebrow}</p>
+                <p className="mt-3 text-[1.9rem] font-black leading-tight">{card.title}</p>
+                <p className="mt-3 text-sm leading-7 text-white/82">{card.body}</p>
+              </motion.div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Navigation controls */}
-      <div className="absolute bottom-4 right-4 z-10 flex items-center gap-3 sm:bottom-6 sm:right-6 sm:gap-4 lg:right-8">
-        <button
-          onClick={prev}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur-sm transition-all hover:bg-white/25 sm:h-10 sm:w-10"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <div className="flex items-center gap-2">
-          {slides.map((_, index) => (
+        <div className="flex items-center justify-between gap-4 pt-4">
+          <div className="flex items-center gap-2">
+            {slides.map((_, index) => (
+              <button
+                key={slides[index]?.id || index}
+                type="button"
+                aria-label={`Go to slide ${index + 1}`}
+                onClick={() => setCurrent(index)}
+                className={`rounded-full transition-all ${
+                  index === current ? "h-2.5 w-10 bg-white" : "h-2.5 w-2.5 bg-white/38"
+                }`}
+              />
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
-              key={index}
-              onClick={() => setCurrent(index)}
-              className={`rounded-full transition-all ${
-                index === current ? "h-2.5 w-10 bg-white" : "h-2.5 w-2.5 bg-white/40"
-              }`}
-            />
-          ))}
+              type="button"
+              onClick={previous}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/18 bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/16"
+              aria-label="Previous slide"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={next}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/18 bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/16"
+              aria-label="Next slide"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <button
-          onClick={next}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur-sm transition-all hover:bg-white/25 sm:h-10 sm:w-10"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
       </div>
     </section>
   );

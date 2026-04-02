@@ -298,9 +298,9 @@ export function AffiliateDashboard() {
       </section>
 
       {data.affiliate.status !== "active" ? (
-        <div className="rounded-[30px] border border-primary-blue/20 bg-primary-blue/10 p-5 text-primary-blue">
+        <div className="rounded-[30px] border border-primary-blue/20 bg-primary-blue p-5 text-[#ffffff]">
           <p className="font-semibold">Your affiliate account is currently {data.affiliate.status.replace("_", " ")}.</p>
-          <p className="mt-2 text-sm text-primary-blue/80">
+          <p className="mt-2 text-sm text-white/80">
             We'll keep this dashboard live so you can review your profile, but link sharing and payouts unlock once the account is fully active.
           </p>
         </div>

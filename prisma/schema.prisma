@@ -539,6 +539,52 @@ model HomepageParagraph {
   @@map("homepage_paragraphs")
 }
 
+model TrustedLogo {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  imageUrl   String   @map("image_url")
+  imagePath  String?  @map("image_path")
+  websiteUrl String?  @map("website_url")
+  order      Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ContactMessage {
+  id        String               @id @default(uuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  status    ContactMessageStatus @default(UNREAD)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  replies ContactMessageReply[]
+
+  @@index([status, createdAt])
+}
+
+model ContactMessageReply {
+  id          String         @id @default(uuid())
+  messageId   String         @map("message_id")
+  senderName  String?        @map("sender_name")
+  senderEmail String?        @map("sender_email")
+  body        String
+  isAdmin     Boolean        @default(true) @map("is_admin")
+  createdAt   DateTime       @default(now())
+  message     ContactMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, createdAt])
+}
+
+enum ContactMessageStatus {
+  UNREAD
+  READ
+  REPLIED
+}
+
 // ====================== REFERRALS ======================
 model ReferralProgram {
   id                    String   @id @default(cuid())

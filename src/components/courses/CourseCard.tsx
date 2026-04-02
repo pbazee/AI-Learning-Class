@@ -5,12 +5,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
-import { Check, Heart, Loader2, Play, ShoppingCart, Star } from "lucide-react";
+import { Heart, Loader2, Star } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/media";
 import { enrollInFreeCourse } from "@/lib/course-enrollment";
 import { useCartStore } from "@/store/cart";
 import { useToast } from "@/components/ui/ToastProvider";
-import { cn, formatDuration, formatNumber, formatPrice, levelBadgeColor, levelLabel } from "@/lib/utils";
+import { cn, formatNumber, formatPrice, levelLabel } from "@/lib/utils";
 import type { Course, CourseAccessState } from "@/types";
 
 interface CourseCardProps {
@@ -44,7 +44,23 @@ export function CourseCard({
     path: course.imagePath,
     fallback: "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200&h=1600&fit=crop",
   });
-  const durationLabel = course.totalDuration > 0 ? formatDuration(course.totalDuration) : "Self-paced";
+  const displayLevel = levelLabel(course.level).toUpperCase();
+  const filledStars = Math.max(0, Math.min(5, Math.round(course.rating)));
+  const hasDiscount = Boolean(course.originalPrice && course.originalPrice > course.price);
+  const ctaLabel = hasAccess
+    ? courseAccess?.actionLabel ?? "Continue Learning"
+    : enrolling
+      ? "Enrolling..."
+      : inCart
+        ? "Added to Cart"
+        : isFreeCourse
+          ? "Enroll Free"
+          : "Add to Cart";
+  const buttonClassName = hasAccess
+    ? "bg-primary-blue text-white shadow-[0_24px_44px_-28px_rgba(0,86,210,0.95)] hover:bg-primary-blue/90"
+    : inCart
+      ? "border border-primary-blue/35 bg-primary-blue/16 text-white hover:bg-primary-blue/24"
+      : "bg-primary-blue text-white shadow-[0_24px_44px_-28px_rgba(0,86,210,0.95)] hover:bg-primary-blue/90";
 
   useEffect(() => {
     setWishlisted(isWishlisted);
@@ -129,153 +145,108 @@ export function CourseCard({
   }
 
   return (
-    <motion.div
+    <motion.article
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="group"
+      className="group h-full"
     >
-      <Link href={`/courses/${course.slug}`} className="block h-full">
-        <div className="relative flex h-full min-h-[520px] flex-col overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_28px_80px_-40px_rgba(2,6,23,0.95)] transition-all duration-500 hover:scale-[1.02] hover:border-primary-blue/35 hover:shadow-[0_36px_120px_-44px_rgba(59,130,246,0.38)]">
-          <Image
-            src={heroImage}
-            alt={course.title}
-            fill
-            quality={100}
-            sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-            className="object-cover transition-transform duration-700 group-hover:scale-105"
-          />
-          <div className="absolute inset-0 bg-slate-950/20" />
-          <div className="absolute inset-x-0 bottom-0 h-[54%] bg-gradient-to-t from-slate-950 via-slate-950/96 via-45% to-transparent" />
+      <div className="relative h-full overflow-hidden rounded-[30px] border border-white/10 bg-[#05070b] shadow-[0_30px_90px_-48px_rgba(2,6,23,0.9)] transition-all duration-500 hover:-translate-y-2 hover:border-primary-blue/30 hover:shadow-[0_38px_110px_-50px_rgba(0,86,210,0.55)]">
+        <Link
+          href={`/courses/${course.slug}`}
+          aria-label={`Open ${course.title}`}
+          className="absolute inset-0 z-10 rounded-[30px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-blue/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070b]"
+        />
+        <div className="pointer-events-none relative z-20 grid h-full min-h-[560px] aspect-[11/20] grid-rows-[73%_27%]">
+          <div className="relative overflow-hidden">
+            <Image
+              src={heroImage}
+              alt={course.title}
+              fill
+              quality={100}
+              sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+              className="object-cover object-center brightness-[0.94] contrast-[1.08] saturate-[1.08] transition duration-700 ease-out group-hover:scale-[1.04] group-hover:brightness-[1.05] group-hover:saturate-[1.16]"
+            />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_12%,rgba(255,255,255,0.18),transparent_32%)]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/12 via-transparent to-black/28" />
+            <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/52 via-black/15 to-transparent" />
 
-          <div className="relative z-10 flex h-full flex-col p-5 text-white sm:p-6">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {hasAccess ? (
-                  <span className="rounded-[10px] border border-primary-blue/30 bg-primary-blue/12 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary-blue backdrop-blur-md">
-                    {courseAccess?.statusLabel}
-                  </span>
-                ) : null}
-                <span
-                  className={cn(
-                    "rounded-[10px] border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] backdrop-blur-md",
-                    levelBadgeColor(course.level)
-                  )}
-                >
-                  {levelLabel(course.level)}
-                </span>
-                {course.categoryName ? (
-                  <span className="max-w-[11rem] truncate rounded-[10px] border border-white/12 bg-black/38 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-white/82 backdrop-blur-md">
-                    {course.categoryName}
-                  </span>
-                ) : null}
-              </div>
+            <div className="absolute inset-x-0 top-0 flex items-start justify-between p-5 sm:p-6">
+              <span className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-[0_18px_34px_-22px_rgba(16,185,129,0.8)] sm:text-xs">
+                {displayLevel}
+              </span>
 
-              {/* Updated: course cards now support direct wishlist toggling with a persistent heart action. */}
               <button
                 type="button"
                 onClick={handleWishlistToggle}
                 disabled={wishlistPending}
                 aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
                 className={cn(
-                  "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border backdrop-blur-md transition-colors disabled:cursor-not-allowed disabled:opacity-70",
+                  "pointer-events-auto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/18 bg-black/30 text-white backdrop-blur-md transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                   wishlisted
-                    ? "border-primary-blue/30 bg-primary-blue/20 text-primary-blue"
-                    : "border-white/15 bg-black/25 text-white hover:border-primary-blue/30 hover:bg-primary-blue/18 hover:text-primary-blue"
+                    ? "border-white/30 bg-white/95 text-primary-blue shadow-[0_20px_36px_-20px_rgba(255,255,255,0.55)]"
+                    : "hover:border-primary-blue/35 hover:bg-white/95 hover:text-primary-blue"
                 )}
               >
-                <Heart className={cn("h-4 w-4", wishlisted && "fill-current")} />
+                <Heart className={cn("h-5 w-5", wishlisted && "fill-current")} />
               </button>
             </div>
+          </div>
 
-            <div className="mt-auto max-w-[16.5rem] space-y-3 pt-24 sm:pt-28">
-              <div className="space-y-3">
-                {/* Updated: smaller title + quieter pricing keep the catalog easier to scan. */}
-                <h3 className="line-clamp-2 text-[1.18rem] font-black leading-tight text-white drop-shadow-[0_4px_14px_rgba(2,6,23,0.84)] sm:text-[1.28rem]">
-                  {course.title}
-                </h3>
+          <div className="flex min-h-0 flex-col bg-[#070a0f] px-5 pb-5 pt-4 text-white sm:px-6 sm:pb-6">
+            <h3 className="line-clamp-2 text-[1.24rem] font-black leading-[1.08] text-white sm:text-[1.34rem]">
+              {course.title}
+            </h3>
 
-                <div className="grid grid-cols-2 gap-3 text-xs text-slate-100 sm:text-sm">
-                  <div className="space-y-1">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="font-semibold">{course.rating.toFixed(1)}</span>
-                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                    </span>
-                    <p className="text-slate-200/88">{formatNumber(course.totalStudents)} students</p>
-                  </div>
-
-                  <div className="space-y-1 text-right">
-                    <p>{durationLabel}</p>
-                    <p className="text-slate-200/88">{course.totalLessons} lessons</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-end justify-between gap-2.5 border-t border-white/12 pt-3">
-                <div className="min-w-0">
-                  {isFreeCourse ? (
-                    <span className="text-[1.35rem] font-semibold leading-none text-primary-blue drop-shadow-[0_4px_14px_rgba(59,130,246,0.4)]">
-                      Free
-                    </span>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[1.25rem] font-semibold leading-none text-white drop-shadow-[0_4px_14px_rgba(2,6,23,0.8)]">
-                        {formatPrice(course.price)}
-                      </span>
-                      {course.originalPrice && course.originalPrice > course.price ? (
-                        <span className="text-xs text-slate-300/72 line-through">{formatPrice(course.originalPrice)}</span>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={hasAccess ? handleResumeLearning : handlePrimaryAction}
-                  disabled={enrolling && !hasAccess}
-                  className={cn(
-                    "inline-flex min-w-[116px] items-center justify-center gap-2 rounded-[16px] border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] transition-all duration-300 disabled:opacity-70",
-                    hasAccess
-                      ? "border-primary-blue bg-primary-blue text-white shadow-[0_16px_32px_-18px_rgba(59,130,246,0.9)] hover:bg-primary-blue/90"
-                      : canInstantEnroll
-                      ? "border-primary-blue bg-primary-blue text-white shadow-[0_16px_32px_-18px_rgba(59,130,246,0.9)] hover:bg-primary-blue/90"
-                      : inCart
-                        ? "border-primary-blue/25 bg-primary-blue/12 text-white"
-                        : "border-primary-blue bg-primary-blue text-white shadow-[0_16px_32px_-18px_rgba(59,130,246,0.9)] hover:bg-primary-blue/90"
-                  )}
-                >
-                  {hasAccess ? (
-                    <>
-                      <Play className="h-3.5 w-3.5" />
-                      {courseAccess?.actionLabel ?? "Continue Learning"}
-                    </>
-                  ) : enrolling ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Enrolling
-                    </>
-                  ) : canInstantEnroll ? (
-                    <>
-                      <Check className="h-3.5 w-3.5" />
-                      Enroll Free
-                    </>
-                  ) : inCart ? (
-                    <>
-                      <Check className="h-3.5 w-3.5" />
-                      Added
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="h-3.5 w-3.5" />
-                      Add to Cart
-                    </>
-                  )}
-                </button>
-              </div>
+            <div className="mt-3 flex flex-wrap items-end gap-x-2 gap-y-1">
+              <span className={cn("text-[1.42rem] font-black leading-none", isFreeCourse ? "text-primary-blue" : "text-white")}>
+                {isFreeCourse ? "Free" : formatPrice(course.price, course.currency)}
+              </span>
+              {hasDiscount ? (
+                <span className="text-sm font-medium text-white/42 line-through">
+                  {formatPrice(course.originalPrice!, course.currency)}
+                </span>
+              ) : null}
             </div>
+
+            <div className="mt-3 flex items-center gap-2 text-sm text-white/68">
+              <div className="flex items-center gap-0.5 text-amber-400">
+                {Array.from({ length: 5 }).map((_, starIndex) => (
+                  <Star
+                    key={`${course.id}-star-${starIndex}`}
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      starIndex < filledStars ? "fill-current text-amber-400" : "text-white/16"
+                    )}
+                  />
+                ))}
+              </div>
+              <span className="font-semibold text-white">{course.rating.toFixed(1)}</span>
+              <span className="text-white/28">/</span>
+              <span>{formatNumber(course.totalStudents)} students</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={hasAccess ? handleResumeLearning : handlePrimaryAction}
+              disabled={enrolling && !hasAccess}
+              className={cn(
+                "pointer-events-auto mt-auto inline-flex w-full items-center justify-center rounded-[18px] px-5 py-3.5 text-base font-semibold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                buttonClassName
+              )}
+            >
+              {enrolling && !hasAccess ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {ctaLabel}
+                </span>
+              ) : (
+                ctaLabel
+              )}
+            </button>
           </div>
         </div>
-      </Link>
-    </motion.div>
+      </div>
+    </motion.article>
   );
 }

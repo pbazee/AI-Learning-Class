@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  ContactMessageStatus,
   Prisma,
   type ContentStatus,
   type CouponDiscountType,
@@ -13,6 +14,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { normalizeEmail } from "@/lib/admin-email";
+import { notifyContactReply } from "@/lib/contact-notifications";
 import { syncCourseReviewMetrics } from "@/lib/course-reviews";
 import { HOMEPAGE_PARAGRAPH_SECTION_KEYS } from "@/lib/homepage-paragraphs";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
@@ -204,6 +206,26 @@ const heroSchema = z.object({
   order: z.coerce.number().min(0).optional().default(0),
   isActive: z.boolean().optional().default(true),
   autoSlideInterval: z.coerce.number().positive().optional().nullable(),
+});
+
+const trustedLogoSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(2, "Logo name is required."),
+  imageUrl: z.string().min(1, "Logo image is required."),
+  imagePath: z.string().optional(),
+  websiteUrl: z.string().optional(),
+  order: z.coerce.number().min(0).optional().default(0),
+  isActive: z.boolean().optional().default(true),
+});
+
+const contactMessageStatusSchema = z.object({
+  id: z.string().min(1),
+  status: z.enum(["UNREAD", "READ", "REPLIED"]),
+});
+
+const contactMessageReplySchema = z.object({
+  messageId: z.string().min(1),
+  body: z.string().trim().min(3, "Reply message is required."),
 });
 
 const couponSchema = z.object({
@@ -1441,6 +1463,143 @@ export async function deleteHeroSlideAction(id: string) {
       return prisma.heroSlide.delete({ where: { id } });
     },
     "Hero slide deleted successfully."
+  );
+}
+
+export async function saveTrustedLogoAction(input: z.input<typeof trustedLogoSchema>) {
+  return runValidatedAdminAction(
+    trustedLogoSchema,
+    input,
+    "saveTrustedLogo",
+    ["/", "/admin/trusted-logos"],
+    async (values) => {
+      const imagePath = optionalString(values.imagePath);
+      const existing = values.id
+        ? await prisma.trustedLogo.findUnique({
+            where: { id: values.id },
+            select: { imagePath: true },
+          })
+        : null;
+
+      const logo = await prisma.trustedLogo.upsert({
+        where: { id: values.id || "__new__" },
+        update: {
+          name: values.name.trim(),
+          imageUrl: values.imageUrl,
+          imagePath,
+          websiteUrl: optionalString(values.websiteUrl),
+          order: values.order,
+          isActive: Boolean(values.isActive),
+        },
+        create: {
+          name: values.name.trim(),
+          imageUrl: values.imageUrl,
+          imagePath,
+          websiteUrl: optionalString(values.websiteUrl),
+          order: values.order,
+          isActive: Boolean(values.isActive),
+        },
+      });
+
+      if (existing?.imagePath && existing.imagePath !== imagePath) {
+        await deleteAssetPath(existing.imagePath);
+      }
+
+      return logo;
+    },
+    "Trusted logo saved successfully."
+  );
+}
+
+export async function deleteTrustedLogoAction(id: string) {
+  return runAdminAction(
+    "deleteTrustedLogo",
+    ["/", "/admin/trusted-logos"],
+    async () => {
+      const logo = await prisma.trustedLogo.findUnique({ where: { id } });
+      await deleteAssetPath(logo?.imagePath);
+      return prisma.trustedLogo.delete({ where: { id } });
+    },
+    "Trusted logo deleted successfully."
+  );
+}
+
+export async function updateContactMessageStatusAction(
+  input: z.input<typeof contactMessageStatusSchema>
+) {
+  return runValidatedAdminAction(
+    contactMessageStatusSchema,
+    input,
+    "updateContactMessageStatus",
+    ["/admin/messages"],
+    async (values) =>
+      prisma.contactMessage.update({
+        where: { id: values.id },
+        data: {
+          status: values.status as ContactMessageStatus,
+        },
+      }),
+    "Message status updated successfully."
+  );
+}
+
+export async function replyToContactMessageAction(
+  input: z.input<typeof contactMessageReplySchema>
+) {
+  return runValidatedAdminAction(
+    contactMessageReplySchema,
+    input,
+    "replyToContactMessage",
+    ["/admin/messages"],
+    async (values) => {
+      const message = await prisma.contactMessage.findUnique({
+        where: { id: values.messageId },
+      });
+
+      if (!message) {
+        throw new Error("That message could not be found.");
+      }
+
+      const siteSettings = await prisma.siteSettings.findUnique({
+        where: { id: "singleton" },
+        select: {
+          siteName: true,
+          supportEmail: true,
+        },
+      });
+
+      const senderName = siteSettings?.siteName?.trim() || "AI Learning Class";
+      const senderEmail = normalizeEmail(siteSettings?.supportEmail) || undefined;
+
+      const reply = await prisma.$transaction(async (tx) => {
+        const createdReply = await tx.contactMessageReply.create({
+          data: {
+            messageId: values.messageId,
+            body: values.body,
+            senderName,
+            senderEmail,
+            isAdmin: true,
+          },
+        });
+
+        await tx.contactMessage.update({
+          where: { id: values.messageId },
+          data: { status: "REPLIED" },
+        });
+
+        return createdReply;
+      });
+
+      void notifyContactReply({
+        toEmail: message.email,
+        toName: message.name,
+        subject: message.subject,
+        replyBody: values.body,
+      });
+
+      return reply;
+    },
+    "Reply sent successfully."
   );
 }
 

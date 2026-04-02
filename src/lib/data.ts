@@ -7,10 +7,12 @@ import type {
   BlogPost,
   Category,
   Course,
+  CourseSearchSuggestion,
   CourseAccessState,
   HeroSlide,
   SubscriptionPlan,
   Testimonial,
+  TrustedLogo,
 } from "@/types";
 import {
   HOMEPAGE_PARAGRAPH_DEFAULTS,
@@ -809,6 +811,62 @@ export async function getCourses(filters?: {
   });
 }
 
+export async function searchCourseSuggestions(
+  query: string,
+  limit = 6
+): Promise<CourseSearchSuggestion[]> {
+  return safeDatabaseRead("searchCourseSuggestions", [] as CourseSearchSuggestion[], async () => {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    const rows = await prisma.course.findMany({
+      where: {
+        isPublished: true,
+        OR: [
+          { title: { contains: normalizedQuery, mode: "insensitive" } },
+          { description: { contains: normalizedQuery, mode: "insensitive" } },
+          { shortDescription: { contains: normalizedQuery, mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        level: true,
+        thumbnailUrl: true,
+        imageUrl: true,
+        tags: true,
+        category: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ isFeatured: "desc" }, { totalStudents: "desc" }, { rating: "desc" }],
+      take: Math.max(limit * 2, 8),
+    });
+
+    const lowerQuery = normalizedQuery.toLowerCase();
+
+    return rows
+      .filter((course) => {
+        const searchable = `${course.title} ${course.category.name} ${course.tags.join(" ")}`.toLowerCase();
+        return searchable.includes(lowerQuery);
+      })
+      .slice(0, limit)
+      .map((course) => ({
+        id: course.id,
+        slug: course.slug,
+        title: course.title,
+        level: course.level,
+        thumbnailUrl: course.thumbnailUrl ?? course.imageUrl ?? undefined,
+        categoryName: course.category.name,
+      }));
+  });
+}
+
 export async function getHomepageParagraphEntries(): Promise<HomepageParagraphEntry[]> {
   return safeDatabaseRead(
     "getHomepageParagraphEntries",
@@ -1009,6 +1067,25 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
     });
 
     return plans.map(mapSubscriptionPlan);
+  });
+}
+
+export async function getTrustedLogos(): Promise<TrustedLogo[]> {
+  return safeDatabaseRead("getTrustedLogos", [] as TrustedLogo[], async () => {
+    const logos = await prisma.trustedLogo.findMany({
+      where: { isActive: true },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    });
+
+    return logos.map((logo) => ({
+      id: logo.id,
+      name: logo.name,
+      imageUrl: logo.imageUrl,
+      imagePath: logo.imagePath ?? undefined,
+      websiteUrl: logo.websiteUrl ?? undefined,
+      order: logo.order,
+      isActive: logo.isActive,
+    }));
   });
 }
 

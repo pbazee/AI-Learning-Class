@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
+import { ContactMessageForm } from "@/components/contact/ContactMessageForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
@@ -92,23 +93,48 @@ export default async function ContactPage() {
           ))}
         </div>
 
-        <Card className="mt-8 overflow-hidden bg-gradient-to-r from-slate-950 via-slate-900 to-primary-blue text-white">
-          <CardContent className="flex flex-col gap-6 p-8 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
-                Visit Us
+        <div className="mt-10 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+          <Card className="border-primary-blue/15 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.28)]">
+            <CardHeader>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary-blue">
+                Send Message
               </p>
-              <h2 className="mt-3 text-2xl font-black">{supportAddress}</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/85">
-                AI Learning Class supports learners across Africa and globally, with personalized AI upskilling and structured online programs.
-              </p>
-            </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white">
-              <MapPin className="h-5 w-5 text-white/75" />
-              <span>{supportAddress}</span>
-            </div>
-          </CardContent>
-        </Card>
+              <CardTitle className="text-3xl text-foreground">Send us the details and we&apos;ll respond quickly</CardTitle>
+              <CardDescription className="text-base text-muted-foreground">
+                Use this form for support questions, partnership ideas, course guidance, or anything else you need from the AI Learning Class team.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ContactMessageForm />
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden bg-primary-blue text-white shadow-[0_30px_80px_-46px_rgba(0,86,210,0.7)]">
+            <CardContent className="flex h-full flex-col justify-between gap-8 p-8">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
+                  Visit Us
+                </p>
+                <h2 className="mt-3 text-3xl font-black">{supportAddress}</h2>
+                <p className="mt-4 text-sm leading-7 text-white/88">
+                  AI Learning Class supports learners across Africa and globally, with personalized AI upskilling, structured online programs, and hands-on LLM engineering training.
+                </p>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-5 py-4 text-sm text-white">
+                  <MapPin className="h-5 w-5 text-white/80" />
+                  <span>{supportAddress}</span>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-5">
+                  <p className="text-sm font-semibold text-white">Need a fast response?</p>
+                  <p className="mt-2 text-sm text-white/78">
+                    Email, WhatsApp, and admissions support stay active while your form submission lands in the admin inbox.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="mt-8 text-center">
           <Button asChild>

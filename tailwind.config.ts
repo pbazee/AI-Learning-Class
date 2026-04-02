@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
-const primaryBlue = "#3B82F6";
-const primaryBlueTint = (opacity: number) => `rgb(59 130 246 / ${opacity})`;
+const primaryBlue = "rgb(var(--primary-blue-rgb) / <alpha-value>)";
+const primaryBlueTint = (opacity: number) => `rgb(var(--primary-blue-rgb) / ${opacity})`;
 
 const config: Config = {
   darkMode: ["class"],
@@ -61,12 +61,12 @@ const config: Config = {
           100: primaryBlueTint(0.12),
           200: primaryBlueTint(0.18),
           300: primaryBlueTint(0.24),
-          400: primaryBlue,
-          500: primaryBlue,
-          600: primaryBlue,
-          700: primaryBlue,
-          800: primaryBlue,
-          900: primaryBlue,
+          400: primaryBlueTint(1),
+          500: primaryBlueTint(1),
+          600: primaryBlueTint(1),
+          700: primaryBlueTint(1),
+          800: primaryBlueTint(1),
+          900: primaryBlueTint(1),
         },
       },
       borderRadius: {
