@@ -1,7 +1,8 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { X, Send, Sparkles, Bot, User, Loader2 } from "lucide-react";
+import { X, Send, Sparkles, Bot, User, Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -9,6 +10,14 @@ interface Message {
   content: string;
   timestamp: Date;
 }
+
+type CopilotQuota = {
+  planName: string;
+  limit: number;
+  used: number;
+  remaining: number;
+  monthKey: string;
+};
 
 interface AICopilotProps {
   courseTitle: string;
@@ -32,6 +41,9 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [quota, setQuota] = useState<CopilotQuota | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(true);
+  const [quotaError, setQuotaError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -43,8 +55,59 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
     inputRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadQuota() {
+      setQuotaLoading(true);
+      setQuotaError(null);
+
+      try {
+        const response = await fetch("/api/copilot");
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok || !payload?.quota) {
+          throw new Error(payload?.error || "Please sign in to use AI Copilot.");
+        }
+
+        if (!cancelled) {
+          setQuota(payload.quota);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setQuota(null);
+          setQuotaError(error instanceof Error ? error.message : "Unable to load AI Copilot quota.");
+        }
+      } finally {
+        if (!cancelled) {
+          setQuotaLoading(false);
+        }
+      }
+    }
+
+    void loadQuota();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function sendMessage(content: string) {
     if (!content.trim() || loading) return;
+
+    if (!quota || quota.remaining <= 0) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: quota
+            ? `You have reached your ${quota.planName} plan limit for this month.`
+            : "Please sign in to use AI Copilot.",
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
 
     const userMsg: Message = { role: "user", content, timestamp: new Date() };
     setMessages((prev) => [...prev, userMsg]);
@@ -56,29 +119,34 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messages, userMsg].map((m) => ({
-            role: m.role,
-            content: m.content,
+          messages: [...messages, userMsg].map((message) => ({
+            role: message.role,
+            content: message.content,
           })),
           courseTitle,
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: data.content || "I could not process that request. Please try again.",
+          content: data?.content || "I could not process that request. Please try again.",
           timestamp: new Date(),
         },
       ]);
+
+      if (data?.quota) {
+        setQuota(data.quota);
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "Connection error. Please check your API configuration and try again.",
+          content: "Connection error. Please try again in a moment.",
           timestamp: new Date(),
         },
       ]);
@@ -87,10 +155,10 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(input);
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void sendMessage(input);
     }
   }
 
@@ -103,6 +171,14 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
         '<code class="rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">$1</code>'
       );
   }
+
+  const quotaLabel = quota
+    ? `${quota.remaining} of ${quota.limit} requests left this month`
+    : quotaLoading
+      ? "Loading quota..."
+      : quotaError || "Please sign in to use AI Copilot";
+
+  const inputDisabled = loading || quotaLoading || !quota || quota.remaining <= 0;
 
   return (
     <motion.div
@@ -118,12 +194,26 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
           </div>
           <div>
             <div className="text-sm font-bold text-foreground">AI Learning Copilot</div>
-            <div className="text-xs text-muted-foreground">Ready to help</div>
+            <div className="text-xs text-muted-foreground">{quota?.planName || "Free"} plan</div>
           </div>
         </div>
         <button onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-card hover:text-foreground">
           <X className="h-4 w-4" />
         </button>
+      </div>
+
+      <div className="border-b border-border bg-background px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">Monthly quota</p>
+            <p className="mt-1 text-sm text-foreground">{quotaLabel}</p>
+          </div>
+          {quota && quota.remaining <= 0 ? (
+            <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/20 dark:text-rose-300">
+              <Lock className="h-4 w-4" />
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto bg-background p-4">
@@ -168,13 +258,14 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
         <div className="border-t border-border px-4 py-3">
           <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Quick prompts</p>
           <div className="flex flex-wrap gap-2">
-            {suggestions.map((s) => (
+            {suggestions.map((suggestion) => (
               <button
-                key={s}
-                onClick={() => sendMessage(s)}
-                className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                key={suggestion}
+                onClick={() => void sendMessage(suggestion)}
+                disabled={inputDisabled}
+                className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {s}
+                {suggestion}
               </button>
             ))}
           </div>
@@ -187,20 +278,23 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
             ref={inputRef}
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything about this course..."
-            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            placeholder={quota ? "Ask anything about this course..." : "Sign in to unlock AI Copilot"}
+            disabled={inputDisabled}
+            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
           />
           <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || loading}
+            onClick={() => void sendMessage(input)}
+            disabled={!input.trim() || inputDisabled}
             className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Send className="h-3.5 w-3.5" />
           </button>
         </div>
-        <p className="mt-2 text-center text-xs text-muted-foreground">Powered by your configured AI backend</p>
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          Powered by OpenAI with plan-based monthly usage limits
+        </p>
       </div>
     </motion.div>
   );

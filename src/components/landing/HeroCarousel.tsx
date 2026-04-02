@@ -53,7 +53,7 @@ export function HeroCarousel({
 
   return (
     <section
-      className="relative h-[calc(100svh-var(--announcement-height)-var(--navbar-height))] overflow-hidden"
+      className="relative h-screen overflow-hidden"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -83,8 +83,8 @@ export function HeroCarousel({
       </AnimatePresence>
 
       {/* Content */}
-      <div className="relative z-10 mx-auto flex h-full max-w-7xl items-center px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
-        <div className="max-w-3xl">
+      <div className="relative z-10 mx-auto flex h-full max-w-7xl items-center px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-3xl pr-6 sm:pr-20 lg:pr-28">
           <AnimatePresence mode="wait">
             <motion.div
               key={current}
@@ -101,12 +101,12 @@ export function HeroCarousel({
                 </div>
               )}
 
-              <h1 className="text-4xl font-black leading-[0.95] text-white drop-shadow-lg sm:text-5xl lg:text-6xl">
+              <h1 className="text-3xl font-black leading-[0.95] text-white drop-shadow-lg sm:text-5xl lg:text-6xl">
                 {slide.title}
               </h1>
 
               {slide.description && (
-                <p className="max-w-2xl text-base leading-relaxed text-white/88 sm:text-lg">
+                <p className="max-w-2xl text-sm leading-relaxed text-white sm:text-lg">
                   {slide.description}
                 </p>
               )}
@@ -114,7 +114,7 @@ export function HeroCarousel({
               <div className="flex flex-wrap items-center gap-3 pt-1 sm:gap-4">
                 <Link
                   href={slide.ctaLink || "/courses"}
-                  className="group inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 py-3.5 text-sm font-semibold text-primary-blue shadow-[0_20px_40px_rgba(15,23,42,0.3)] transition-all hover:bg-white/95 sm:w-auto sm:px-7 sm:text-base"
+                  className="group inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-primary-blue px-6 py-3.5 text-sm font-semibold text-white shadow-[0_20px_40px_rgba(15,23,42,0.3)] transition-all hover:bg-primary-blue/90 sm:w-auto sm:px-7 sm:text-base"
                 >
                   {slide.ctaText || "Explore Courses"}
                   <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
@@ -125,7 +125,7 @@ export function HeroCarousel({
                 <div className="flex items-center gap-2 text-yellow-300">
                   <Star className="h-4 w-4 fill-current sm:h-5 sm:w-5" />
                   <span className="font-bold text-white">{averageRating}</span>
-                  <span className="text-white/75 text-sm">average rating</span>
+                  <span className="text-sm text-white">average rating</span>
                 </div>
               )}
             </motion.div>
@@ -143,7 +143,7 @@ export function HeroCarousel({
                     </div>
                     <div>
                       <div className="text-base font-bold text-white leading-none">{value}</div>
-                      <div className="mt-0.5 text-xs text-white/70">{label}</div>
+                      <div className="mt-0.5 text-xs text-white">{label}</div>
                     </div>
                   </div>
                 );
@@ -154,7 +154,7 @@ export function HeroCarousel({
       </div>
 
       {/* Navigation controls */}
-      <div className="absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 sm:bottom-6 sm:gap-4">
+      <div className="absolute bottom-4 right-4 z-10 flex items-center gap-3 sm:bottom-6 sm:right-6 sm:gap-4 lg:right-8">
         <button
           onClick={prev}
           className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur-sm transition-all hover:bg-white/25 sm:h-10 sm:w-10"

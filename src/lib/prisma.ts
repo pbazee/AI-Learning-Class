@@ -1,9 +1,17 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
-const TRANSIENT_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024"]);
+const TRANSIENT_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2028", "P2034"]);
 const DEFAULT_MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.PRISMA_MAX_ATTEMPTS ?? "3", 10));
 const DEFAULT_RETRY_DELAY_MS = Math.max(150, Number.parseInt(process.env.PRISMA_RETRY_DELAY_MS ?? "350", 10));
 const DEFAULT_LOG_COOLDOWN_MS = Math.max(1_000, Number.parseInt(process.env.PRISMA_LOG_COOLDOWN_MS ?? "60000", 10));
+const DEFAULT_TRANSACTION_MAX_WAIT_MS = Math.max(
+  5_000,
+  Number.parseInt(process.env.PRISMA_TRANSACTION_MAX_WAIT_MS ?? "20000", 10)
+);
+const DEFAULT_TRANSACTION_TIMEOUT_MS = Math.max(
+  DEFAULT_TRANSACTION_MAX_WAIT_MS,
+  Number.parseInt(process.env.PRISMA_TRANSACTION_TIMEOUT_MS ?? "45000", 10)
+);
 
 type PrismaLikeClient = PrismaClient & {
   $extends: PrismaClient["$extends"];
@@ -105,7 +113,38 @@ function isRetryablePrismaError(error: unknown) {
     "server closed the connection unexpectedly",
     "timed out fetching a new connection",
     "the database system is starting up",
+    "transaction api error",
+    "unable to start a transaction in the given time",
+    "transaction already closed",
+    "transaction was already closed",
   ].some((fragment) => message.includes(fragment));
+}
+
+function withDefaultTransactionArgs(args: any[]) {
+  if (args.length === 0) {
+    return args;
+  }
+
+  const transactionOptions = {
+    maxWait: DEFAULT_TRANSACTION_MAX_WAIT_MS,
+    timeout: DEFAULT_TRANSACTION_TIMEOUT_MS,
+  };
+
+  if (args.length === 1) {
+    return [...args, transactionOptions];
+  }
+
+  if (typeof args[1] !== "object" || args[1] === null) {
+    return [args[0], transactionOptions];
+  }
+
+  return [
+    args[0],
+    {
+      ...transactionOptions,
+      ...args[1],
+    },
+  ];
 }
 
 export function logPrismaConnectionEvent(
@@ -168,6 +207,10 @@ if (directUrl) {
 
 const prismaOptions: Prisma.PrismaClientOptions = {
   log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+  transactionOptions: {
+    maxWait: DEFAULT_TRANSACTION_MAX_WAIT_MS,
+    timeout: DEFAULT_TRANSACTION_TIMEOUT_MS,
+  },
 };
 
 if (databaseUrl) {
@@ -211,7 +254,10 @@ function createPrismaClient() {
       if (prop === "$transaction") {
         const transaction = target.$transaction as (...args: any[]) => Promise<any>;
         return (...args: any[]) =>
-          withPrismaRetry(() => transaction.apply(target, args), "$transaction");
+          withPrismaRetry(
+            () => transaction.apply(target, withDefaultTransactionArgs(args)),
+            "$transaction"
+          );
       }
 
       return Reflect.get(target, prop, receiver);

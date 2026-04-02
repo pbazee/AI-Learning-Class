@@ -1,7 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { CoursesManager } from "@/components/admin/courses-manager";
+import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
+import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
 export default async function AdminCoursesPage() {
+  await ensureLessonPreviewColumns();
+  await ensureSubscriptionPlansTable();
+
   const [courses, categories, instructors, activePlans] = await Promise.all([
     prisma.course.findMany({
       include: {
@@ -117,6 +122,8 @@ export default async function AdminCoursesPage() {
             duration: lesson.duration,
             content: lesson.content,
             isPreview: lesson.isPreview,
+            previewPages: lesson.previewPages,
+            previewMinutes: lesson.previewMinutes,
             allowDownload: lesson.allowDownload,
             sellSeparately: lesson.sellSeparately,
             order: lesson.order,

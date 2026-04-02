@@ -52,6 +52,8 @@ type CourseLessonRow = {
   duration?: number | null;
   content?: string | null;
   isPreview: boolean;
+  previewPages?: number | null;
+  previewMinutes?: number | null;
   allowDownload: boolean;
   sellSeparately: boolean;
   order: number;
@@ -234,6 +236,8 @@ function mapCourseToForm(course: CourseRow): CourseFormState {
                   durationMinutes: lesson.duration ? String(Math.max(1, Math.round(lesson.duration / 60))) : "",
                   content: lesson.content || "",
                   isPreview: lesson.isPreview,
+                  previewPages: lesson.previewPages != null ? String(lesson.previewPages) : "",
+                  previewMinutes: lesson.previewMinutes != null ? String(lesson.previewMinutes) : "",
                   allowDownload: lesson.allowDownload,
                   sellSeparately: lesson.sellSeparately,
                   isExpanded: false,
@@ -327,6 +331,8 @@ export function CoursesManager({
               duration: lesson.durationMinutes ? Number(lesson.durationMinutes) * 60 : undefined,
               content: lesson.content,
               isPreview: lesson.isPreview,
+              previewPages: lesson.previewPages ? Number(lesson.previewPages) : undefined,
+              previewMinutes: lesson.previewMinutes ? Number(lesson.previewMinutes) : undefined,
               allowDownload: lesson.allowDownload,
               sellSeparately: lesson.sellSeparately,
               order: lessonIndex,

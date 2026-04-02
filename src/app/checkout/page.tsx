@@ -1,313 +1,441 @@
 "use client";
-import { useState } from "react";
-import Link from "next/link";
+
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Loader2, Lock, Shield, Check } from "lucide-react";
+import { CountryCombobox } from "@/components/checkout/CountryCombobox";
 import { Navbar } from "@/components/layout/Navbar";
-import { useCartStore } from "@/store/cart";
 import { formatPrice, cn } from "@/lib/utils";
-import { Shield, CreditCard, Check, Lock, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCartStore } from "@/store/cart";
 
 type PaymentMethod = "stripe" | "paypal" | "paystack";
 
+type QuoteItem = {
+  courseId?: string;
+  title: string;
+  price: number;
+  thumbnailUrl?: string;
+  kind: "course" | "plan";
+};
+
+type CheckoutQuote = {
+  items: QuoteItem[];
+  subtotal: number;
+  discountAmount: number;
+  total: number;
+  appliedCouponCode: string | null;
+  appliedCouponDescription: string | null;
+  planSlug: string | null;
+};
+
+function StripeMark() {
+  return <span className="text-sm font-black tracking-[0.08em] text-[#635BFF]">Stripe</span>;
+}
+
+function PayPalMark() {
+  return (
+    <span className="text-sm font-black tracking-[0.04em]">
+      <span className="text-[#003087]">Pay</span>
+      <span className="text-[#009CDE]">Pal</span>
+    </span>
+  );
+}
+
+function PaystackMark() {
+  return (
+    <span className="inline-flex items-center gap-2 text-sm font-black text-[#0BAF62]">
+      <span className="h-2.5 w-2.5 rounded-full bg-[#0BAF62]" />
+      Paystack
+    </span>
+  );
+}
+
+const paymentOptions: Array<{
+  id: PaymentMethod;
+  label: string;
+  sublabel: string;
+  logo: ReactNode;
+}> = [
+  {
+    id: "stripe",
+    label: "Stripe",
+    sublabel: "Cards and fast checkout",
+    logo: <StripeMark />,
+  },
+  {
+    id: "paypal",
+    label: "PayPal",
+    sublabel: "Pay with PayPal balance or card",
+    logo: <PayPalMark />,
+  },
+  {
+    id: "paystack",
+    label: "PayStack",
+    sublabel: "Card, bank, M-Pesa, and more",
+    logo: <PaystackMark />,
+  },
+];
+
 export default function CheckoutPage() {
-  const { items, total, clearCart } = useCartStore();
-  const cartTotal = total();
+  const searchParams = useSearchParams();
+  const { items } = useCartStore();
+  const planSlug = searchParams.get("plan");
   const [method, setMethod] = useState<PaymentMethod>("stripe");
   const [processing, setProcessing] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [quote, setQuote] = useState<CheckoutQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: "", email: "", country: "US" });
 
-  async function handleCheckout(e: React.FormEvent) {
-    e.preventDefault();
-    setProcessing(true);
+  const cartSavings = useMemo(
+    () =>
+      items.reduce((sum, item) => sum + Math.max(0, (item.originalPrice || item.price) - item.price), 0),
+    [items]
+  );
+  const requestItems = useMemo(
+    () =>
+      items.map((item) => ({
+        courseId: item.courseId,
+        title: item.title,
+        price: item.price,
+        thumbnailUrl: item.thumbnailUrl,
+      })),
+    [items]
+  );
 
-    if (method === "stripe") {
-      await new Promise((r) => setTimeout(r, 2000));
-    } else {
-      await new Promise((r) => setTimeout(r, 1500));
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadQuote() {
+      setQuoteLoading(true);
+      setQuoteError(null);
+
+      try {
+        const response = await fetch("/api/checkout/quote", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            planSlug,
+            items: requestItems,
+          }),
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok || !payload?.quote) {
+          throw new Error(payload?.error || "Unable to load your checkout summary.");
+        }
+
+        if (!cancelled) {
+          setQuote(payload.quote);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setQuoteError(error instanceof Error ? error.message : "Unable to load your checkout summary.");
+          setQuote(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setQuoteLoading(false);
+        }
+      }
     }
 
-    setProcessing(false);
-    setSuccess(true);
-    clearCart();
+    void loadQuote();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [planSlug, requestItems]);
+
+  async function handleCheckout(event: React.FormEvent) {
+    event.preventDefault();
+
+    if (!quote) {
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      const response = await fetch("/api/checkout/session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          method,
+          planSlug,
+          items: requestItems,
+          customerName: formData.name,
+          customerEmail: formData.email,
+          country: formData.country,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.url) {
+        throw new Error(payload?.error || "Unable to start checkout right now.");
+      }
+
+      window.location.assign(payload.url);
+    } catch (error) {
+      setQuoteError(error instanceof Error ? error.message : "Unable to start checkout right now.");
+      setProcessing(false);
+    }
   }
 
-  if (success) {
-    return (
-      <div className="site-shell">
-        <Navbar />
-        <div className="flex min-h-screen items-center justify-center px-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="surface-card w-full max-w-md p-8 text-center"
-          >
-            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50">
-              <Check className="h-10 w-10 text-emerald-600" />
-            </div>
-            <h1 className="mb-3 text-3xl font-black text-foreground">Payment successful</h1>
-            <p className="mb-2 text-muted-foreground">You now have access to your courses and learning dashboard.</p>
-            <p className="mb-8 text-sm text-muted-foreground">A receipt has been sent to your email.</p>
-            <div className="flex flex-col gap-3">
-              <Link href="/dashboard" className="action-primary w-full">
-                Go to my courses
-              </Link>
-              <Link href="/courses" className="action-secondary w-full">
-                Continue browsing
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
+  const isFreePlan = quote?.planSlug === "free" || (quote?.total ?? 0) <= 0;
+  const hasCheckoutContent = Boolean(planSlug) || items.length > 0;
 
   return (
-    <div className="site-shell">
+    <div className="site-shell overflow-x-hidden">
       <Navbar />
-      <div className="pb-20 pt-8">
+      <div className="pb-16 pt-6 sm:pt-8">
         <div className="section-frame">
           <div className="mb-8">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-4 py-2 text-sm font-semibold text-primary-blue">
               <Lock className="h-4 w-4" />
               Secure checkout
             </div>
             <h1 className="text-3xl font-black text-foreground">Complete your order</h1>
           </div>
 
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
-            <div className="lg:col-span-3">
-              <form onSubmit={handleCheckout} className="space-y-6">
-                <div className="surface-card p-6">
-                  <h2 className="mb-5 text-base font-bold text-foreground">Contact information</h2>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2 sm:col-span-1">
-                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Full name</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="input-surface w-full"
-                        placeholder="Your name"
-                      />
-                    </div>
-                    <div className="col-span-2 sm:col-span-1">
-                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Email</label>
-                      <input
-                        type="email"
-                        required
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="input-surface w-full"
-                        placeholder="you@example.com"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Country</label>
-                      <select
-                        value={formData.country}
-                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                        className="input-surface w-full cursor-pointer"
-                      >
-                        <option value="US">United States</option>
-                        <option value="GB">United Kingdom</option>
-                        <option value="NG">Nigeria</option>
-                        <option value="GH">Ghana</option>
-                        <option value="KE">Kenya</option>
-                        <option value="ZA">South Africa</option>
-                        <option value="IN">India</option>
-                        <option value="CA">Canada</option>
-                        <option value="AU">Australia</option>
-                        <option value="DE">Germany</option>
-                      </select>
+          {!hasCheckoutContent ? (
+            <div className="surface-card p-8 text-center">
+              <h2 className="text-2xl font-black text-foreground">Your checkout is empty</h2>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Add a course to your cart or pick a plan to continue.
+              </p>
+              <Link href="/courses" className="action-primary mt-6 inline-flex">
+                Browse courses
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="min-w-0">
+                <form onSubmit={handleCheckout} className="space-y-6">
+                  <div className="surface-card p-5 sm:p-6">
+                    <h2 className="mb-5 text-base font-bold text-foreground">Contact information</h2>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Full name</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.name}
+                          onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))}
+                          className="input-surface w-full"
+                          placeholder="Your name"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Email</label>
+                        <input
+                          type="email"
+                          required
+                          value={formData.email}
+                          onChange={(event) => setFormData((current) => ({ ...current, email: event.target.value }))}
+                          className="input-surface w-full"
+                          placeholder="you@example.com"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <CountryCombobox
+                          value={formData.country}
+                          onChange={(country) => setFormData((current) => ({ ...current, country }))}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="surface-card p-6">
-                  <h2 className="mb-5 text-base font-bold text-foreground">Payment method</h2>
+                  {!isFreePlan ? (
+                    <div className="surface-card p-5 sm:p-6">
+                      <h2 className="mb-5 text-base font-bold text-foreground">Payment method</h2>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        {paymentOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => setMethod(option.id)}
+                            className={cn(
+                              "rounded-2xl border p-4 text-left transition-all",
+                              method === option.id
+                                ? "border-primary-blue bg-primary-blue/5 shadow-sm"
+                                : "border-border bg-background hover:border-primary-blue/30"
+                            )}
+                          >
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              {option.logo}
+                              <span
+                                className={cn(
+                                  "h-4 w-4 rounded-full border-2",
+                                  method === option.id
+                                    ? "border-primary-blue bg-primary-blue"
+                                    : "border-border bg-transparent"
+                                )}
+                              />
+                            </div>
+                            <div className="text-sm font-semibold text-foreground">{option.label}</div>
+                            <div className="mt-1 text-xs leading-5 text-muted-foreground">{option.sublabel}</div>
+                          </button>
+                        ))}
+                      </div>
 
-                  <div className="mb-6 grid grid-cols-3 gap-3">
-                    {([
-                      { id: "stripe", label: "Credit Card", sub: "Visa, Mastercard, Amex" },
-                      { id: "paypal", label: "PayPal", sub: "Pay via PayPal" },
-                      { id: "paystack", label: "Paystack", sub: "Africa and global" },
-                    ] as const).map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setMethod(m.id)}
-                        className={cn(
-                          "rounded-2xl border p-3 text-left transition-all",
-                          method === m.id
-                            ? "border-blue-300 bg-blue-50 shadow-sm"
-                            : "border-border bg-background hover:border-blue-200"
-                        )}
-                      >
-                        <div className="mb-0.5 text-sm font-semibold text-foreground">{m.label}</div>
-                        <div className="text-xs text-muted-foreground">{m.sub}</div>
-                      </button>
-                    ))}
+                      <div className="mt-5 rounded-2xl border border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
+                        {method === "stripe"
+                          ? "You will be redirected to Stripe Checkout to complete payment securely."
+                          : method === "paypal"
+                            ? "You will be redirected to PayPal to approve and complete payment."
+                            : "You will be redirected to Paystack to finish payment with your preferred regional method."}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="surface-card p-5 sm:p-6">
+                      <h2 className="mb-2 text-base font-bold text-foreground">Free plan selected</h2>
+                      <p className="text-sm text-muted-foreground">
+                        No payment is required for the Free plan. Continue to browse the free course catalog.
+                      </p>
+                    </div>
+                  )}
+
+                  {quoteError ? (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300">
+                      {quoteError}
+                    </div>
+                  ) : null}
+
+                  {isFreePlan ? (
+                    <Link href="/courses?price=free" className="action-primary flex w-full justify-center py-4 text-base">
+                      Explore free courses
+                    </Link>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={processing || quoteLoading || !quote}
+                      className="action-primary flex w-full justify-center py-4 text-base"
+                    >
+                      {processing ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          Redirecting
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="h-5 w-5" />
+                          Pay {quote ? formatPrice(quote.total) : ""}
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <Shield className="h-3.5 w-3.5" />
+                    SSL encryption, referral discount support, and trusted checkout gateways
                   </div>
+                </form>
+              </div>
 
-                  <AnimatePresence mode="wait">
-                    {method === "stripe" && (
-                      <motion.div
-                        key="stripe"
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="space-y-4"
-                      >
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Card number</label>
-                          <div className="relative">
-                            <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <input
-                              type="text"
-                              placeholder="1234 5678 9012 3456"
-                              maxLength={19}
-                              className="input-surface w-full pl-10 font-mono"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Expiry date</label>
-                            <input type="text" placeholder="MM / YY" maxLength={7} className="input-surface w-full font-mono" />
-                          </div>
-                          <div>
-                            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">CVV</label>
-                            <input type="password" placeholder="***" maxLength={4} className="input-surface w-full font-mono" />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Name on card</label>
-                          <input type="text" placeholder="As it appears on card" className="input-surface w-full" />
-                        </div>
-                      </motion.div>
-                    )}
+              <div className="min-w-0">
+                <div className="surface-card p-5 sm:p-6 lg:sticky lg:top-24">
+                  <h2 className="mb-5 text-base font-bold text-foreground">Order summary</h2>
 
-                    {method === "paypal" && (
-                      <motion.div
-                        key="paypal"
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="rounded-2xl border border-border bg-muted/40 px-5 py-8 text-center"
-                      >
-                        <p className="text-sm text-muted-foreground">
-                          You will be redirected to PayPal to complete the purchase securely.
-                        </p>
-                      </motion.div>
-                    )}
-
-                    {method === "paystack" && (
-                      <motion.div
-                        key="paystack"
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="rounded-2xl border border-border bg-muted/40 px-5 py-8 text-center"
-                      >
-                        <p className="text-sm text-muted-foreground">
-                          Pay with M-Pesa, bank transfer, USSD, or card through Paystack.
-                        </p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={processing}
-                  className="action-primary flex w-full justify-center py-4 text-base"
-                >
-                  {processing ? (
+                  {quoteLoading ? (
+                    <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-5 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading your checkout summary...
+                    </div>
+                  ) : quote ? (
                     <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Processing
+                      <div className="mb-6 space-y-4">
+                        {quote.items.map((item) => (
+                          <div key={`${item.kind}-${item.courseId || item.title}`} className="flex items-start gap-3">
+                            {item.thumbnailUrl ? (
+                              <div className="relative h-12 w-20 shrink-0 overflow-hidden rounded-xl bg-primary-blue/10">
+                                <Image src={item.thumbnailUrl} alt={item.title} fill className="object-cover" />
+                              </div>
+                            ) : (
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
+                                <Shield className="h-4 w-4" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="line-clamp-2 text-sm font-medium text-foreground">{item.title}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {item.kind === "plan" ? "Subscription plan" : "Course access"}
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold text-foreground">{formatPrice(item.price)}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {quote.appliedCouponCode ? (
+                        <div className="mb-5 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-4 py-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                            Referral discount applied
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-foreground">{quote.appliedCouponCode}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {quote.appliedCouponDescription || "Your active referral reward was applied automatically."}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      <div className="mb-4 space-y-2 border-y border-border py-4">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="text-foreground">{formatPrice(quote.subtotal)}</span>
+                        </div>
+                        {cartSavings > 0 ? (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Catalog savings</span>
+                            <span className="text-emerald-600">-{formatPrice(cartSavings)}</span>
+                          </div>
+                        ) : null}
+                        {quote.discountAmount > 0 ? (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Referral discount</span>
+                            <span className="text-emerald-600">-{formatPrice(quote.discountAmount)}</span>
+                          </div>
+                        ) : null}
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Tax</span>
+                          <span className="text-foreground">$0.00</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-foreground">Total</span>
+                        <span className="text-2xl font-black text-foreground">{formatPrice(quote.total)}</span>
+                      </div>
                     </>
                   ) : (
-                    <>
-                      <Lock className="h-5 w-5" />
-                      Pay {formatPrice(cartTotal)}
-                    </>
+                    <div className="rounded-2xl border border-border bg-muted/30 px-4 py-5 text-sm text-muted-foreground">
+                      We couldn&apos;t load your order summary right now.
+                    </div>
                   )}
-                </button>
 
-                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                  <Shield className="h-3.5 w-3.5" />
-                  256-bit SSL encryption and 30-day money-back guarantee
-                </div>
-              </form>
-            </div>
-
-            <div className="lg:col-span-2">
-              <div className="surface-card sticky top-24 p-6">
-                <h2 className="mb-5 text-base font-bold text-foreground">Order summary</h2>
-
-                <div className="mb-6 space-y-4">
-                  {items.map((item) => (
-                    <div key={item.courseId} className="flex items-start gap-3">
-                      {item.thumbnailUrl && (
-                        <div className="relative h-12 w-20 shrink-0 overflow-hidden rounded-xl bg-blue-50">
-                          <Image src={item.thumbnailUrl} alt={item.title} fill className="object-cover" />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="line-clamp-2 text-sm font-medium text-foreground">{item.title}</p>
-                        {item.originalPrice && item.originalPrice > item.price && (
-                          <p className="text-xs text-muted-foreground line-through">{formatPrice(item.originalPrice)}</p>
-                        )}
+                  <div className="mt-5 space-y-2 border-t border-border pt-5">
+                    {[
+                      "Premium classroom access on desktop and mobile",
+                      "Instant checkout with Stripe, PayPal, or Paystack",
+                      "Referral discounts applied automatically when available",
+                      "Certificates included on eligible plans and courses",
+                    ].map((feature) => (
+                      <div key={feature} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                        {feature}
                       </div>
-                      <span className="text-sm font-semibold text-foreground">{formatPrice(item.price)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mb-4 space-y-2 border-y border-border py-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span className="text-foreground">{formatPrice(cartTotal)}</span>
+                    ))}
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Savings</span>
-                    <span className="text-emerald-600">
-                      -
-                      {formatPrice(items.reduce((s, i) => s + (i.originalPrice || i.price) - i.price, 0))}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Tax</span>
-                    <span className="text-foreground">$0.00</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-foreground">Total</span>
-                  <span className="text-2xl font-black text-foreground">{formatPrice(cartTotal)}</span>
-                </div>
-
-                <div className="mt-5 space-y-2 border-t border-border pt-5">
-                  {[
-                    "Lifetime access to purchased courses",
-                    "AI learning copilot included",
-                    "Download resources and code",
-                    "Certificate of completion",
-                    "30-day money-back guarantee",
-                  ].map((f) => (
-                    <div key={f} className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                      {f}
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

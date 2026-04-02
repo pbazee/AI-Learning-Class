@@ -82,7 +82,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [emailConfirmSent, setEmailConfirmSent] = useState(false);
-  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(true);
 
   async function syncNewsletterPreference(nextEmail: string, nextName?: string) {
     if (!newsletterOptIn || !nextEmail.trim()) {

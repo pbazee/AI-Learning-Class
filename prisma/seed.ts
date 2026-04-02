@@ -119,6 +119,7 @@ async function main() {
         yearlyPrice: plan.yearlyPrice,
         currency: plan.currency,
         features: plan.features,
+        coursesIncluded: plan.coursesIncluded,
         isPopular: plan.isPopular,
         isActive: plan.isActive,
       },

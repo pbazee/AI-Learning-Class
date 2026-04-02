@@ -28,6 +28,7 @@ import {
   Save,
   Grip,
   Maximize2,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Course } from "@/types";
@@ -47,6 +48,8 @@ type NotesPanelSize = {
   width: number;
   height: number;
 };
+
+type CourseLesson = NonNullable<Course["modules"]>[number]["lessons"][number];
 
 const savedAtFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -167,6 +170,7 @@ export function LessonPlayerClient({
   initialCompletedLessonIds,
   initialNotes,
   initialNoteContent,
+  hasFullCourseAccess,
 }: {
   course: Course;
   initialLessonId: string;
@@ -174,20 +178,44 @@ export function LessonPlayerClient({
   initialCompletedLessonIds: string[];
   initialNotes: LessonPlayerNote[];
   initialNoteContent: string;
+  hasFullCourseAccess: boolean;
 }) {
   const { toast } = useToast();
   const modules = course.modules ?? [];
   const allLessons = useMemo(() => modules.flatMap((module) => module.lessons), [modules]);
+  const isLessonUnlocked = useCallback(
+    (lesson: CourseLesson) => hasFullCourseAccess || lesson.isPreview,
+    [hasFullCourseAccess]
+  );
   const currentLesson = allLessons.find((lesson) => lesson.id === initialLessonId) ?? allLessons[0];
   const currentIndex = allLessons.findIndex((lesson) => lesson.id === currentLesson.id);
-  const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : undefined;
-  const nextLesson = currentIndex >= 0 ? allLessons[currentIndex + 1] : undefined;
+  const prevLesson =
+    currentIndex > 0
+      ? [...allLessons.slice(0, currentIndex)].reverse().find((lesson) => isLessonUnlocked(lesson))
+      : undefined;
+  const nextLesson =
+    currentIndex >= 0
+      ? allLessons.slice(currentIndex + 1).find((lesson) => isLessonUnlocked(lesson))
+      : undefined;
+  const hasLockedLessonsAhead =
+    !hasFullCourseAccess &&
+    allLessons.slice(currentIndex + 1).some((lesson) => !isLessonUnlocked(lesson));
   const currentModule = modules.find((module) =>
     module.lessons.some((lesson) => lesson.id === currentLesson.id)
   );
   const primaryAssetUrl = currentLesson.assetUrl || currentLesson.videoUrl;
+  const isPreviewOnlyLesson = currentLesson.isPreview && !hasFullCourseAccess;
+  const previewMinutesLimit =
+    isPreviewOnlyLesson &&
+    (currentLesson.type === "VIDEO" || currentLesson.type === "AUDIO" || currentLesson.type === "LIVE")
+      ? currentLesson.previewMinutes ?? undefined
+      : undefined;
+  const previewPagesLimit =
+    isPreviewOnlyLesson && currentLesson.type === "PDF"
+      ? currentLesson.previewPages ?? undefined
+      : undefined;
   const resources = [
-    primaryAssetUrl && currentLesson.allowDownload
+    primaryAssetUrl && currentLesson.allowDownload && hasFullCourseAccess
       ? { name: "Lesson asset", href: primaryAssetUrl, type: currentLesson.type.toLowerCase() }
       : null,
     course.previewVideoUrl
@@ -213,6 +241,9 @@ export function LessonPlayerClient({
     readStoredPanelPosition(readStoredPanelSize())
   );
   const [isDraggingNotesPanel, setIsDraggingNotesPanel] = useState(false);
+  const [previewConsumedSeconds, setPreviewConsumedSeconds] = useState(0);
+  const [previewLocked, setPreviewLocked] = useState(false);
+  const [previewPdfPage, setPreviewPdfPage] = useState(1);
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const notesPanelDragStateRef = useRef<{
     offsetX: number;
@@ -229,6 +260,12 @@ export function LessonPlayerClient({
     setSavedNotes(initialNotes);
     setNoteState(initialNoteContent ? "saved" : "idle");
   }, [currentLesson.id, initialNoteContent, initialNotes]);
+
+  useEffect(() => {
+    setPreviewConsumedSeconds(0);
+    setPreviewLocked(false);
+    setPreviewPdfPage(1);
+  }, [currentLesson.id]);
 
   useEffect(() => {
     if (noteState === "saving") {
@@ -352,7 +389,7 @@ export function LessonPlayerClient({
   }, [isDraggingNotesPanel, notesPanelSize]);
 
   useEffect(() => {
-    if (!viewerId) {
+    if (!viewerId || !hasFullCourseAccess) {
       return;
     }
 
@@ -373,7 +410,7 @@ export function LessonPlayerClient({
         setCompletedLessonIds(payload.progress.completedLessonIds);
       })
       .catch(() => {});
-  }, [currentLesson.id, viewerId]);
+  }, [currentLesson.id, hasFullCourseAccess, viewerId]);
 
   const completedLessonSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
   const completedCount = completedLessonSet.size;
@@ -381,6 +418,39 @@ export function LessonPlayerClient({
   const currentLessonCompleted = completedLessonSet.has(currentLesson.id);
   const noteHasChanges = noteContent !== savedNoteContent;
   const noteCanSave = noteContent.trim().length > 0 && noteHasChanges;
+  const previewLimitSeconds = previewMinutesLimit ? previewMinutesLimit * 60 : 0;
+  const hasTimedPreviewLimit = previewLimitSeconds > 0;
+  const hasPdfPreviewLimit = Boolean(previewPagesLimit && previewPagesLimit > 0);
+  const previewProgress = hasTimedPreviewLimit
+    ? Math.min(100, Math.round((previewConsumedSeconds / previewLimitSeconds) * 100))
+    : hasPdfPreviewLimit && previewPagesLimit
+      ? Math.min(100, Math.round((previewPdfPage / previewPagesLimit) * 100))
+      : 0;
+  const pdfPreviewMaxed = Boolean(hasPdfPreviewLimit && previewPagesLimit && previewPdfPage >= previewPagesLimit);
+  const previewStatusText = hasTimedPreviewLimit
+    ? `${Math.min(previewMinutesLimit ?? 0, Math.max(0, Math.ceil(previewConsumedSeconds / 60)))} / ${previewMinutesLimit} minutes previewed`
+    : hasPdfPreviewLimit && previewPagesLimit
+      ? `${Math.min(previewPdfPage, previewPagesLimit)} / ${previewPagesLimit} preview pages unlocked`
+      : null;
+
+  const handleTimedPreviewUpdate = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement | HTMLAudioElement>) => {
+      if (!hasTimedPreviewLimit) {
+        return;
+      }
+
+      const element = event.currentTarget;
+      const nextTime = Math.min(element.currentTime, previewLimitSeconds);
+      setPreviewConsumedSeconds(nextTime);
+
+      if (element.currentTime >= previewLimitSeconds) {
+        element.currentTime = previewLimitSeconds;
+        element.pause();
+        setPreviewLocked(true);
+      }
+    },
+    [hasTimedPreviewLimit, previewLimitSeconds]
+  );
 
   const updateCompletedLessonIds = useCallback((lessonId: string, isCompleted: boolean) => {
     setCompletedLessonIds((current) => {
@@ -394,6 +464,11 @@ export function LessonPlayerClient({
 
   const persistLessonCompletion = useCallback(
     async (isCompleted: boolean) => {
+      if (!hasFullCourseAccess) {
+        toast("Unlock the full course to track completion for this lesson.", "error");
+        return;
+      }
+
       if (!viewerId) {
         toast("Please sign in to track lesson progress.", "error");
         return;
@@ -430,7 +505,7 @@ export function LessonPlayerClient({
         setCompletionPending(false);
       }
     },
-    [completedLessonIds, currentLesson.id, toast, updateCompletedLessonIds, viewerId]
+    [completedLessonIds, currentLesson.id, hasFullCourseAccess, toast, updateCompletedLessonIds, viewerId]
   );
 
   const saveNote = useCallback(async () => {
@@ -589,6 +664,14 @@ export function LessonPlayerClient({
               Next
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
+          ) : hasLockedLessonsAhead ? (
+            <Link
+              href={`/courses/${course.slug}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary-blue px-3 py-2 text-xs font-semibold text-white hover:bg-primary-blue/90"
+            >
+              Unlock Course
+              <Lock className="h-3.5 w-3.5" />
+            </Link>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-primary-blue/20 bg-primary-blue/10 px-3 py-2 text-xs font-semibold text-primary-blue">
               <Award className="h-3.5 w-3.5" />
@@ -638,20 +721,14 @@ export function LessonPlayerClient({
                         {module.lessons.map((lesson) => {
                           const isActive = lesson.id === currentLesson.id;
                           const isCompleted = completedLessonSet.has(lesson.id);
+                          const isUnlocked = isLessonUnlocked(lesson);
 
-                          return (
-                            <Link
-                              key={lesson.id}
-                              href={`/learn/${course.slug}/${lesson.id}`}
-                              className={cn(
-                                "flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition-all",
-                                isActive
-                                  ? "border-primary-blue/20 bg-primary-blue/10 text-primary-blue"
-                                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-                              )}
-                            >
+                          const lessonRow = (
+                            <>
                               <span className="shrink-0">
-                                {isCompleted ? (
+                                {!isUnlocked ? (
+                                  <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                                ) : isCompleted ? (
                                   <CheckCircle2 className="h-3.5 w-3.5 text-primary-blue" />
                                 ) : lesson.type === "QUIZ" ? (
                                   <BarChart2 className="h-3.5 w-3.5 text-primary-blue" />
@@ -678,7 +755,32 @@ export function LessonPlayerClient({
                                   {Math.ceil((lesson.duration ?? 0) / 60)}m
                                 </span>
                               )}
+                            </>
+                          );
+
+                          return isUnlocked ? (
+                            <Link
+                              key={lesson.id}
+                              href={`/learn/${course.slug}/${lesson.id}`}
+                              className={cn(
+                                "flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition-all",
+                                isActive
+                                  ? "border-primary-blue/20 bg-primary-blue/10 text-primary-blue"
+                                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+                              )}
+                            >
+                              {lessonRow}
                             </Link>
+                          ) : (
+                            <div
+                              key={lesson.id}
+                              className="flex items-center gap-2 rounded-xl border border-transparent px-3 py-2 text-xs text-muted-foreground/80 opacity-80"
+                            >
+                              {lessonRow}
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]">
+                                Locked
+                              </span>
+                            </div>
                           );
                         })}
                       </div>
@@ -706,24 +808,140 @@ export function LessonPlayerClient({
               </div>
 
               <div className="overflow-hidden rounded-[28px] border border-slate-900 bg-slate-950 shadow-lg">
+                {(hasTimedPreviewLimit || hasPdfPreviewLimit) && previewStatusText ? (
+                  <div className="border-b border-white/10 bg-black/30 px-4 py-4 sm:px-6">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-blue">
+                          Limited preview
+                        </p>
+                        <p className="mt-1 text-sm text-white">{previewStatusText}</p>
+                      </div>
+                      <Link
+                        href={`/courses/${course.slug}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                      >
+                        Unlock Full Course
+                        <Lock className="h-4 w-4" />
+                      </Link>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-primary-blue transition-[width] duration-300"
+                        style={{ width: `${previewProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="relative flex aspect-video w-full items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900">
                   {currentLesson.type === "VIDEO" && primaryAssetUrl ? (
-                    <video controls className="h-full w-full bg-black" src={primaryAssetUrl} />
+                    <>
+                      <video
+                        controls
+                        className="h-full w-full bg-black"
+                        src={primaryAssetUrl}
+                        onTimeUpdate={handleTimedPreviewUpdate}
+                      />
+                      {previewLocked ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 px-6 text-center">
+                          <div className="max-w-md rounded-[28px] border border-white/10 bg-black/40 p-6 backdrop-blur">
+                            <Lock className="mx-auto mb-4 h-12 w-12 text-primary-blue" />
+                            <h3 className="text-xl font-bold text-white">Preview complete</h3>
+                            <p className="mt-3 text-sm leading-6 text-slate-300">
+                              You&apos;ve reached the {previewMinutesLimit}-minute preview for this lesson. Unlock the full course to continue watching.
+                            </p>
+                            <Link
+                              href={`/courses/${course.slug}`}
+                              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                            >
+                              Unlock Full Course
+                              <ChevronRight className="h-4 w-4" />
+                            </Link>
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
                   ) : currentLesson.type === "AUDIO" && primaryAssetUrl ? (
-                    <div className="relative z-10 w-full max-w-2xl px-8 text-center">
+                    <div className="relative z-10 w-full max-w-2xl px-6 text-center sm:px-8">
                       <Volume2 className="mx-auto mb-4 h-16 w-16 text-primary-blue" />
                       <h3 className="mb-3 text-2xl font-bold text-white">{currentLesson.title}</h3>
                       <p className="mb-6 text-slate-300">
                         {currentLesson.description || "Listen directly inside the platform."}
                       </p>
-                      <audio controls className="mx-auto w-full max-w-xl" src={primaryAssetUrl} />
+                      <audio
+                        controls
+                        className="mx-auto w-full max-w-xl"
+                        src={primaryAssetUrl}
+                        onTimeUpdate={handleTimedPreviewUpdate}
+                      />
+                      {previewLocked ? (
+                        <div className="mt-5 rounded-[24px] border border-white/10 bg-black/40 p-5">
+                          <p className="text-sm leading-6 text-slate-300">
+                            You&apos;ve reached the {previewMinutesLimit}-minute audio preview.
+                          </p>
+                          <Link
+                            href={`/courses/${course.slug}`}
+                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                          >
+                            Unlock Full Course
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
+                        </div>
+                      ) : null}
                     </div>
                   ) : currentLesson.type === "PDF" && primaryAssetUrl ? (
-                    <iframe
-                      src={primaryAssetUrl}
-                      title={currentLesson.title}
-                      className="h-full w-full bg-white"
-                    />
+                    <div className="flex h-full w-full flex-col">
+                      {hasPdfPreviewLimit && previewPagesLimit ? (
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-black/30 px-4 py-3 text-white sm:px-6">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewPdfPage((current) => Math.max(1, current - 1))}
+                            disabled={previewPdfPage <= 1}
+                            className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Previous page
+                          </button>
+                          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
+                            Page {previewPdfPage} of {previewPagesLimit}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewPdfPage((current) => Math.min(previewPagesLimit, current + 1))
+                            }
+                            disabled={previewPdfPage >= previewPagesLimit}
+                            className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Next page
+                          </button>
+                        </div>
+                      ) : null}
+                      <iframe
+                        src={
+                          hasPdfPreviewLimit
+                            ? `${primaryAssetUrl}#toolbar=0&navpanes=0&scrollbar=0&page=${previewPdfPage}`
+                            : primaryAssetUrl
+                        }
+                        title={currentLesson.title}
+                        className={cn("h-full w-full bg-white", hasPdfPreviewLimit && "pointer-events-none")}
+                      />
+                      {pdfPreviewMaxed ? (
+                        <div className="border-t border-white/10 bg-black/35 px-4 py-4 text-center sm:px-6">
+                          <p className="text-sm leading-6 text-slate-300">
+                            This preview is limited to {previewPagesLimit} page{previewPagesLimit === 1 ? "" : "s"}.
+                            Unlock the course to read the full lesson.
+                          </p>
+                          <Link
+                            href={`/courses/${course.slug}`}
+                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                          >
+                            Unlock Full Course
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : currentLesson.type === "QUIZ" ? (
                     <div className="relative z-10 p-8 text-center">
                       <BarChart2 className="mx-auto mb-4 h-16 w-16 text-primary-blue" />
@@ -788,23 +1006,33 @@ export function LessonPlayerClient({
                   </span>
                 ) : null}
 
-                <button
-                  onClick={() => void persistLessonCompletion(!currentLessonCompleted)}
-                  disabled={completionPending}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70",
-                    currentLessonCompleted
-                      ? "border border-border bg-card text-muted-foreground hover:border-primary-blue/20 hover:bg-primary-blue/10 hover:text-primary-blue"
-                      : "bg-primary-blue text-white hover:bg-primary-blue/90"
-                  )}
-                >
-                  {completionPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4" />
-                  )}
-                  {currentLessonCompleted ? "Mark incomplete" : "Mark complete"}
-                </button>
+                {hasFullCourseAccess ? (
+                  <button
+                    onClick={() => void persistLessonCompletion(!currentLessonCompleted)}
+                    disabled={completionPending}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70",
+                      currentLessonCompleted
+                        ? "border border-border bg-card text-muted-foreground hover:border-primary-blue/20 hover:bg-primary-blue/10 hover:text-primary-blue"
+                        : "bg-primary-blue text-white hover:bg-primary-blue/90"
+                    )}
+                  >
+                    {completionPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    {currentLessonCompleted ? "Mark incomplete" : "Mark complete"}
+                  </button>
+                ) : (
+                  <Link
+                    href={`/courses/${course.slug}`}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                  >
+                    <Lock className="h-4 w-4" />
+                    Unlock full course
+                  </Link>
+                )}
               </div>
             </div>
 
@@ -830,6 +1058,14 @@ export function LessonPlayerClient({
                   <span className="hidden max-w-[220px] truncate sm:block">{nextLesson.title}</span>
                   <span className="sm:hidden">Next</span>
                   <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </Link>
+              ) : hasLockedLessonsAhead ? (
+                <Link
+                  href={`/courses/${course.slug}`}
+                  className="flex items-center gap-2 text-sm font-medium text-primary-blue"
+                >
+                  <Lock className="h-4 w-4" />
+                  Unlock full course
                 </Link>
               ) : (
                 <Link

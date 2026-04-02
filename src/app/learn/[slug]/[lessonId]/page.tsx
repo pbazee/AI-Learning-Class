@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { LessonPlayerClient } from "@/components/learn/LessonPlayerClient";
-import { getCourseByLessonId, getCourseBySlug, getCurrentUserProfile } from "@/lib/data";
+import { getCourseByLessonId, getCourseBySlug, getCurrentUserProfile, getUserCourseAccessMap } from "@/lib/data";
 import { getCourseProgressState, getLessonNotes } from "@/lib/lesson-player";
 
 export default async function LessonPlayerPage({
@@ -30,6 +30,21 @@ export default async function LessonPlayerPage({
     redirect(`/learn/${course.slug}/${lessonId}`);
   }
 
+  const requestedLesson =
+    course.modules?.flatMap((module) => module.lessons).find((lesson) => lesson.id === lessonId) ?? null;
+
+  if (!requestedLesson) {
+    notFound();
+  }
+
+  const courseAccessMap =
+    viewer ? await getUserCourseAccessMap(viewer.id, [course.id]) : {};
+  const hasFullCourseAccess = Boolean(courseAccessMap[course.id]?.hasAccess);
+
+  if (!hasFullCourseAccess && !requestedLesson.isPreview) {
+    redirect(`/courses/${course.slug}`);
+  }
+
   const playerState = viewer
     ? await Promise.all([
         getCourseProgressState(viewer.id, course.id),
@@ -48,6 +63,7 @@ export default async function LessonPlayerPage({
       initialCompletedLessonIds={playerState?.progress.completedLessonIds ?? []}
       initialNotes={playerState?.notes ?? []}
       initialNoteContent={playerState?.notes[0]?.content ?? ""}
+      hasFullCourseAccess={hasFullCourseAccess}
     />
   );
 }

@@ -20,7 +20,9 @@ import {
   type HomepageParagraphSectionKey,
 } from "@/lib/homepage-paragraphs";
 import { getCompletedCourseCertificateRecords } from "@/lib/learner-records";
+import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
 import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "./prisma";
+import { ensureSubscriptionPlansTable, mapSubscriptionPlan } from "@/lib/subscription-plans";
 import { createServerSupabaseClient } from "./supabase-server";
 import { syncAuthenticatedUser } from "./auth-user-sync";
 
@@ -433,6 +435,8 @@ function mapCourse(
               duration: lesson.duration ?? undefined,
               content: lesson.content ?? undefined,
               isPreview: lesson.isPreview,
+              previewPages: lesson.previewPages ?? undefined,
+              previewMinutes: lesson.previewMinutes ?? undefined,
               allowDownload: lesson.allowDownload,
               sellSeparately: lesson.sellSeparately,
               order: lesson.order,
@@ -797,6 +801,8 @@ export async function getHomepageParagraphContentMap(): Promise<HomepageParagrap
 
 export async function getCourseBySlug(slug: string): Promise<Course | null> {
   return safeDatabaseRead("getCourseBySlug", null, async () => {
+    await ensureLessonPreviewColumns();
+
     const course = await prisma.course.findUnique({
       where: { slug },
       include: {
@@ -932,23 +938,14 @@ export async function getAnnouncements(): Promise<Announcement[]> {
 
 export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
   return safeDatabaseRead("getSubscriptionPlans", [] as SubscriptionPlan[], async () => {
+    await ensureSubscriptionPlansTable();
+
     const plans = await prisma.subscriptionPlan.findMany({
       where: { isActive: true },
       orderBy: [{ price: "asc" }, { createdAt: "asc" }],
     });
 
-    return plans.map((plan) => ({
-      id: plan.id,
-      name: plan.name,
-      slug: plan.slug,
-      description: plan.description ?? undefined,
-      price: plan.price,
-      yearlyPrice: plan.yearlyPrice ?? undefined,
-      currency: plan.currency,
-      features: plan.features,
-      isPopular: plan.isPopular,
-      isActive: plan.isActive,
-    }));
+    return plans.map(mapSubscriptionPlan);
   });
 }
 
@@ -1074,6 +1071,8 @@ export async function getTestimonials(limit = 4): Promise<Testimonial[]> {
 
 export async function getAdminStats(): Promise<AdminStats> {
   return safeDatabaseRead("getAdminStats", EMPTY_ADMIN_STATS, async () => {
+    await ensureSubscriptionPlansTable();
+
     const now = new Date();
     const thisMonthStart = getMonthStart(now);
 
@@ -1492,6 +1491,8 @@ export async function getAdminStats(): Promise<AdminStats> {
 
 export async function getUserEnrollments(userId: string): Promise<DashboardEnrollment[]> {
   return safeDatabaseRead("getUserEnrollments", [] as DashboardEnrollment[], async () => {
+    await ensureLessonPreviewColumns();
+
     const enrollments = await prisma.enrollment.findMany({
       where: {
         userId,

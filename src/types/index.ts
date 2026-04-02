@@ -91,6 +91,8 @@ export interface Lesson {
   duration?: number;
   content?: string;
   isPreview: boolean;
+  previewPages?: number;
+  previewMinutes?: number;
   allowDownload?: boolean;
   sellSeparately?: boolean;
   order: number;

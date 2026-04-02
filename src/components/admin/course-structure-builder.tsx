@@ -26,6 +26,8 @@ export type CourseLessonDraft = {
   durationMinutes: string;
   content: string;
   isPreview: boolean;
+  previewPages: string;
+  previewMinutes: string;
   allowDownload: boolean;
   sellSeparately: boolean;
   isExpanded: boolean;
@@ -60,6 +62,8 @@ export function createEmptyLesson(): CourseLessonDraft {
     durationMinutes: "",
     content: "",
     isPreview: false,
+    previewPages: "",
+    previewMinutes: "",
     allowDownload: false,
     sellSeparately: false,
     isExpanded: true,
@@ -401,6 +405,7 @@ export function CourseStructureBuilder({
                                 </p>
                                 <div className="mt-1 flex flex-wrap items-center gap-2">
                                   <StatusPill tone="info">{normalizeLessonType(lesson.type)}</StatusPill>
+                                  {lesson.isPreview ? <StatusPill tone="success">Preview enabled</StatusPill> : null}
                                   {lesson.allowDownload ? <StatusPill tone="success">Downloadable</StatusPill> : null}
                                   {lesson.sellSeparately ? <StatusPill tone="warning">Sell separately</StatusPill> : null}
                                 </div>
@@ -450,9 +455,17 @@ export function CourseStructureBuilder({
                                 <AdminSelect
                                   value={lesson.type}
                                   onChange={(event) =>
-                                    updateLesson(section.localId, lesson.localId, {
-                                      type: event.target.value as CourseLessonDraft["type"],
-                                    })
+                                    updateLesson(section.localId, lesson.localId, (() => {
+                                      const nextType = event.target.value as CourseLessonDraft["type"];
+                                      return {
+                                        type: nextType,
+                                        previewPages: nextType === "PDF" ? lesson.previewPages : "",
+                                        previewMinutes:
+                                          nextType === "VIDEO" || nextType === "AUDIO" || nextType === "LIVE"
+                                            ? lesson.previewMinutes
+                                            : "",
+                                      };
+                                    })())
                                   }
                                 >
                                   {lessonOptions.map((option) => (
@@ -493,12 +506,53 @@ export function CourseStructureBuilder({
                                 <AdminSwitch
                                   checked={lesson.isPreview}
                                   onChange={(value) =>
-                                    updateLesson(section.localId, lesson.localId, { isPreview: value })
+                                    updateLesson(section.localId, lesson.localId, {
+                                      isPreview: value,
+                                      previewPages:
+                                        !value || lesson.type !== "PDF" ? "" : lesson.previewPages,
+                                      previewMinutes:
+                                        !value || (lesson.type !== "VIDEO" && lesson.type !== "AUDIO" && lesson.type !== "LIVE")
+                                          ? ""
+                                          : lesson.previewMinutes,
+                                    })
                                   }
                                   label="Preview lesson"
                                   hint="Allow prospective learners to preview this lesson."
                                 />
                               </div>
+                              {lesson.isPreview && lesson.type === "PDF" ? (
+                                <div>
+                                  <FieldLabel>Preview pages (PDF only)</FieldLabel>
+                                  <AdminInput
+                                    type="number"
+                                    min="0"
+                                    value={lesson.previewPages}
+                                    onChange={(event) =>
+                                      updateLesson(section.localId, lesson.localId, {
+                                        previewPages: event.target.value,
+                                      })
+                                    }
+                                    placeholder="3"
+                                  />
+                                </div>
+                              ) : null}
+                              {lesson.isPreview &&
+                              (lesson.type === "VIDEO" || lesson.type === "AUDIO" || lesson.type === "LIVE") ? (
+                                <div>
+                                  <FieldLabel>Preview minutes (video/audio)</FieldLabel>
+                                  <AdminInput
+                                    type="number"
+                                    min="0"
+                                    value={lesson.previewMinutes}
+                                    onChange={(event) =>
+                                      updateLesson(section.localId, lesson.localId, {
+                                        previewMinutes: event.target.value,
+                                      })
+                                    }
+                                    placeholder="5"
+                                  />
+                                </div>
+                              ) : null}
 
                               {lesson.type === "QUIZ" ? null : (
                                 <div className="md:col-span-2">

@@ -15,7 +15,9 @@ import { z } from "zod";
 import { normalizeEmail } from "@/lib/admin-email";
 import { syncCourseReviewMetrics } from "@/lib/course-reviews";
 import { HOMEPAGE_PARAGRAPH_SECTION_KEYS } from "@/lib/homepage-paragraphs";
+import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
+import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 import { deleteAdminStorageObjects } from "@/lib/supabase-admin";
 
 type ActionResult<T = void> = {
@@ -70,6 +72,8 @@ const lessonSchema = z.object({
   duration: z.coerce.number().min(0).optional(),
   content: z.string().optional(),
   isPreview: z.boolean().optional().default(false),
+  previewPages: z.coerce.number().min(0).optional(),
+  previewMinutes: z.coerce.number().min(0).optional(),
   allowDownload: z.boolean().optional().default(false),
   sellSeparately: z.boolean().optional().default(false),
   order: z.coerce.number().min(0).optional().default(0),
@@ -413,6 +417,8 @@ async function syncCourseCurriculum(
   courseId: string,
   sections: Array<z.output<typeof sectionSchema>>
 ) {
+  await ensureLessonPreviewColumns();
+
   const existingModules = await prisma.module.findMany({
     where: { courseId },
     include: {
@@ -489,6 +495,14 @@ async function syncCourseCurriculum(
         duration: optionalNumber(lesson.duration),
         content: optionalString(lesson.content),
         isPreview: Boolean(lesson.isPreview),
+        previewPages:
+          lesson.isPreview && lesson.type === "PDF"
+            ? optionalNumber(lesson.previewPages)
+            : null,
+        previewMinutes:
+          lesson.isPreview && (lesson.type === "VIDEO" || lesson.type === "AUDIO" || lesson.type === "LIVE")
+            ? optionalNumber(lesson.previewMinutes)
+            : null,
         allowDownload: Boolean(lesson.allowDownload),
         sellSeparately: Boolean(lesson.sellSeparately),
         order: lessonIndex,
@@ -1285,6 +1299,7 @@ export async function saveSubscriptionPlanAction(input: z.input<typeof planSchem
     "saveSubscriptionPlan",
     ["/admin", "/admin/subscriptions", "/pricing", "/"],
     async (values) => {
+      await ensureSubscriptionPlansTable();
       const slug = slugify(values.slug || values.name);
 
       return prisma.subscriptionPlan.upsert({
@@ -1323,7 +1338,10 @@ export async function deleteSubscriptionPlanAction(id: string) {
   return runAdminAction(
     "deleteSubscriptionPlan",
     ["/admin", "/admin/subscriptions", "/pricing", "/"],
-    async () => prisma.subscriptionPlan.delete({ where: { id } }),
+    async () => {
+      await ensureSubscriptionPlansTable();
+      return prisma.subscriptionPlan.delete({ where: { id } });
+    },
     "Subscription plan deleted successfully."
   );
 }

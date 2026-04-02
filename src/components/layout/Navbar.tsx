@@ -452,12 +452,12 @@ export function Navbar() {
                   </AnimatePresence>
                 </div>
               ) : (
-                <Link
-                  href="/login"
-                  className="inline-flex h-10 items-center rounded-full bg-orange-500 px-4 text-sm font-bold text-white shadow-[0_18px_40px_-24px_rgba(249,115,22,0.95)] transition-all hover:bg-orange-400"
-                >
-                  Login
-                </Link>
+              <Link
+                href="/login"
+                className="inline-flex h-10 items-center rounded-full bg-primary-blue px-4 text-sm font-bold text-white shadow-[0_18px_40px_-24px_rgba(59,130,246,0.95)] transition-all hover:bg-primary-blue/90"
+              >
+                Login
+              </Link>
               )}
 
               <Dialog.Trigger asChild>
@@ -644,7 +644,7 @@ export function Navbar() {
                   <Link
                     href="/login"
                     onClick={() => setMenuOpen(false)}
-                    className="flex w-full items-center justify-center rounded-2xl bg-orange-500 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-orange-400"
+                    className="flex w-full items-center justify-center rounded-2xl bg-primary-blue px-4 py-3 text-sm font-bold text-white transition-all hover:bg-primary-blue/90"
                   >
                     Login
                   </Link>

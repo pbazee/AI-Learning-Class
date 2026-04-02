@@ -1,21 +1,30 @@
-import { prisma } from "@/lib/prisma";
 import { SubscriptionPlansManager } from "@/components/admin/subscription-plans-manager";
+import { prisma } from "@/lib/prisma";
+import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
 export default async function AdminSubscriptionsPage() {
-  const plans = await prisma.subscriptionPlan.findMany({
-    include: {
-      _count: {
-        select: {
-          subscriptions: true,
-        },
-      },
-    },
+  await ensureSubscriptionPlansTable();
+  const managedPlans = await prisma.subscriptionPlan.findMany({
     orderBy: [{ price: "asc" }, { createdAt: "asc" }],
   });
+  const subscriptionCounts = await prisma.userSubscription.groupBy({
+    by: ["planId"],
+    _count: {
+      planId: true,
+    },
+    where: {
+      planId: {
+        in: managedPlans.map((plan) => plan.id),
+      },
+    },
+  });
+  const countByPlanId = new Map(
+    subscriptionCounts.map((entry) => [entry.planId, entry._count.planId])
+  );
 
   return (
     <SubscriptionPlansManager
-      plans={plans.map((plan) => ({
+      plans={managedPlans.map((plan) => ({
         id: plan.id,
         name: plan.name,
         slug: plan.slug,
@@ -27,7 +36,7 @@ export default async function AdminSubscriptionsPage() {
         coursesIncluded: plan.coursesIncluded,
         isPopular: plan.isPopular,
         isActive: plan.isActive,
-        subscriptionsCount: plan._count.subscriptions,
+        subscriptionsCount: countByPlanId.get(plan.id) ?? 0,
       }))}
     />
   );

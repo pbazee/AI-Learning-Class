@@ -81,7 +81,7 @@ function LoginPageInner() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
-  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(true);
   const [error, setError] = useState<string | null>(
     callbackError === "oauth_failed" ? "Google sign-in failed. Please try again." :
     callbackError === "magic_link_failed" ? "Your magic link expired or is invalid. Please request a new one." :

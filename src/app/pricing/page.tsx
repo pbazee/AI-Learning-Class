@@ -7,18 +7,12 @@ import { Check, X, HelpCircle } from "lucide-react";
 import { getSubscriptionPlans } from "@/lib/data";
 
 const comparison = [
-  { feature: "Course access", starter: "50+ beginner courses", pro: "All 200+ courses", teams: "All 200+ courses x seats" },
-  { feature: "AI Copilot messages", starter: "100/month", pro: "Unlimited", teams: "Unlimited" },
-  { feature: "Certificate of completion", starter: true, pro: true, teams: true },
-  { feature: "Blockchain cert verification", starter: false, pro: true, teams: true },
-  { feature: "Download resources & code", starter: false, pro: true, teams: true },
-  { feature: "Live Q&A sessions", starter: false, pro: "Weekly", teams: "Weekly + dedicated" },
-  { feature: "1-on-1 AI mentoring", starter: false, pro: true, teams: true },
-  { feature: "Career support", starter: false, pro: true, teams: true },
-  { feature: "Admin dashboard", starter: false, pro: false, teams: true },
-  { feature: "SSO integration", starter: false, pro: false, teams: true },
-  { feature: "Compliance reports", starter: false, pro: false, teams: true },
-  { feature: "Priority support SLA", starter: false, pro: false, teams: true },
+  { feature: "Course access", free: "All free courses", pro: "All courses", teams: "All courses + team access" },
+  { feature: "Certificates", free: true, pro: true, teams: true },
+  { feature: "Priority support", free: false, pro: true, teams: true },
+  { feature: "Early access", free: false, pro: true, teams: true },
+  { feature: "Admin dashboard", free: false, pro: false, teams: true },
+  { feature: "Progress tracking", free: false, pro: false, teams: true },
 ];
 
 function FeatureCell({ val }: { val: boolean | string }) {
@@ -47,7 +41,7 @@ export default async function PricingPage() {
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
                     <th className="w-1/2 px-6 py-4 text-left text-xs font-medium text-muted-foreground">Feature</th>
-                    <th className="px-4 py-4 text-center text-xs font-semibold text-muted-foreground">Starter</th>
+                    <th className="px-4 py-4 text-center text-xs font-semibold text-muted-foreground">Free</th>
                     <th className="bg-primary-blue/10 px-4 py-4 text-center text-xs font-semibold text-primary-blue">Pro *</th>
                     <th className="px-4 py-4 text-center text-xs font-semibold text-muted-foreground">Teams</th>
                   </tr>
@@ -56,7 +50,7 @@ export default async function PricingPage() {
                   {comparison.map((row) => (
                     <tr key={row.feature} className="transition-colors hover:bg-muted/30">
                       <td className="px-6 py-3.5 text-xs text-muted-foreground">{row.feature}</td>
-                      <td className="px-4 py-3.5 text-center"><FeatureCell val={row.starter} /></td>
+                      <td className="px-4 py-3.5 text-center"><FeatureCell val={row.free} /></td>
                       <td className="bg-primary-blue/5 px-4 py-3.5 text-center"><FeatureCell val={row.pro} /></td>
                       <td className="px-4 py-3.5 text-center"><FeatureCell val={row.teams} /></td>
                     </tr>
@@ -72,12 +66,12 @@ export default async function PricingPage() {
             </h2>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {[
-                { q: "Can I switch plans?", a: "Yes - upgrade or downgrade anytime. Upgrades take effect immediately; downgrades at the next billing cycle." },
+                { q: "Can I switch plans?", a: "Yes - you can move between Free, Pro, and Teams as your needs change." },
                 { q: "What payment methods do you accept?", a: "Visa, Mastercard, Amex via Stripe; PayPal; and Paystack for African users (M-Pesa, bank transfer, USSD, NGN/GHS/KES/ZAR)." },
-                { q: "Is there a free trial?", a: "Every plan includes a 14-day money-back guarantee. No questions asked. Plus many courses have free preview lessons." },
-                { q: "Do certificates expire?", a: "No - your certificates never expire and include a unique verification code. Pro and Teams plans include blockchain verification." },
-                { q: "Can I buy individual courses?", a: "Yes - every course can be purchased individually for lifetime access, in addition to subscription plans." },
-                { q: "What is the Teams plan?", a: "Teams gives 10 seats, an admin dashboard with progress tracking, custom learning paths, SSO, and a dedicated account manager." },
+                { q: "What does the Free plan include?", a: "The Free plan includes all free courses and certificates so new learners can start immediately." },
+                { q: "What makes Pro different?", a: "Pro unlocks every course plus priority support and early access to new content." },
+                { q: "What is included in Teams?", a: "Teams includes everything in Pro, plus the admin dashboard and learner progress tracking for organizations." },
+                { q: "Can I still preview lessons?", a: "Yes - preview-enabled lessons can still be sampled before you commit to a paid plan." },
               ].map((faq) => (
                 <div key={faq.q} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                   <div className="flex items-start gap-3">
@@ -94,7 +88,7 @@ export default async function PricingPage() {
 
           <div className="mt-16 text-center">
             <h3 className="mb-3 text-xl font-black text-foreground">Still not sure?</h3>
-            <p className="mb-6 text-sm text-muted-foreground">Start for free - no credit card required. Upgrade when you&apos;re ready.</p>
+            <p className="mb-6 text-sm text-muted-foreground">Start with free courses today, then upgrade to Pro or Teams whenever you&apos;re ready.</p>
             <Link
               href="/courses?price=free"
               className="inline-flex items-center gap-2 rounded-2xl bg-primary-blue px-10 py-4 font-bold text-white transition-colors shadow-sm hover:bg-primary-blue/90"

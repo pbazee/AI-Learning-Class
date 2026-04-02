@@ -176,6 +176,8 @@ model Lesson {
   duration       Int? // in seconds
   content        String? // for text/markdown lessons
   isPreview      Boolean    @default(false)
+  previewPages   Int?       @map("preview_pages")
+  previewMinutes Int?       @map("preview_minutes")
   allowDownload  Boolean    @default(false)
   sellSeparately Boolean    @default(false)
   order          Int
