@@ -594,24 +594,87 @@ export async function getUserCourseAccessMap(
       return {};
     }
 
-    const enrollments = await prisma.enrollment.findMany({
-      where: {
-        userId,
-        courseId: { in: courseIds },
-        status: { in: ["ACTIVE", "COMPLETED"] },
-      },
-      select: {
-        courseId: true,
-      },
-    });
+    const now = new Date();
+    const [enrollments, requestedCourses, activeSubscriptions] = await Promise.all([
+      prisma.enrollment.findMany({
+        where: {
+          userId,
+          courseId: { in: courseIds },
+          status: { in: ["ACTIVE", "COMPLETED"] },
+          OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        },
+        select: {
+          courseId: true,
+        },
+      }),
+      prisma.course.findMany({
+        where: {
+          id: { in: courseIds },
+        },
+        select: {
+          id: true,
+          isFree: true,
+          price: true,
+        },
+      }),
+      prisma.userSubscription.findMany({
+        where: {
+          userId,
+          status: { in: ["ACTIVE", "TRIALING"] },
+          currentPeriodEnd: { gte: now },
+        },
+        select: {
+          plan: {
+            select: {
+              coursesIncluded: true,
+            },
+          },
+        },
+      }),
+    ]);
+    const accessibleCourseIds = new Set(
+      enrollments.map((enrollment) => enrollment.courseId)
+    );
 
-    const accessibleCourseIds = Array.from(new Set(enrollments.map((enrollment) => enrollment.courseId)));
+    if (activeSubscriptions.length > 0) {
+      const coveredEntries = new Set<string>();
 
-    if (accessibleCourseIds.length === 0) {
+      activeSubscriptions.forEach((subscription) => {
+        subscription.plan.coursesIncluded.forEach((entry) => {
+          const normalizedEntry = entry.trim();
+
+          if (normalizedEntry) {
+            coveredEntries.add(normalizedEntry);
+          }
+        });
+      });
+
+      if (coveredEntries.has("ALL")) {
+        courseIds.forEach((courseId) => accessibleCourseIds.add(courseId));
+      } else {
+        const includesFreeCourses = coveredEntries.has("FREE");
+
+        requestedCourses.forEach((course) => {
+          if (coveredEntries.has(course.id)) {
+            accessibleCourseIds.add(course.id);
+            return;
+          }
+
+          if (includesFreeCourses && (course.isFree || course.price === 0)) {
+            accessibleCourseIds.add(course.id);
+          }
+        });
+      }
+    }
+
+    if (accessibleCourseIds.size === 0) {
       return {};
     }
 
-    const accessRows = await computeUserCourseAccess(userId, accessibleCourseIds);
+    const accessRows = await computeUserCourseAccess(
+      userId,
+      Array.from(accessibleCourseIds)
+    );
 
     return accessRows.reduce<Record<string, CourseAccessState>>((accumulator, row) => {
       accumulator[row.courseId] = {
@@ -1492,11 +1555,13 @@ export async function getAdminStats(): Promise<AdminStats> {
 export async function getUserEnrollments(userId: string): Promise<DashboardEnrollment[]> {
   return safeDatabaseRead("getUserEnrollments", [] as DashboardEnrollment[], async () => {
     await ensureLessonPreviewColumns();
+    const now = new Date();
 
     const enrollments = await prisma.enrollment.findMany({
       where: {
         userId,
         status: { in: ["ACTIVE", "COMPLETED"] },
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
       },
       include: {
         course: {

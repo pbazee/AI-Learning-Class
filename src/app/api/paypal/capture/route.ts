@@ -1,35 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-
-async function createPaypalAccessToken() {
-  if (!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
-    throw new Error("PayPal is not configured.");
-  }
-
-  const isLive = (process.env.PAYPAL_MODE || "sandbox").trim().toLowerCase() === "live";
-  const baseUrl = isLive ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
-  const auth = Buffer.from(
-    `${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
-  ).toString("base64");
-
-  const response = await fetch(`${baseUrl}/v1/oauth2/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  if (!response.ok) {
-    throw new Error("Unable to authenticate with PayPal.");
-  }
-
-  const payload = await response.json();
-  return {
-    accessToken: payload.access_token as string,
-    baseUrl,
-  };
-}
+import { decodeProviderState, finalizeCheckoutOrder } from "@/lib/payments";
+import { capturePaypalOrder } from "@/lib/paypal";
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,19 +11,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing PayPal order." }, { status: 400 });
     }
 
-    const { accessToken, baseUrl } = await createPaypalAccessToken();
-    const response = await fetch(`${baseUrl}/v2/checkout/orders/${orderId}/capture`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
-    const payload = await response.json();
+    const payload = await capturePaypalOrder(orderId);
 
-    if (!response.ok || payload?.status !== "COMPLETED") {
-      return NextResponse.json({ error: payload?.message || "Unable to confirm PayPal payment." }, { status: 400 });
-    }
+    const providerState = decodeProviderState(
+      payload?.purchase_units?.[0]?.custom_id
+    );
+
+    await finalizeCheckoutOrder({
+      gateway: "paypal",
+      orderId: providerState?.orderId,
+      providerReference: payload.id,
+      planSlug: providerState?.planSlug,
+      couponCode: providerState?.couponCode,
+      affiliateCode: providerState?.affiliateCode,
+      customerEmail:
+        payload?.payer?.email_address ??
+        request.headers.get("x-user-email") ??
+        null,
+    });
 
     return NextResponse.json({ success: true, sessionId: payload.id });
   } catch (error) {

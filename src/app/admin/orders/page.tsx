@@ -90,6 +90,7 @@ export default async function AdminOrdersPage() {
 
   const orderRows: AdminOrderRecord[] = orders.map((order) => {
     const status = normalizeOrderStatus(order.status);
+    const isPlanOrder = order.items.length === 0;
     const courseItems = order.items.map((item) => ({
       courseId: item.courseId,
       title: item.course.title,
@@ -124,7 +125,9 @@ export default async function AdminOrdersPage() {
       customerName: order.user.name || order.user.email || "Unknown customer",
       customerEmail: order.user.email || "No email provided",
       customerCountry: order.user.country,
-      itemSummary: courseItems.map((item) => item.title).join(", ") || "Course purchase",
+      itemSummary:
+        courseItems.map((item) => item.title).join(", ") ||
+        (isPlanOrder ? "Plan purchase" : "Course purchase"),
       itemLabels: courseItems.map((item) => item.title),
       amount: order.totalAmount,
       currency: order.currency,

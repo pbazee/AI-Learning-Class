@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { finalizeCheckoutOrder } from "@/lib/payments";
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +25,16 @@ export async function POST(request: NextRequest) {
     if (!response.ok || payload?.data?.status !== "success") {
       return NextResponse.json({ error: payload?.message || "Unable to verify Paystack payment." }, { status: 400 });
     }
+
+    await finalizeCheckoutOrder({
+      gateway: "paystack",
+      orderId: payload?.data?.metadata?.order_id,
+      providerReference: payload.data.reference,
+      planSlug: payload?.data?.metadata?.plan_slug,
+      couponCode: payload?.data?.metadata?.applied_coupon,
+      affiliateCode: payload?.data?.metadata?.aff_code,
+      customerEmail: payload?.data?.customer?.email ?? null,
+    });
 
     return NextResponse.json({ success: true, sessionId: payload.data.reference });
   } catch (error) {

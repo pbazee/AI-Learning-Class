@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Coupon, User } from "@prisma/client";
 import type { NextRequest } from "next/server";
+import { CHECKOUT_CURRENCY } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
@@ -105,6 +106,7 @@ async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | 
   const plan = await prisma.subscriptionPlan.findUnique({
     where: { slug: planSlug },
     select: {
+      currency: true,
       name: true,
       price: true,
       isActive: true,
@@ -115,6 +117,10 @@ async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | 
     return null;
   }
 
+  if (plan.currency && plan.currency !== CHECKOUT_CURRENCY) {
+    return null;
+  }
+
   return {
     kind: "plan",
     title: `${plan.name} Plan`,
@@ -122,16 +128,61 @@ async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | 
   };
 }
 
-function sanitizeCartItems(items: CheckoutItemInput[]) {
-  return items
-    .filter((item) => item && typeof item.title === "string" && Number.isFinite(item.price))
-    .map<CheckoutLineItem>((item) => ({
-      kind: "course",
-      courseId: item.courseId,
-      title: item.title,
-      price: roundCurrencyAmount(item.price),
-      thumbnailUrl: item.thumbnailUrl,
-    }));
+async function sanitizeCartItems(items: CheckoutItemInput[]) {
+  const requestedCourseIds = Array.from(
+    new Set(
+      items
+        .map((item) => item.courseId?.trim())
+        .filter((courseId): courseId is string => Boolean(courseId))
+    )
+  );
+
+  if (requestedCourseIds.length === 0) {
+    return [] as CheckoutLineItem[];
+  }
+
+  const courses = await prisma.course.findMany({
+    where: {
+      id: { in: requestedCourseIds },
+      isPublished: true,
+    },
+    select: {
+      id: true,
+      title: true,
+      price: true,
+      currency: true,
+      isFree: true,
+      thumbnailUrl: true,
+    },
+  });
+  const courseById = new Map(courses.map((course) => [course.id, course]));
+  const addedCourseIds = new Set<string>();
+
+  return items.flatMap<CheckoutLineItem>((item) => {
+    const courseId = item.courseId?.trim();
+
+    if (!courseId || addedCourseIds.has(courseId)) {
+      return [];
+    }
+
+    const course = courseById.get(courseId);
+
+    if (!course || (course.currency && course.currency !== CHECKOUT_CURRENCY)) {
+      return [];
+    }
+
+    addedCourseIds.add(courseId);
+
+    return [
+      {
+        kind: "course",
+        courseId,
+        title: course.title,
+        price: roundCurrencyAmount(course.isFree ? 0 : course.price),
+        thumbnailUrl: course.thumbnailUrl ?? undefined,
+      },
+    ];
+  });
 }
 
 export async function buildCheckoutQuote({
@@ -147,7 +198,7 @@ export async function buildCheckoutQuote({
 }): Promise<CheckoutQuote> {
   const normalizedPlanSlug = planSlug?.trim().toLowerCase() || null;
   const planItem = normalizedPlanSlug ? await getManagedPlanItem(normalizedPlanSlug) : null;
-  const lineItems = planItem ? [planItem] : sanitizeCartItems(items ?? []);
+  const lineItems = planItem ? [planItem] : await sanitizeCartItems(items ?? []);
   const subtotal = roundCurrencyAmount(lineItems.reduce((sum, item) => sum + item.price, 0));
   const coupon = await resolveActiveReferralCoupon(request, user);
   const discountAmount = applyCouponDiscount(subtotal, coupon);

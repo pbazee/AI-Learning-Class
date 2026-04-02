@@ -10,6 +10,7 @@ export default function CheckoutCompletePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const gateway = searchParams.get("gateway");
+  const stripeSessionId = searchParams.get("session_id");
   const paypalOrderId = searchParams.get("token");
   const paystackReference = searchParams.get("reference") || searchParams.get("trxref");
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +20,26 @@ export default function CheckoutCompletePage() {
 
     async function finalizeCheckout() {
       try {
+        if (gateway === "stripe" && stripeSessionId) {
+          const response = await fetch("/api/stripe/confirm", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ sessionId: stripeSessionId }),
+          });
+          const payload = await response.json().catch(() => null);
+
+          if (!response.ok || !payload?.success) {
+            throw new Error(payload?.error || "Unable to confirm your Stripe payment.");
+          }
+
+          if (!cancelled) {
+            router.replace(`/checkout/success?gateway=stripe&session_id=${encodeURIComponent(payload.sessionId)}`);
+          }
+          return;
+        }
+
         if (gateway === "paypal" && paypalOrderId) {
           const response = await fetch("/api/paypal/capture", {
             method: "POST",
@@ -72,7 +93,7 @@ export default function CheckoutCompletePage() {
     return () => {
       cancelled = true;
     };
-  }, [gateway, paystackReference, paypalOrderId, router]);
+  }, [gateway, paystackReference, paypalOrderId, router, stripeSessionId]);
 
   return (
     <div className="site-shell">
