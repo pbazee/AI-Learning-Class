@@ -96,7 +96,7 @@ export default async function PricingPage() {
             <h3 className="mb-3 text-xl font-black text-foreground">Still not sure?</h3>
             <p className="mb-6 text-sm text-muted-foreground">Start for free - no credit card required. Upgrade when you&apos;re ready.</p>
             <Link
-              href="/signup"
+              href="/courses?price=free"
               className="inline-flex items-center gap-2 rounded-2xl bg-primary-blue px-10 py-4 font-bold text-white transition-colors shadow-sm hover:bg-primary-blue/90"
             >
               Start Free Today {"->"}

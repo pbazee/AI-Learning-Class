@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Brain, Mail, Lock, Eye, EyeOff, Chrome, User, ArrowRight, Check, Sparkles, AlertCircle } from "lucide-react";
+import { Brain, Mail, Lock, Eye, EyeOff, User, ArrowRight, Check, Sparkles, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 
 function getRedirectTo() {
@@ -46,6 +46,29 @@ const roadmapSuggestions: Record<string, string[]> = {
   ],
 };
 
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path
+        d="M21.6 12.23c0-.76-.07-1.49-.2-2.2H12v4.16h5.38a4.6 4.6 0 0 1-1.99 3.02v2.5h3.22c1.89-1.74 2.99-4.31 2.99-7.48Z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 22c2.7 0 4.96-.9 6.61-2.43l-3.22-2.5c-.9.6-2.05.96-3.39.96-2.6 0-4.81-1.76-5.6-4.12H3.07v2.58A9.98 9.98 0 0 0 12 22Z"
+        fill="#34A853"
+      />
+      <path
+        d="M6.4 13.91A5.98 5.98 0 0 1 6.09 12c0-.66.11-1.31.31-1.91V7.5H3.07a9.98 9.98 0 0 0 0 9l3.33-2.59Z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 5.97c1.47 0 2.78.5 3.81 1.48l2.86-2.86C16.95 2.98 14.69 2 12 2a9.98 9.98 0 0 0-8.93 5.5l3.33 2.59c.79-2.36 3-4.12 5.6-4.12Z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
+}
+
 export default function SignupPage() {
   const searchParams = useSearchParams();
   const referralCode = searchParams.get("ref") || "";
@@ -59,11 +82,29 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [emailConfirmSent, setEmailConfirmSent] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
+
+  async function syncNewsletterPreference(nextEmail: string, nextName?: string) {
+    if (!newsletterOptIn || !nextEmail.trim()) {
+      return;
+    }
+
+    try {
+      await fetch("/api/newsletter/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: nextEmail, name: nextName }),
+      });
+    } catch {
+      // Newsletter opt-in should never block sign-up.
+    }
+  }
 
   async function handleGoogleSignUp() {
     setError(null);
     setLoading(true);
     const supabase = createClient();
+    await syncNewsletterPreference(email, name);
     console.log("[signup] Starting Google OAuth, redirectTo:", getRedirectTo());
 
     const { error } = await supabase.auth.signInWithOAuth({
@@ -112,6 +153,7 @@ export default function SignupPage() {
 
     // If Supabase email confirmation is enabled, no session yet → show confirm message
     if (data.user && !data.session) {
+      void syncNewsletterPreference(email, name);
       console.log("[signup] Email confirmation required, check inbox");
       setEmailConfirmSent(true);
       setLoading(false);
@@ -127,6 +169,7 @@ export default function SignupPage() {
         body: JSON.stringify({ referralCode }),
       }).catch(() => {});
     }
+    void syncNewsletterPreference(email, name);
     setLoading(false);
     setStep("quiz");
   }
@@ -222,7 +265,7 @@ export default function SignupPage() {
                     {loading ? (
                       <div className="w-5 h-5 border-2 border-muted-foreground/30 border-t-foreground rounded-full animate-spin" />
                     ) : (
-                      <Chrome className="w-5 h-5" />
+                      <GoogleIcon className="h-5 w-5" />
                     )}
                     Continue with Google
                   </button>
@@ -259,6 +302,17 @@ export default function SignupPage() {
                         </button>
                       </div>
                     </div>
+                    <label className="flex items-start gap-3 rounded-xl border border-border bg-background px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={newsletterOptIn}
+                        onChange={(event) => setNewsletterOptIn(event.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-border text-primary-blue focus:ring-primary-blue"
+                      />
+                      <span className="text-xs leading-5 text-muted-foreground">
+                        Get notified on more offers, discounts & new AI trends
+                      </span>
+                    </label>
                     <button type="submit" disabled={loading}
                       className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
                       {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Create Account <ArrowRight className="w-4 h-4" /></>}

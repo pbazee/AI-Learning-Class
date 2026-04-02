@@ -1,8 +1,9 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
 const TRANSIENT_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024"]);
-const DEFAULT_RETRY_COUNT = Number.parseInt(process.env.PRISMA_RETRY_COUNT ?? "2", 10);
-const DEFAULT_RETRY_DELAY_MS = Number.parseInt(process.env.PRISMA_RETRY_DELAY_MS ?? "350", 10);
+const DEFAULT_MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.PRISMA_MAX_ATTEMPTS ?? "3", 10));
+const DEFAULT_RETRY_DELAY_MS = Math.max(150, Number.parseInt(process.env.PRISMA_RETRY_DELAY_MS ?? "350", 10));
+const DEFAULT_LOG_COOLDOWN_MS = Math.max(1_000, Number.parseInt(process.env.PRISMA_LOG_COOLDOWN_MS ?? "60000", 10));
 
 type PrismaLikeClient = PrismaClient & {
   $extends: PrismaClient["$extends"];
@@ -10,15 +11,6 @@ type PrismaLikeClient = PrismaClient & {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getSupabaseProjectRef(parsed: URL) {
-  const [username, ...rest] = parsed.username.split(".");
-  if (username !== "postgres" || rest.length === 0) {
-    return undefined;
-  }
-
-  return rest.join(".");
 }
 
 function normalizePoolerUrl(rawUrl?: string) {
@@ -71,6 +63,27 @@ function normalizeDirectUrl(rawUrl?: string) {
   }
 }
 
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+  prismaLogCache?: Map<string, number>;
+  prismaUrl?: string;
+  directUrl?: string;
+};
+
+function shouldLogPrismaEvent(key: string) {
+  const now = Date.now();
+  const logCache = globalForPrisma.prismaLogCache ?? new Map<string, number>();
+  const lastLoggedAt = logCache.get(key) ?? 0;
+
+  if (now - lastLoggedAt < DEFAULT_LOG_COOLDOWN_MS) {
+    return false;
+  }
+
+  logCache.set(key, now);
+  globalForPrisma.prismaLogCache = logCache;
+  return true;
+}
+
 function isRetryablePrismaError(error: unknown) {
   if (error instanceof Prisma.PrismaClientInitializationError) {
     return true;
@@ -95,22 +108,41 @@ function isRetryablePrismaError(error: unknown) {
   ].some((fragment) => message.includes(fragment));
 }
 
+export function logPrismaConnectionEvent(
+  key: string,
+  message: string,
+  error: unknown,
+  level: "warn" | "error" = "warn"
+) {
+  if (!shouldLogPrismaEvent(key)) {
+    return;
+  }
+
+  const logger = level === "error" ? console.error : console.warn;
+  logger(message, error);
+}
+
 export async function withPrismaRetry<T>(operation: () => Promise<T>, label = "Prisma operation") {
-  let attempt = 0;
+  let attempt = 1;
   let lastError: unknown;
 
-  while (attempt <= DEFAULT_RETRY_COUNT) {
+  while (attempt <= DEFAULT_MAX_ATTEMPTS) {
     try {
       return await operation();
     } catch (error) {
       lastError = error;
 
-      if (!isRetryablePrismaError(error) || attempt === DEFAULT_RETRY_COUNT) {
+      if (!isRetryablePrismaError(error) || attempt === DEFAULT_MAX_ATTEMPTS) {
         throw error;
       }
 
-      const delay = DEFAULT_RETRY_DELAY_MS * (attempt + 1);
-      console.warn(`[prisma] ${label} failed on attempt ${attempt + 1}. Retrying in ${delay}ms.`);
+      const delay = DEFAULT_RETRY_DELAY_MS * 2 ** (attempt - 1);
+      logPrismaConnectionEvent(
+        `${label}:retry`,
+        `[prisma] ${label} failed on attempt ${attempt}. Retrying in ${delay}ms.`,
+        error,
+        "warn"
+      );
       await sleep(delay);
       attempt += 1;
     }
@@ -122,12 +154,6 @@ export async function withPrismaRetry<T>(operation: () => Promise<T>, label = "P
 export function isPrismaConnectionError(error: unknown) {
   return isRetryablePrismaError(error);
 }
-
-const globalForPrisma = globalThis as unknown as {
-  prisma?: PrismaClient;
-  prismaUrl?: string;
-  directUrl?: string;
-};
 
 const databaseUrl = normalizePoolerUrl(process.env.DATABASE_URL);
 const directUrl = normalizeDirectUrl(process.env.DIRECT_URL);

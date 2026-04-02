@@ -483,9 +483,6 @@ export function Navbar() {
                 </span>
               </Link>
 
-              <Link href="/wishlist" className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 dark:border-slate-800 dark:text-slate-200" aria-label="Wishlist">
-                <Heart className="h-4 w-4" />
-              </Link>
               {mounted ? (
                 <button
                   type="button"
@@ -496,27 +493,6 @@ export function Navbar() {
                   {resolvedTheme === "dark" ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
                 </button>
               ) : null}
-              <Link href="/cart" className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 dark:border-slate-800 dark:text-slate-200" aria-label="Cart">
-                <ShoppingCart className="h-4 w-4" />
-                {cartCount > 0 ? (
-                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[9px] font-bold text-white">
-                    {cartCount}
-                  </span>
-                ) : null}
-              </Link>
-
-              {user ? (
-                <Link
-                  href="/dashboard"
-                  className="inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
-                >
-                  <span className="max-w-[48px] truncate">{firstName}</span>
-                </Link>
-              ) : (
-                <Link href="/login" className="inline-flex h-9 items-center rounded-full bg-orange-500 px-3 text-xs font-bold text-white">
-                  Login
-                </Link>
-              )}
 
               <Dialog.Trigger asChild>
                 <button

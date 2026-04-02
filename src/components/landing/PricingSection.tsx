@@ -3,14 +3,52 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Check, Zap } from "lucide-react";
+import { useToast } from "@/components/ui/ToastProvider";
 import { formatPrice, cn } from "@/lib/utils";
 import type { SubscriptionPlan } from "@/types";
 
 export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
   const [yearly, setYearly] = useState(false);
+  const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   if (plans.length === 0) {
     return null;
+  }
+
+  async function startPlanCheckout(plan: SubscriptionPlan) {
+    try {
+      setCheckoutPlanId(plan.id);
+      const planPrice = yearly && plan.yearlyPrice ? plan.yearlyPrice : plan.price;
+      const origin = window.location.origin;
+      const response = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              title: yearly && plan.yearlyPrice ? `${plan.name} Plan (Yearly)` : `${plan.name} Plan`,
+              price: planPrice,
+            },
+          ],
+          successUrl: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancelUrl: `${origin}/pricing`,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.url) {
+        throw new Error(payload?.error || "Unable to start checkout right now.");
+      }
+
+      window.location.assign(payload.url);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Unable to start checkout right now.", "error");
+      setCheckoutPlanId(null);
+    }
   }
 
   return (
@@ -118,17 +156,19 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
                 ))}
               </ul>
 
-              <Link
-                href="/signup"
+              <button
+                type="button"
+                onClick={() => void startPlanCheckout(plan)}
+                disabled={checkoutPlanId === plan.id}
                 className={cn(
-                  "rounded-2xl px-4 py-3.5 text-center text-sm font-semibold",
+                  "rounded-2xl px-4 py-3.5 text-center text-sm font-semibold transition-opacity disabled:cursor-not-allowed disabled:opacity-70",
                   plan.isPopular
                     ? "bg-white text-primary-blue hover:bg-primary-blue/10"
                     : "border border-primary-blue/20 bg-primary-blue/10 text-primary-blue hover:border-primary-blue/30 hover:bg-primary-blue/15"
                 )}
               >
-                Get started with {plan.name}
-              </Link>
+                {checkoutPlanId === plan.id ? "Starting checkout..." : `Get started with ${plan.name}`}
+              </button>
             </motion.div>
           ))}
         </div>

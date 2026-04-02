@@ -1,6 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { LessonPlayerClient } from "@/components/learn/LessonPlayerClient";
-import { getCourseBySlug, getCurrentUserProfile } from "@/lib/data";
+import { getCourseByLessonId, getCourseBySlug, getCurrentUserProfile } from "@/lib/data";
 import { getCourseProgressState, getLessonNotes } from "@/lib/lesson-player";
 
 export default async function LessonPlayerPage({
@@ -9,10 +9,25 @@ export default async function LessonPlayerPage({
   params: Promise<{ slug: string; lessonId: string }>;
 }) {
   const { slug, lessonId } = await params;
-  const [course, viewer] = await Promise.all([getCourseBySlug(slug), getCurrentUserProfile()]);
+  const [viewer, courseBySlug] = await Promise.all([getCurrentUserProfile(), getCourseBySlug(slug)]);
+  let course = courseBySlug;
 
-  if (!course || !course.modules?.some((module) => module.lessons.some((lesson) => lesson.id === lessonId))) {
+  const hasRequestedLesson =
+    course?.modules?.some((module) => module.lessons.some((lesson) => lesson.id === lessonId)) ?? false;
+
+  if (!hasRequestedLesson) {
+    course = await getCourseByLessonId(lessonId);
+  }
+
+  const resolvedLessonExists =
+    course?.modules?.some((module) => module.lessons.some((lesson) => lesson.id === lessonId)) ?? false;
+
+  if (!course || !resolvedLessonExists) {
     notFound();
+  }
+
+  if (course.slug !== slug) {
+    redirect(`/learn/${course.slug}/${lessonId}`);
   }
 
   const playerState = viewer

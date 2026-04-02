@@ -92,6 +92,10 @@ export function Footer() {
     ? `https://wa.me/${settings.whatsappNumber.replace(/\D/g, "")}`
     : null;
 
+  function handleInternalNavigation() {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }
+
   return (
     <footer className="mt-20 border-t border-neutral-200 bg-white text-gray-900 dark:border-neutral-900 dark:bg-black dark:text-white">
       <div className="border-b border-neutral-200 bg-white dark:border-neutral-900 dark:bg-black">
@@ -144,8 +148,8 @@ export function Footer() {
 
       <div className="section-frame py-12 sm:py-14">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5 lg:gap-10">
-          <div className="sm:col-span-2 lg:col-span-2">
-            <Link href="/" className="mb-4 flex items-center gap-2">
+            <div className="sm:col-span-2 lg:col-span-2">
+            <Link href="/" scroll onClick={handleInternalNavigation} className="mb-4 flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-blue">
                 <Brain className="h-4 w-4 text-white" />
               </div>
@@ -163,7 +167,12 @@ export function Footer() {
             <ul className="space-y-3">
               {learnLinks.map((link) => (
                 <li key={link.href}>
-                  <Link href={link.href} className="text-sm text-gray-900 transition-colors hover:text-primary-blue dark:text-neutral-200">
+                  <Link
+                    href={link.href}
+                    scroll
+                    onClick={handleInternalNavigation}
+                    className="text-sm text-gray-900 transition-colors hover:text-primary-blue dark:text-neutral-200"
+                  >
                     {link.label}
                   </Link>
                 </li>
@@ -176,7 +185,12 @@ export function Footer() {
             <ul className="space-y-3">
               {quickLinks.map((link) => (
                 <li key={link.href}>
-                  <Link href={link.href} className="text-sm text-gray-900 transition-colors hover:text-primary-blue dark:text-neutral-200">
+                  <Link
+                    href={link.href}
+                    scroll
+                    onClick={handleInternalNavigation}
+                    className="text-sm text-gray-900 transition-colors hover:text-primary-blue dark:text-neutral-200"
+                  >
                     {link.label}
                   </Link>
                 </li>

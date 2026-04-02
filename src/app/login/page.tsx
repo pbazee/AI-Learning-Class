@@ -81,6 +81,7 @@ function LoginPageInner() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false);
   const [error, setError] = useState<string | null>(
     callbackError === "oauth_failed" ? "Google sign-in failed. Please try again." :
     callbackError === "magic_link_failed" ? "Your magic link expired or is invalid. Please request a new one." :
@@ -88,10 +89,27 @@ function LoginPageInner() {
     null
   );
 
+  async function syncNewsletterPreference(nextEmail: string) {
+    if (!newsletterOptIn || !nextEmail.trim()) {
+      return;
+    }
+
+    try {
+      await fetch("/api/newsletter/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: nextEmail }),
+      });
+    } catch {
+      // Newsletter opt-in should never block authentication.
+    }
+  }
+
   async function handleGoogleSignIn() {
     setError(null);
     setLoading(true);
     const supabase = createClient();
+    await syncNewsletterPreference(email);
     console.log("[login] Starting Google OAuth, redirectTo:", getRedirectTo(redirectPath));
 
     const { error } = await supabase.auth.signInWithOAuth({
@@ -124,6 +142,7 @@ function LoginPageInner() {
         console.error("[login] Magic link error:", error.message);
         setError(error.message);
       } else {
+        void syncNewsletterPreference(email);
         console.log("[login] Magic link sent successfully to:", email);
         setMagicSent(true);
       }
@@ -135,6 +154,7 @@ function LoginPageInner() {
         console.error("[login] Password sign-in error:", error.message);
         setError(error.message);
       } else {
+        void syncNewsletterPreference(email);
         console.log("[login] Signed in successfully, user:", data.user?.id);
         let nextPath = redirectPath;
 
@@ -286,6 +306,18 @@ function LoginPageInner() {
                 </div>
               )}
 
+              <label className="flex items-start gap-3 rounded-xl border border-border bg-background px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={newsletterOptIn}
+                  onChange={(event) => setNewsletterOptIn(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-border text-primary-blue focus:ring-primary-blue"
+                />
+                <span className="text-xs leading-5 text-muted-foreground">
+                  Get notified on more offers, discounts & new AI trends
+                </span>
+              </label>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -307,7 +339,7 @@ function LoginPageInner() {
         <p className="text-center text-sm text-muted-foreground mt-6">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-blue-600 hover:underline font-medium">
-            Start learning free
+            Sign up
           </Link>
         </p>
       </motion.div>

@@ -20,7 +20,7 @@ import {
   type HomepageParagraphSectionKey,
 } from "@/lib/homepage-paragraphs";
 import { getCompletedCourseCertificateRecords } from "@/lib/learner-records";
-import { isPrismaConnectionError, prisma } from "./prisma";
+import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "./prisma";
 import { createServerSupabaseClient } from "./supabase-server";
 import { syncAuthenticatedUser } from "./auth-user-sync";
 
@@ -323,7 +323,12 @@ async function safeDatabaseRead<T>(
     return await query();
   } catch (error) {
     if (isPrismaConnectionError(error)) {
-      console.error(`[database] ${label} failed. Returning a safe fallback.`, error);
+      logPrismaConnectionEvent(
+        `safeDatabaseRead:${label}`,
+        `[database] ${label} failed. Returning a safe fallback.`,
+        error,
+        "warn"
+      );
       return resolveFallback(fallback);
     }
 
@@ -822,6 +827,33 @@ export async function getCourseBySlug(slug: string): Promise<Course | null> {
 
     const instructorMap = await getInstructorMap([course]);
     return mapCourse(course, instructorMap);
+  });
+}
+
+export async function getCourseByLessonId(lessonId: string): Promise<Course | null> {
+  return safeDatabaseRead("getCourseByLessonId", null, async () => {
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: {
+        module: {
+          select: {
+            course: {
+              select: {
+                slug: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const courseSlug = lesson?.module.course.slug;
+
+    if (!courseSlug) {
+      return null;
+    }
+
+    return getCourseBySlug(courseSlug);
   });
 }
 
