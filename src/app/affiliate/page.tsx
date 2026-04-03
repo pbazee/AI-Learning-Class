@@ -88,11 +88,13 @@ export default async function AffiliatePage() {
         </div>
       </section>
 
-      <section id="affiliate-application" className="py-12 sm:py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <AffiliatePortal />
-        </div>
-      </section>
+      {!affiliateStatus.hasJoined ? (
+        <section id="affiliate-application" className="py-12 sm:py-16">
+          <div className="mx-auto max-w-5xl px-4 sm:px-6">
+            <AffiliatePortal />
+          </div>
+        </section>
+      ) : null}
 
       <Footer />
     </div>

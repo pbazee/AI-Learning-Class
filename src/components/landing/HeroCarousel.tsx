@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -23,17 +23,17 @@ type HeroStat = {
 const statIcons = [Users, BookOpen, Star];
 
 function getMobileCtaText(label?: string) {
-  const fallback = "Explore Courses";
+  const fallback = "Courses";
   if (!label?.trim()) {
     return fallback;
   }
 
   const normalized = label.trim();
   if (/explore/i.test(normalized) && /course/i.test(normalized)) {
-    return "Explore Courses";
+    return "Courses";
   }
 
-  if (normalized.length <= 18) {
+  if (normalized.length <= 12) {
     return normalized;
   }
 
@@ -62,12 +62,10 @@ function getPrimaryCtaText(label?: string) {
 export function HeroCarousel({
   slides,
   stats,
-  averageRating,
   globalInterval = 6,
 }: {
   slides: HeroSlide[];
   stats: HeroStat[];
-  averageRating?: string;
   globalInterval?: number;
 }) {
   const [current, setCurrent] = useState(0);
@@ -101,29 +99,6 @@ export function HeroCarousel({
     const timer = window.setInterval(next, intervalMs);
     return () => window.clearInterval(timer);
   }, [intervalMs, next, paused, slideCount]);
-
-  const heroCards = useMemo(() => {
-    const primaryStat = stats[0];
-    const secondaryStat = stats[1];
-
-    return [
-      {
-        eyebrow: "Featured Track",
-        title: currentSlide?.subtitle || "Master LLM Engineering",
-        body: "Live projects, prompt evaluation, retrieval workflows, and production-minded AI systems.",
-      },
-      {
-        eyebrow: primaryStat?.label || "Learner momentum",
-        title: primaryStat?.value || "Global",
-        body: "Ambitious builders learning practical AI every day.",
-      },
-      {
-        eyebrow: averageRating ? "Average Rating" : secondaryStat?.label || "Course library",
-        title: averageRating ? `${averageRating}/5` : secondaryStat?.value || "Fresh weekly",
-        body: averageRating ? "Backed by learner reviews across the platform." : "New labs, lessons, and guided pathways stay in rotation.",
-      },
-    ];
-  }, [averageRating, currentSlide?.subtitle, stats]);
 
   if (slideCount === 0) {
     return null;
@@ -166,7 +141,7 @@ export function HeroCarousel({
       </AnimatePresence>
 
       <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-between px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-        <div className="grid min-h-0 flex-1 items-center gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px] xl:gap-10">
+        <div className="flex min-h-0 flex-1 items-center">
           <AnimatePresence mode="wait">
             <motion.div
               key={`hero-copy-${current}`}
@@ -174,7 +149,7 @@ export function HeroCarousel({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -18 }}
               transition={{ duration: 0.42 }}
-              className="max-w-2xl"
+              className="max-w-3xl"
             >
               <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white backdrop-blur-sm sm:text-xs">
                 <Sparkles className="h-3.5 w-3.5 text-white" />
@@ -191,90 +166,39 @@ export function HeroCarousel({
                 </p>
               ) : null}
 
-              <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:flex-wrap">
+              <div className="mt-5 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1 hide-scrollbar sm:mt-6 sm:gap-3">
                 <Link
                   href={currentSlide.ctaLink || "/courses"}
-                  className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white shadow-[0_22px_50px_-28px_rgba(0,86,210,0.9)] transition hover:bg-primary-blue/90 sm:px-5 sm:py-3"
+                  className="group inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary-blue px-3.5 py-2 text-xs font-semibold text-white shadow-[0_22px_50px_-28px_rgba(0,86,210,0.9)] transition hover:bg-primary-blue/90 sm:px-5 sm:py-3 sm:text-sm"
                 >
                   <span className="sm:hidden">{getMobileCtaText(currentSlide.ctaText || "Explore LLM Courses")}</span>
                   <span className="hidden sm:inline">{getPrimaryCtaText(currentSlide.ctaText || "Explore LLM Courses")}</span>
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </Link>
-              </div>
 
-              <div className="mt-5 grid gap-3 sm:mt-6 sm:grid-cols-3">
                 {stats.map((stat, index) => {
                   const Icon = statIcons[index] ?? Sparkles;
 
                   return (
                     <div
                       key={stat.label}
-                      className="rounded-[22px] border border-white/14 bg-white/10 px-4 py-3 backdrop-blur-sm"
+                      className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/14 bg-white/10 px-3 py-2 text-white backdrop-blur-sm sm:px-4 sm:py-2.5"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
-                          <Icon className="h-4 w-4 text-white" />
-                        </div>
-                        <div>
-                          <p className="text-lg font-black leading-none text-white">{stat.value}</p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-white">{stat.label}</p>
-                        </div>
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 sm:h-8 sm:w-8">
+                        <Icon className="h-3.5 w-3.5 text-white sm:h-4 sm:w-4" />
+                      </div>
+                      <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+                        <p className="text-sm font-black leading-none text-white sm:text-base">{stat.value}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/88 sm:text-[11px]">
+                          {stat.label}
+                        </p>
                       </div>
                     </div>
                   );
                 })}
               </div>
-
-              {averageRating ? (
-                <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-white">
-                  <Star className="h-4 w-4 fill-current text-[#facc15]" />
-                  <span>{averageRating} average rating from active learners</span>
-                </div>
-              ) : null}
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:hidden">
-                {heroCards.map((card) => (
-                  <div
-                    key={card.eyebrow}
-                    className="rounded-[24px] border border-white/14 bg-white/10 p-4 backdrop-blur-md"
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white">{card.eyebrow}</p>
-                    <p className="mt-2 text-lg font-black text-white">{card.title}</p>
-                    <p className="mt-2 text-xs leading-6 text-white">{card.body}</p>
-                  </div>
-                ))}
-              </div>
             </motion.div>
           </AnimatePresence>
-
-          <div className="relative hidden h-full min-h-[420px] lg:block">
-            {heroCards.map((card, index) => (
-              <motion.div
-                key={card.eyebrow}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{
-                  opacity: 1,
-                  y: [0, index % 2 === 0 ? -10 : 8, 0],
-                }}
-                transition={{
-                  duration: 7 + index,
-                  repeat: Number.POSITIVE_INFINITY,
-                  ease: "easeInOut",
-                }}
-                className={`absolute w-full rounded-[30px] border border-white/14 bg-white/12 p-6 text-white shadow-[0_26px_70px_-44px_rgba(2,6,23,0.95)] backdrop-blur-xl ${
-                  index === 0
-                    ? "right-0 top-[8%] max-w-[340px]"
-                    : index === 1
-                      ? "left-0 top-[42%] max-w-[280px]"
-                      : "right-5 bottom-[8%] max-w-[300px]"
-                }`}
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white">{card.eyebrow}</p>
-                <p className="mt-3 text-[1.9rem] font-black leading-tight">{card.title}</p>
-                <p className="mt-3 text-sm leading-7 text-white">{card.body}</p>
-              </motion.div>
-            ))}
-          </div>
         </div>
 
         <div className="flex items-center justify-between gap-4 pt-4">

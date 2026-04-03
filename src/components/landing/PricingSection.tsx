@@ -76,13 +76,6 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
                       </span>
                     ) : null}
                   </div>
-                  <p className={cn("mt-2 text-xs", plan.isPopular ? "text-white/80" : "text-muted-foreground")}>
-                    {plan.slug === "free"
-                      ? "Free Plan"
-                      : plan.slug === "pro"
-                        ? "$79/month"
-                        : "$199/month"}
-                  </p>
                 </div>
 
                 <ul className="mb-8 flex-1 space-y-3">

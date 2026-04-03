@@ -27,10 +27,10 @@ const sortOptions = [
 const inputClass =
   "rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary-blue focus:ring-1 focus:ring-primary-blue/20";
 
-type SpecialFilter = "all" | "featured" | "trending" | "new";
+type SpecialFilter = "all" | "featured" | "trending" | "recommended" | "new";
 
 function normalizeSpecialFilter(value?: string): SpecialFilter {
-  if (value === "featured" || value === "trending") {
+  if (value === "featured" || value === "trending" || value === "recommended") {
     return value;
   }
 
@@ -104,6 +104,10 @@ export function CoursesCatalog({
 
     if (specialFilter === "trending") {
       filteredCourses = filteredCourses.filter((course) => course.isTrending);
+    }
+
+    if (specialFilter === "recommended") {
+      filteredCourses = filteredCourses.filter((course) => course.isRecommended);
     }
 
     if (specialFilter === "new") {

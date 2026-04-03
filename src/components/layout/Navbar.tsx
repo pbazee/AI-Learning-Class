@@ -39,11 +39,17 @@ const desktopLinks = [
 const drawerLinks = [
   { label: "Home", href: "/" },
   { label: "Courses", href: "/courses" },
+  { label: "Featured Courses", href: "/courses?filter=featured" },
+  { label: "Trending Courses", href: "/courses?filter=trending" },
+  { label: "Popular Courses", href: "/courses?filter=popular" },
+  { label: "New Releases", href: "/courses?filter=new-releases" },
+  { label: "Recommended", href: "/courses?filter=recommended" },
   { label: "Learning Paths", href: "/paths" },
   { label: "Categories", href: "/categories" },
-  { label: "Contact Us", href: "/contact" },
+  { label: "Affiliate Program", href: "/affiliate" },
   { label: "Pricing", href: "/pricing" },
   { label: "Blog", href: "/blog" },
+  { label: "Contact Us", href: "/contact" },
   { label: "Wishlist", href: "/wishlist" },
   { label: "Cart", href: "/cart" },
 ];

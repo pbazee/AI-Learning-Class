@@ -34,7 +34,7 @@ export function HeroSlidesManager({ slides }: { slides: HeroRow[] }) {
       createLabel="New Slide"
       dialogTitle="Hero Slide"
       emptyTitle="No hero slides yet"
-      emptyDescription="Add slides to power the animated homepage hero carousel."
+      emptyDescription="Add slides to power the homepage hero carousel."
       getEmptyForm={() => ({
         id: "",
         title: "",

@@ -31,10 +31,6 @@ type CheckoutQuote = {
 };
 
 type CheckoutSessionResponse = {
-  accessCode?: string;
-  callbackUrl?: string;
-  gateway?: PaymentMethod;
-  reference?: string;
   sessionId?: string;
   url?: string;
 };
@@ -81,11 +77,37 @@ const paymentOptions: Array<{
   },
   {
     id: "paystack",
-    label: "PayStack",
+    label: "Paystack",
     sublabel: "Card, bank, M-Pesa, and more",
     logo: <PaystackMark />,
   },
 ];
+
+const timezoneCountryMap: Array<{ code: string; pattern: RegExp }> = [
+  { code: "KE", pattern: /Africa\/Nairobi/i },
+  { code: "UG", pattern: /Africa\/Kampala/i },
+  { code: "TZ", pattern: /Africa\/Dar_es_Salaam/i },
+  { code: "RW", pattern: /Africa\/Kigali/i },
+  { code: "NG", pattern: /Africa\/Lagos/i },
+  { code: "GH", pattern: /Africa\/Accra/i },
+  { code: "ZA", pattern: /Africa\/Johannesburg/i },
+];
+
+function inferCheckoutCountry() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const locale = typeof navigator !== "undefined" ? navigator.language : "";
+  const localeCountry = locale.match(/(?:-|_)([A-Z]{2})$/i)?.[1]?.toUpperCase();
+
+  if (localeCountry) {
+    return localeCountry;
+  }
+
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return timezoneCountryMap.find((entry) => entry.pattern.test(timezone))?.code ?? null;
+}
 
 export default function CheckoutPage() {
   const searchParams = useSearchParams();
@@ -114,16 +136,19 @@ export default function CheckoutPage() {
     [items]
   );
   const isPlanCheckout = Boolean(planSlug);
-  const availablePaymentOptions = useMemo(
-    () => (isPlanCheckout ? paymentOptions.filter((option) => option.id === "stripe") : paymentOptions),
-    [isPlanCheckout]
-  );
+  const availablePaymentOptions = paymentOptions;
 
   useEffect(() => {
-    if (isPlanCheckout) {
-      setMethod("stripe");
+    const inferredCountry = inferCheckoutCountry();
+
+    if (!inferredCountry) {
+      return;
     }
-  }, [isPlanCheckout]);
+
+    setFormData((current) =>
+      current.country === "US" ? { ...current, country: inferredCountry } : current
+    );
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,47 +196,6 @@ export default function CheckoutPage() {
     };
   }, [planSlug, requestItems]);
 
-  async function launchPaystackModal(payload: CheckoutSessionResponse) {
-    if (!payload.accessCode) {
-      throw new Error("Unable to load Paystack checkout right now.");
-    }
-
-    const { default: Paystack } = await import("@paystack/inline-js");
-    const popup = new Paystack();
-
-    popup.resumeTransaction(payload.accessCode, {
-      onLoad: () => {
-        setProcessing(false);
-      },
-      onCancel: () => {
-        setProcessing(false);
-        setQuoteError("Paystack checkout was cancelled before payment completed.");
-      },
-      onError: (error: { message?: string }) => {
-        setProcessing(false);
-        setQuoteError(error.message || "Unable to load Paystack checkout right now.");
-      },
-      onSuccess: (transaction: { reference?: string; trxref?: string }) => {
-        const reference = transaction.reference || transaction.trxref || payload.reference;
-
-        if (!reference) {
-          setProcessing(false);
-          setQuoteError("Paystack completed, but we could not read the payment reference.");
-          return;
-        }
-
-        const completionUrl = new URL(
-          payload.callbackUrl || "/checkout/complete?gateway=paystack",
-          window.location.origin
-        );
-        completionUrl.searchParams.set("gateway", "paystack");
-        completionUrl.searchParams.set("reference", reference);
-
-        window.location.assign(completionUrl.toString());
-      },
-    });
-  }
-
   async function handleCheckout(event: React.FormEvent) {
     event.preventDefault();
 
@@ -240,12 +224,6 @@ export default function CheckoutPage() {
 
       if (!response.ok) {
         throw new Error(payload?.error || "Unable to start checkout right now.");
-      }
-
-      if (method === "paystack") {
-        setQuoteError(null);
-        await launchPaystackModal(payload as CheckoutSessionResponse);
-        return;
       }
 
       if (!payload?.url) {
@@ -358,12 +336,14 @@ export default function CheckoutPage() {
 
                       <div className="mt-5 rounded-2xl border border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
                         {isPlanCheckout
-                          ? "Plan billing is handled through Stripe so your Pro or Teams access stays synced with your live subscription period."
+                          ? method === "stripe"
+                            ? "Stripe keeps Pro and Teams renewals in sync automatically with your active billing period."
+                            : "PayPal and Paystack activate the current billing period for your selected plan and return here for access confirmation after payment."
                           : method === "stripe"
-                          ? "You will be redirected to Stripe Checkout to complete payment securely."
+                            ? "You will be redirected to Stripe Checkout to complete payment securely."
                           : method === "paypal"
                             ? "You will be redirected to PayPal to approve and complete payment."
-                            : "Paystack will open its secure checkout modal here so customers can choose card, mobile money, or bank transfer methods enabled for their region."}
+                            : "You will be redirected to Paystack Checkout where card, mobile money, bank transfer, and other eligible regional methods appear based on your region and Paystack settings."}
                       </div>
                     </div>
                   ) : (
@@ -400,7 +380,7 @@ export default function CheckoutPage() {
                         <>
                           <Lock className="h-5 w-5" />
                           {isPlanCheckout
-                            ? `Start ${quote?.planSlug === "teams" ? "Teams" : "Pro"} Subscription`
+                            ? `${method === "stripe" ? "Start" : "Activate"} ${quote?.planSlug === "teams" ? "Teams" : "Pro"} ${method === "stripe" ? "Subscription" : "Plan"}`
                             : `Pay ${quote ? formatPrice(quote.total) : ""}`}
                         </>
                       )}

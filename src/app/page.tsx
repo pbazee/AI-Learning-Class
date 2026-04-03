@@ -29,7 +29,17 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 });
 
 export default async function HomePage() {
-  const [courses, categories, slides, testimonials, posts, plans, viewer, homepageParagraphs, trustedLogos] = await Promise.all([
+  const [
+    courses,
+    categories,
+    slides,
+    testimonials,
+    posts,
+    plans,
+    viewer,
+    homepageParagraphs,
+    trustedLogos,
+  ] = await Promise.all([
     getCourses(),
     getCategories(),
     getHeroSlides(),
@@ -59,28 +69,35 @@ export default async function HomePage() {
   const featured = courses.filter((course) => course.isFeatured);
   const trending = courses.filter((course) => course.isTrending);
   const newCourses = courses.filter((course) => course.isNew);
-  const popular = [...courses].sort((left, right) => right.totalStudents - left.totalStudents).slice(0, 4);
-  const totalLearners = courses.reduce((sum, course) => sum + course.totalStudents, 0);
-  const totalRatings = courses.reduce((sum, course) => sum + course.totalRatings, 0);
+  const popular = [...courses]
+    .sort((left, right) => right.totalStudents - left.totalStudents)
+    .slice(0, 4);
+  const totalLearners = courses.reduce(
+    (sum, course) => sum + course.totalStudents,
+    0
+  );
+  const totalRatings = courses.reduce(
+    (sum, course) => sum + course.totalRatings,
+    0
+  );
   const weightedRating =
     totalRatings > 0
-      ? courses.reduce((sum, course) => sum + course.rating * course.totalRatings, 0) / totalRatings
+      ? courses.reduce(
+          (sum, course) => sum + course.rating * course.totalRatings,
+          0
+        ) / totalRatings
       : 0;
 
   const heroStats = [
-    { value: compactNumberFormatter.format(totalLearners), label: "Learner enrollments" },
-    { value: compactNumberFormatter.format(courses.length), label: "Live courses" },
-    { value: weightedRating > 0 ? `${weightedRating.toFixed(1)}★` : "New", label: "Average rating" },
+    { value: compactNumberFormatter.format(totalLearners), label: "Learners" },
+    { value: compactNumberFormatter.format(courses.length), label: "Courses" },
+    { value: weightedRating > 0 ? weightedRating.toFixed(1) : "New", label: "Rating" },
   ];
 
   return (
     <div className="min-h-screen">
       <Navbar />
-      <HeroCarousel
-        slides={slides}
-        stats={heroStats}
-        averageRating={weightedRating > 0 ? weightedRating.toFixed(1) : undefined}
-      />
+      <HeroCarousel slides={slides} stats={heroStats} />
       <TrustedLogosMarquee logos={trustedLogos} />
       <CategoriesGrid
         categories={categories.slice(0, 4)}

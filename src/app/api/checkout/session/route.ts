@@ -98,14 +98,6 @@ export async function POST(request: NextRequest) {
       affiliateCode,
     });
 
-    if (isPlanCheckout && method !== "stripe") {
-      await markCheckoutOrderFailed(pendingOrder.id);
-      return NextResponse.json(
-        { error: "Pro and Teams subscriptions are processed securely through Stripe." },
-        { status: 400 }
-      );
-    }
-
     if (method === "stripe") {
       if (!process.env.STRIPE_SECRET_KEY) {
         return NextResponse.json(
@@ -281,7 +273,6 @@ export async function POST(request: NextRequest) {
             email: customerEmail || dbUser.email,
             amount: Math.round(quote.total * 100),
             currency: CHECKOUT_CURRENCY,
-            channels: ["card", "mobile_money", "bank_transfer"],
             metadata: {
               source: "ai-learning-class",
               customer_name: customerName,
@@ -298,14 +289,15 @@ export async function POST(request: NextRequest) {
 
       const paystackPayload = await paystackResponse.json();
 
-      if (
-        !paystackResponse.ok ||
-        !paystackPayload?.status ||
-        typeof paystackPayload?.data?.reference !== "string" ||
-        typeof paystackPayload?.data?.access_code !== "string"
-      ) {
-        await markCheckoutOrderFailed(pendingOrder.id);
-        return NextResponse.json(
+        if (
+          !paystackResponse.ok ||
+          !paystackPayload?.status ||
+          typeof paystackPayload?.data?.authorization_url !== "string" ||
+          typeof paystackPayload?.data?.reference !== "string" ||
+          typeof paystackPayload?.data?.access_code !== "string"
+        ) {
+          await markCheckoutOrderFailed(pendingOrder.id);
+          return NextResponse.json(
           {
             error:
               paystackPayload?.message ||
@@ -321,12 +313,8 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({
-        accessCode: paystackPayload.data.access_code,
-        callbackUrl: `${origin}/checkout/complete?gateway=paystack`,
-        channels: ["card", "mobile_money", "bank_transfer"],
-        gateway: "paystack",
-        reference: paystackPayload.data.reference,
         sessionId: paystackPayload.data.reference,
+        url: paystackPayload.data.authorization_url,
       });
     } catch (error) {
       await markCheckoutOrderFailed(pendingOrder.id);
