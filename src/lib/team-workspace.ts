@@ -2,13 +2,18 @@ import "server-only";
 
 import { randomUUID } from "crypto";
 import {
+  type Prisma,
+} from "@prisma/client";
+import {
   EntitlementSource,
   EntitlementStatus,
+  parseTeamWorkspaceInviteStatus,
+  parseTeamWorkspaceMemberStatus,
+  parseTeamWorkspaceRole,
   TeamWorkspaceInviteStatus,
   TeamWorkspaceMemberStatus,
   TeamWorkspaceRole,
-  type Prisma,
-} from "@prisma/client";
+} from "@/lib/domain-constants";
 import { normalizeEmail } from "@/lib/admin-email";
 import {
   getActiveCatalogEntitlement,
@@ -200,7 +205,7 @@ export async function getTeamWorkspaceAdminContext(
     workspaceName: membership.workspace.name,
     inviteCode: membership.workspace.inviteCode,
     seatLimit: membership.workspace.seatLimit,
-    role: membership.role,
+    role: parseTeamWorkspaceRole(membership.role),
     ownerUserId: membership.workspace.ownerUserId,
     planEndsAt: ownerEntitlement.endsAt ?? null,
   };
@@ -771,8 +776,8 @@ export async function getTeamWorkspaceDashboardData(
       userId: member.userId,
       name: member.user.name || "Unnamed member",
       email: member.user.email,
-      role: member.role,
-      status: member.status,
+      role: parseTeamWorkspaceRole(member.role),
+      status: parseTeamWorkspaceMemberStatus(member.status),
       joinedAt: member.joinedAt.toISOString(),
       assignedCourses: assignmentCountByUserId.get(member.userId) ?? 0,
       startedCourses: (startedCourseSetByUserId.get(member.userId) ?? new Set<string>()).size,
@@ -811,7 +816,7 @@ export async function getTeamWorkspaceDashboardData(
       id: invite.id,
       invitedEmail: invite.invitedEmail,
       token: invite.token,
-      status: invite.status,
+      status: parseTeamWorkspaceInviteStatus(invite.status),
       expiresAt: invite.expiresAt.toISOString(),
       createdAt: invite.createdAt.toISOString(),
       inviteLink: buildInviteLink(invite.token),

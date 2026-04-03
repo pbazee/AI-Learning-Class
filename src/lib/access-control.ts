@@ -1,11 +1,11 @@
 import "server-only";
 
+import { type Prisma } from "@prisma/client";
 import {
   EntitlementScope,
   EntitlementSource,
   EntitlementStatus,
-  type Prisma,
-} from "@prisma/client";
+} from "@/lib/domain-constants";
 import { prisma } from "@/lib/prisma";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;

@@ -1,11 +1,12 @@
 import "server-only";
 
-import { EntitlementSource, Prisma, type EnrollmentStatus } from "@prisma/client";
+import { Prisma, type EnrollmentStatus } from "@prisma/client";
 import {
   revokeCatalogEntitlements,
   upsertManagedSubscriptionEntitlement,
 } from "@/lib/access-control";
 import type { CheckoutGateway, CheckoutQuote } from "@/lib/checkout";
+import { EntitlementSource } from "@/lib/domain-constants";
 import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
 import { evaluateAffiliateFraud } from "@/lib/growth-utils";
 import { recordUserCourseOwnership } from "@/lib/learner-records";
