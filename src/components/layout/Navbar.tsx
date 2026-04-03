@@ -47,6 +47,7 @@ const drawerLinks = [
   { label: "Learning Paths", href: "/paths" },
   { label: "Categories", href: "/categories" },
   { label: "Affiliate Program", href: "/affiliate" },
+  { label: "Referrals", href: "/dashboard/referrals" },
   { label: "Pricing", href: "/pricing" },
   { label: "Blog", href: "/blog" },
   { label: "Contact Us", href: "/contact" },

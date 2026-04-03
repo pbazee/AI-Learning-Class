@@ -5,9 +5,11 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import {
   Award,
+  CreditCard,
   BookOpen,
   Clock,
   Play,
+  ShoppingBag,
   TrendingUp,
   ArrowRight,
   Sparkles,
@@ -37,7 +39,7 @@ export default async function DashboardPage() {
     redirect("/login?redirect=/dashboard");
   }
 
-  const [enrollments, certificates, workspaceNotes, completedLessons, affiliateStatus, teamWorkspace] = await Promise.all([
+  const [enrollments, certificates, workspaceNotes, completedLessons, affiliateStatus, teamWorkspace, purchasedItems, activeSubscription] = await Promise.all([
     getUserEnrollments(user.id),
     getUserCertificates(user.id),
     getUserWorkspaceNotes(user.id, 8),
@@ -67,6 +69,33 @@ export default async function DashboardPage() {
     }),
     getUserAffiliateStatus(user.id),
     getUserTeamWorkspaceSummary(user.id),
+    prisma.orderItem.findMany({
+      where: {
+        order: {
+          userId: user.id,
+          status: "COMPLETED",
+        },
+      },
+      select: {
+        courseId: true,
+      },
+    }),
+    prisma.userSubscription.findFirst({
+      where: {
+        userId: user.id,
+        status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] },
+      },
+      include: {
+        plan: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        currentPeriodEnd: "desc",
+      },
+    }),
   ]);
 
   const totalCompletedSeconds = completedLessons.reduce(
@@ -80,6 +109,10 @@ export default async function DashboardPage() {
           enrollments.reduce((sum, enrollment) => sum + enrollment.progress, 0) / enrollments.length
         )
       : 0;
+  const purchasedCourseCount = new Set(purchasedItems.map((item) => item.courseId)).size;
+  const subscriptionSummary = activeSubscription
+    ? `${activeSubscription.status.toLowerCase().replace("_", " ")} • ${activeSubscription.billingCycle}`
+    : "Upgrade anytime from pricing";
 
   const recentActivity = [
     ...completedLessons.map((item) => ({
@@ -123,17 +156,56 @@ export default async function DashboardPage() {
             </Link>
           </div>
 
-          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {[
-              { label: "Courses Enrolled", value: `${enrollments.length}`, icon: BookOpen, tone: "text-primary-blue" },
-              { label: "Hours Learned", value: `${totalHours}h`, icon: Clock, tone: "text-primary-blue" },
-              { label: "Certificates", value: `${certificates.length}`, icon: Award, tone: "text-primary-blue" },
-              { label: "Average Progress", value: `${averageProgress}%`, icon: TrendingUp, tone: "text-primary-blue" },
+              {
+                label: "Courses Enrolled",
+                value: `${enrollments.length}`,
+                helper: "Active classroom access",
+                icon: BookOpen,
+                tone: "text-primary-blue",
+              },
+              {
+                label: "Hours Learned",
+                value: `${totalHours}h`,
+                helper: "Completed lesson time",
+                icon: Clock,
+                tone: "text-primary-blue",
+              },
+              {
+                label: "Certificates",
+                value: `${certificates.length}`,
+                helper: "Courses completed",
+                icon: Award,
+                tone: "text-primary-blue",
+              },
+              {
+                label: "Average Progress",
+                value: `${averageProgress}%`,
+                helper: "Across enrolled courses",
+                icon: TrendingUp,
+                tone: "text-primary-blue",
+              },
+              {
+                label: "Courses Purchased",
+                value: `${purchasedCourseCount}`,
+                helper: "Paid course checkouts",
+                icon: ShoppingBag,
+                tone: "text-primary-blue",
+              },
+              {
+                label: "Subscription Plan",
+                value: activeSubscription?.plan.name ?? "Free",
+                helper: subscriptionSummary,
+                icon: CreditCard,
+                tone: "text-primary-blue",
+              },
             ].map((stat) => (
               <div key={stat.label} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <stat.icon className={`mb-3 h-6 w-6 ${stat.tone}`} />
                 <div className="text-2xl font-black text-foreground">{stat.value}</div>
                 <div className="mt-1 text-xs text-muted-foreground">{stat.label}</div>
+                <div className="mt-2 text-[11px] leading-5 text-muted-foreground">{stat.helper}</div>
               </div>
             ))}
           </div>

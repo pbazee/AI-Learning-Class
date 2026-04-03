@@ -24,6 +24,7 @@ type SiteSettings = {
 const quickLinks = [
   { label: "About Us", href: "/about" },
   { label: "Affiliate Program", href: "/affiliate" },
+  { label: "Referral Rewards", href: "/dashboard/referrals" },
   { label: "Blog", href: "/blog" },
   { label: "Reviews", href: "/reviews" },
   { label: "Pricing", href: "/pricing" },

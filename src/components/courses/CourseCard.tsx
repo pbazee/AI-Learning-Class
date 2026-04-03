@@ -158,8 +158,8 @@ export function CourseCard({
           aria-label={`Open ${course.title}`}
           className="absolute inset-0 z-10 rounded-[30px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-blue/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070b]"
         />
-        <div className="pointer-events-none relative z-20 flex h-full min-h-[430px] flex-col sm:min-h-[470px]">
-          <div className="relative basis-[65%] overflow-hidden">
+        <div className="pointer-events-none relative z-20 flex h-full min-h-[540px] flex-col sm:min-h-[510px]">
+          <div className="relative basis-[54%] overflow-hidden sm:basis-[50%] lg:basis-[55%]">
             <Image
               src={heroImage}
               alt={course.title}
@@ -169,8 +169,8 @@ export function CourseCard({
               className="object-cover object-center brightness-[0.94] contrast-[1.08] saturate-[1.08] transition duration-700 ease-out group-hover:scale-[1.04] group-hover:brightness-[1.05] group-hover:saturate-[1.16]"
             />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_12%,rgba(255,255,255,0.18),transparent_32%)]" />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/12 via-transparent to-black/28" />
-            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/52 via-black/15 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/12 via-transparent to-black/24" />
+            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/44 via-black/10 to-transparent" />
 
             <div className="absolute inset-x-0 top-0 flex items-start justify-between p-5 sm:p-6">
               <span className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-[0_18px_34px_-22px_rgba(16,185,129,0.8)] sm:text-xs">
@@ -194,14 +194,14 @@ export function CourseCard({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col bg-[#070a0f] px-5 pb-5 pt-4 text-white sm:px-6 sm:pb-6">
+          <div className="flex min-h-0 flex-1 flex-col bg-[#070a0f] px-5 pb-5 pt-5 text-white sm:px-6 sm:pb-6 sm:pt-5">
             {hasAccess ? (
               <div className="mb-3 inline-flex items-center self-start rounded-full border border-primary-blue/25 bg-primary-blue/14 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-blue">
                 {courseAccess?.statusLabel ?? "Enrolled"}
               </div>
             ) : null}
 
-            <h3 className="line-clamp-2 text-[1.08rem] font-black leading-[1.12] text-white sm:text-[1.16rem]">
+            <h3 className="line-clamp-3 text-[1.06rem] font-black leading-[1.14] text-white sm:text-[1.18rem]">
               {course.title}
             </h3>
 

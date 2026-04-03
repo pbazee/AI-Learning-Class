@@ -109,7 +109,7 @@ export function CourseSection({
   return (
     <section className="section-shell">
       <div className="section-frame">
-        <div className="mb-5 flex flex-col gap-4 sm:mb-6">
+        <div className="relative z-20 mb-5 flex flex-col gap-4 sm:mb-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               {badge ? (
@@ -144,7 +144,7 @@ export function CourseSection({
                     disabled={!canScrollLeft}
                     aria-label={`Scroll ${title} left`}
                     className={cn(
-                      "inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground transition",
+                      "pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground transition",
                       canScrollLeft
                         ? "hover:border-primary-blue/30 hover:bg-primary-blue/10 hover:text-primary-blue"
                         : "cursor-not-allowed opacity-45"
@@ -158,7 +158,7 @@ export function CourseSection({
                     disabled={!canScrollRight}
                     aria-label={`Scroll ${title} right`}
                     className={cn(
-                      "inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground transition",
+                      "pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground transition",
                       canScrollRight
                         ? "hover:border-primary-blue/30 hover:bg-primary-blue/10 hover:text-primary-blue"
                         : "cursor-not-allowed opacity-45"
@@ -177,12 +177,12 @@ export function CourseSection({
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="hide-scrollbar -mx-4 flex snap-x snap-mandatory gap-5 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-0 lg:px-0"
+          className="relative z-10 hide-scrollbar -mx-4 flex snap-x snap-mandatory gap-5 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-0 lg:px-0"
         >
           {displayed.map((course, index) => (
             <div
               key={course.id}
-              className="min-w-0 shrink-0 snap-start basis-[84vw] sm:basis-[22rem] lg:basis-[calc((100%-2.5rem)/3)] xl:basis-[calc((100%-3.75rem)/4)]"
+              className="min-w-0 shrink-0 snap-start basis-[84vw] sm:basis-[22rem] lg:basis-[calc((100%-3.75rem)/4)]"
             >
               <CourseCard
                 course={course}

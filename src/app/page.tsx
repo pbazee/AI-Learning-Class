@@ -71,7 +71,7 @@ export default async function HomePage() {
   const newCourses = courses.filter((course) => course.isNew);
   const popular = [...courses]
     .sort((left, right) => right.totalStudents - left.totalStudents)
-    .slice(0, 4);
+    .slice(0, 8);
   const totalLearners = courses.reduce(
     (sum, course) => sum + course.totalStudents,
     0
@@ -90,8 +90,8 @@ export default async function HomePage() {
 
   const heroStats = [
     { value: compactNumberFormatter.format(totalLearners), label: "Learners" },
-    { value: compactNumberFormatter.format(courses.length), label: "Courses" },
     { value: weightedRating > 0 ? weightedRating.toFixed(1) : "New", label: "Rating" },
+    { value: compactNumberFormatter.format(courses.length), label: "Courses" },
   ];
 
   return (
@@ -112,7 +112,7 @@ export default async function HomePage() {
         courses={featured}
         viewAllHref="/courses?filter=featured"
         viewAllLabel="View featured"
-        maxItems={4}
+        maxItems={8}
         viewerId={viewer?.id}
         courseAccessMap={courseAccessMap}
         wishlistCourseIds={wishlistCourseIds}
@@ -125,7 +125,7 @@ export default async function HomePage() {
         courses={trending}
         viewAllHref="/courses?filter=trending"
         viewAllLabel="View trending"
-        maxItems={4}
+        maxItems={8}
         viewerId={viewer?.id}
         courseAccessMap={courseAccessMap}
         wishlistCourseIds={wishlistCourseIds}
@@ -138,7 +138,7 @@ export default async function HomePage() {
         courses={popular}
         viewAllHref="/courses?filter=popular"
         viewAllLabel="View popular"
-        maxItems={4}
+        maxItems={8}
         viewerId={viewer?.id}
         courseAccessMap={courseAccessMap}
         wishlistCourseIds={wishlistCourseIds}
@@ -151,7 +151,7 @@ export default async function HomePage() {
         courses={newCourses}
         viewAllHref="/courses?filter=new-releases"
         viewAllLabel="View new releases"
-        maxItems={4}
+        maxItems={8}
         viewerId={viewer?.id}
         courseAccessMap={courseAccessMap}
         wishlistCourseIds={wishlistCourseIds}

@@ -115,14 +115,17 @@ export function ReferralsDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[36px] border border-slate-200 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_45%,#fff7ed_100%)] p-8 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-600">Referral Dashboard</p>
-        <h1 className="mt-3 text-4xl font-black tracking-tight text-foreground">
-          Share your link and unlock rewards with momentum.
-        </h1>
-        <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-          Invite other learners, track progress in real time, and monitor reward status with fraud-screened referrals.
-        </p>
+      <section className="relative overflow-hidden rounded-[36px] border border-primary-blue/20 bg-primary-blue p-8 shadow-[0_30px_80px_-42px_rgba(0,86,210,0.65)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent_52%)]" />
+        <div className="relative">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80">Referral Dashboard</p>
+          <h1 className="mt-3 text-4xl font-black tracking-tight text-white">
+            Share your link and unlock rewards with momentum.
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-white/88">
+            Invite other learners, track progress in real time, and monitor reward status with fraud-screened referrals.
+          </p>
+        </div>
       </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

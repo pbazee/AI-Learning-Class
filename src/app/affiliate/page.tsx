@@ -60,7 +60,7 @@ export default async function AffiliatePage() {
           <h1 className="mt-4 text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
             Earn Money Teaching <span className="text-white/90">AI</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-base text-white/88 sm:text-lg">
+          <p className="mx-auto mt-6 max-w-2xl text-base text-white sm:text-lg">
             Join our affiliate program and earn commissions for every learner you refer to AI Learning Class.
             Share your passion for AI education and get paid for it with <span className="font-bold text-white">{commissionRate}% commission</span>.
           </p>
