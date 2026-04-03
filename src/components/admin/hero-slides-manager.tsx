@@ -23,7 +23,7 @@ export function HeroSlidesManager({ slides }: { slides: HeroRow[] }) {
   return (
     <SimpleCrudManager
       title="Hero Slides"
-      description="Shape the homepage narrative with carousel slides, CTA buttons, and campaign sequencing."
+      description="Shape the homepage narrative with carousel slides, one focused CTA, and campaign sequencing."
       stats={[
         { label: "Total Slides", value: slides.length },
         { label: "Active", value: slides.filter((slide) => slide.isActive).length },
@@ -79,8 +79,8 @@ export function HeroSlidesManager({ slides }: { slides: HeroRow[] }) {
       onSave={saveHeroSlideAction}
       onDelete={deleteHeroSlideAction}
       fields={[
-        { name: "title", label: "Headline", type: "text", placeholder: "Learn AI. Build the Future." },
-        { name: "subtitle", label: "Eyebrow", type: "text", placeholder: "Master LLM Engineering" },
+        { name: "title", label: "Headline", type: "text", placeholder: "Learn AI. Build the Future.", hint: "This headline renders in pure white on the homepage." },
+        { name: "subtitle", label: "Eyebrow", type: "text", placeholder: "Master LLM Engineering", hint: "Keep the eyebrow concise so the hero lockup stays balanced." },
         {
           name: "imageUrl",
           label: "Hero Image",
@@ -134,10 +134,10 @@ export function HeroSlidesManager({ slides }: { slides: HeroRow[] }) {
         },
         { name: "order", label: "Display Order", type: "number" },
         { name: "autoSlideInterval", label: "Auto-slide Interval (seconds)", type: "number", placeholder: "6", hint: "Leave blank to use the global default (6s). Set per-slide to override." },
-        { name: "ctaText", label: "CTA Label", type: "text", placeholder: "Explore Courses" },
+        { name: "ctaText", label: "CTA Label", type: "text", placeholder: "Explore Courses", hint: "Short CTA labels keep the homepage stats row on a single clean line." },
         { name: "ctaLink", label: "CTA Link", type: "url", placeholder: "/courses" },
         { name: "isActive", label: "Visible Slide", type: "switch", hint: "Hidden slides stay saved but won’t render on the homepage." },
-        { name: "description", label: "Description", type: "textarea", rows: 4, colSpan: 2 },
+        { name: "description", label: "Description", type: "textarea", rows: 4, colSpan: 2, hint: "Description copy also renders in pure white on the homepage hero." },
       ]}
       columns={[
         {

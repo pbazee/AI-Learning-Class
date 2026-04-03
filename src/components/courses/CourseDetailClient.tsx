@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { AICopilot } from "@/components/courses/AICopilot";
+import { CoursePreviewModal } from "@/components/courses/CoursePreviewModal";
 import { CourseReviewsSection } from "@/components/courses/CourseReviewsSection";
 import { useToast } from "@/components/ui/ToastProvider";
 import { enrollInFreeCourse } from "@/lib/course-enrollment";
@@ -36,7 +37,7 @@ import {
   levelLabel,
   cn,
 } from "@/lib/utils";
-import type { Course, CourseAccessState } from "@/types";
+import type { Course, CourseAccessState, CoursePreviewState } from "@/types";
 
 const thumbnailFallback =
   "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop";
@@ -45,22 +46,39 @@ export function CourseDetailClient({
   course,
   viewer,
   courseAccess,
+  previewState,
 }: {
   course: Course;
   viewer: { id: string; name?: string | null } | null;
   courseAccess?: CourseAccessState;
+  previewState?: CoursePreviewState | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const modules = course.modules ?? [];
   const [expandedModule, setExpandedModule] = useState<string | null>(modules[0]?.id ?? null);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const { addItem, isInCart } = useCartStore();
   const inCart = isInCart(course.id);
   const isFreeCourse = course.price === 0 || course.isFree;
-  const hasAccess = Boolean(courseAccess?.hasAccess);
+  const resolvedCourseAccess = courseAccess ?? previewState?.courseAccess;
+  const hasAccess = Boolean(resolvedCourseAccess?.hasAccess);
   const canInstantEnroll = Boolean(viewer?.id) && isFreeCourse;
+  const hasPreviewContent =
+    Boolean(previewState?.previewLessons?.length) ||
+    Boolean(previewState?.previewVideoUrl) ||
+    Boolean(course.previewVideoUrl);
+  const previewLockedActionLabel = inCart
+    ? "Go to Cart"
+    : enrolling
+      ? "Enrolling..."
+      : isFreeCourse
+        ? "Enroll Free"
+        : "Add to Cart";
+  const previewAccessActionLabel =
+    (resolvedCourseAccess?.progress ?? 0) > 0 ? "Continue to Full Course" : "Go to Classroom";
 
   function addCourseToCart() {
     if (!inCart) {
@@ -75,9 +93,9 @@ export function CourseDetailClient({
     }
   }
 
-  async function handlePrimaryAction() {
-    if (hasAccess && courseAccess?.lessonHref) {
-      router.push(courseAccess.lessonHref);
+  async function handleLockedCourseAction() {
+    if (inCart) {
+      router.push("/cart");
       return;
     }
 
@@ -99,10 +117,57 @@ export function CourseDetailClient({
     addCourseToCart();
   }
 
+  async function handlePrimaryAction() {
+    if (hasAccess && resolvedCourseAccess?.lessonHref) {
+      router.push(resolvedCourseAccess.lessonHref);
+      return;
+    }
+
+    await handleLockedCourseAction();
+  }
+
+  function handlePreviewAccessAction() {
+    setPreviewOpen(false);
+
+    if (resolvedCourseAccess?.lessonHref) {
+      router.push(resolvedCourseAccess.lessonHref);
+    }
+  }
+
   const discount =
     course.originalPrice && course.originalPrice > course.price
       ? Math.round((1 - course.price / course.originalPrice) * 100)
       : null;
+
+  function renderPreviewTrigger(compact = false) {
+    return (
+      <button
+        type="button"
+        onClick={() => setPreviewOpen(true)}
+        disabled={!hasPreviewContent}
+        className={cn(
+          "group relative flex aspect-video w-full items-center justify-center overflow-hidden bg-slate-950 transition-all",
+          compact ? "rounded-none" : "rounded-t-2xl",
+          hasPreviewContent ? "cursor-pointer" : "cursor-not-allowed opacity-80"
+        )}
+      >
+        <Image
+          src={course.thumbnailUrl || thumbnailFallback}
+          alt={course.title}
+          fill
+          quality={100}
+          className="object-cover opacity-60 transition-all duration-500 group-hover:scale-[1.02] group-hover:opacity-80"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/10 via-slate-950/10 to-slate-950/70" />
+        <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm transition-all group-hover:bg-white/30">
+          <Play className="ml-1 h-7 w-7 text-white" />
+        </div>
+        <div className="absolute inset-x-0 bottom-3 z-10 text-center text-xs font-medium text-white/84">
+          {hasPreviewContent ? "Preview this course" : "Preview coming soon"}
+        </div>
+      </button>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -111,7 +176,268 @@ export function CourseDetailClient({
       <div className="border-b border-primary-blue/10 bg-gradient-to-b from-primary-blue/10 via-white to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-950">
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:items-start">
-            <div className="min-w-0 space-y-10 lg:col-span-2">
+            <div className="space-y-5 lg:hidden">
+              <div className="overflow-hidden rounded-[28px] border border-border bg-card shadow-sm">
+                {renderPreviewTrigger(true)}
+
+                <div className="space-y-5 p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-primary-blue">{course.categoryName}</span>
+                    <span className="text-slate-400">&gt;</span>
+                    <span
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                        levelBadgeColor(course.level)
+                      )}
+                    >
+                      {levelLabel(course.level)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h1 className="text-3xl font-black leading-tight text-foreground">
+                      {course.title}
+                    </h1>
+                    <p className="mt-3 text-base leading-7 text-muted-foreground">
+                      {course.shortDescription || course.description}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm text-muted-foreground">
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <div className="flex items-center gap-2 text-amber-400">
+                        <Star className="h-4 w-4 fill-current" />
+                        <span className="font-bold text-foreground">{course.rating}</span>
+                      </div>
+                      <p className="mt-2">{formatNumber(course.totalRatings)} ratings</p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <div className="flex items-center gap-2 text-primary-blue">
+                        <Users className="h-4 w-4" />
+                        <span className="font-bold text-foreground">{formatNumber(course.totalStudents)}</span>
+                      </div>
+                      <p className="mt-2">active learners</p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <div className="flex items-center gap-2 text-primary-blue">
+                        <Clock className="h-4 w-4" />
+                        <span className="font-bold text-foreground">{formatDuration(course.totalDuration)}</span>
+                      </div>
+                      <p className="mt-2">on-demand content</p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-background/80 p-4">
+                      <div className="flex items-center gap-2 text-primary-blue">
+                        <BookOpen className="h-4 w-4" />
+                        <span className="font-bold text-foreground">{course.totalLessons}</span>
+                      </div>
+                      <p className="mt-2">stacked lessons</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] bg-slate-950 p-5 text-white">
+                    {hasAccess ? (
+                      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {resolvedCourseAccess?.statusLabel}
+                      </div>
+                    ) : null}
+                    {isFreeCourse ? (
+                      <div className="text-3xl font-black text-primary-blue">Free</div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl font-black text-white">{formatPrice(course.price, course.currency)}</span>
+                        {course.originalPrice && course.originalPrice > course.price && (
+                          <span className="text-base text-white/50 line-through">
+                            {formatPrice(course.originalPrice, course.currency)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {discount ? (
+                      <p className="mt-2 text-xs text-primary-blue">{discount}% off right now</p>
+                    ) : null}
+
+                    <div className="mt-5 space-y-3">
+                      {hasAccess ? (
+                        <button
+                          type="button"
+                          onClick={handlePrimaryAction}
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90"
+                        >
+                          {resolvedCourseAccess?.actionLabel ?? "Continue Learning"}
+                        </button>
+                      ) : canInstantEnroll ? (
+                        <button
+                          type="button"
+                          onClick={handlePrimaryAction}
+                          disabled={enrolling}
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90 disabled:opacity-70"
+                        >
+                          {enrolling ? "Enrolling..." : "Enroll for Free"}
+                        </button>
+                      ) : inCart ? (
+                        <Link
+                          href="/cart"
+                          className="block rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3.5 text-center font-semibold text-primary-blue transition-all hover:bg-primary-blue/15"
+                        >
+                          <Check className="mr-2 inline h-4 w-4" /> Go to Cart
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handlePrimaryAction}
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90"
+                        >
+                          Add to Cart
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => setCopilotOpen(true)}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3 text-sm font-medium text-primary-blue transition-all hover:bg-primary-blue/15"
+                      >
+                        <Sparkles className="h-4 w-4" /> Ask AI Copilot about this course
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <details className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm" open>
+                <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-left">
+                  <div>
+                    <p className="text-lg font-bold text-foreground">What you&apos;ll learn</p>
+                    <p className="mt-1 text-sm text-muted-foreground">A vertical, easy-to-scan mobile checklist.</p>
+                  </div>
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                </summary>
+                <div className="border-t border-border px-5 py-4">
+                  <div className="space-y-3">
+                    {course.whatYouLearn.map((item) => (
+                      <div key={item} className="flex items-start gap-3 text-sm text-muted-foreground">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary-blue" />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </details>
+
+              <details className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm" open>
+                <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-left">
+                  <div>
+                    <p className="text-lg font-bold text-foreground">Curriculum</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Collapsible modules with lesson counts and previews.</p>
+                  </div>
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                </summary>
+                <div className="border-t border-border px-5 py-4">
+                  {modules.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Curriculum details will appear here once lessons are published for this course.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {modules.map((module, moduleIndex) => (
+                        <details key={module.id} className="overflow-hidden rounded-2xl border border-border bg-background/80" open={moduleIndex === 0}>
+                          <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-4 text-left">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary-blue/20 bg-primary-blue/10 text-xs font-bold text-primary-blue">
+                                {moduleIndex + 1}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-foreground">{module.title}</p>
+                                <p className="text-xs text-muted-foreground">{module.lessons.length} lessons</p>
+                              </div>
+                            </div>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          </summary>
+                          <div className="border-t border-border">
+                            {module.lessons.map((lesson) => (
+                              <div
+                                key={lesson.id}
+                                className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0"
+                              >
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted">
+                                    {lesson.type === "QUIZ" ? (
+                                      <BarChart3 className="h-3.5 w-3.5 text-primary-blue" />
+                                    ) : lesson.type === "PROJECT" || lesson.type === "ASSIGNMENT" ? (
+                                      <Award className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                    ) : lesson.type === "PDF" || lesson.type === "TEXT" ? (
+                                      <FileText className="h-3.5 w-3.5 text-primary-blue" />
+                                    ) : (
+                                      <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )}
+                                  </div>
+                                  <span className="text-sm text-foreground">{lesson.title}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {lesson.isPreview ? (
+                                    <span className="rounded-full bg-primary-blue/10 px-2 py-0.5 text-xs text-primary-blue">
+                                      Preview
+                                    </span>
+                                  ) : (
+                                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                                  )}
+                                  {(lesson.duration ?? 0) > 0 ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      {Math.floor((lesson.duration ?? 0) / 60)}m
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </details>
+
+              <details className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
+                <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-left">
+                  <div>
+                    <p className="text-lg font-bold text-foreground">Reviews</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Stacked learner feedback and review form.</p>
+                  </div>
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                </summary>
+                <div className="border-t border-border px-5 py-4">
+                  <CourseReviewsSection
+                    courseId={course.id}
+                    courseSlug={course.slug}
+                    reviews={course.reviews ?? []}
+                    viewer={viewer}
+                  />
+                </div>
+              </details>
+
+              <details className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
+                <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-left">
+                  <div>
+                    <p className="text-lg font-bold text-foreground">Tags</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Quick topics and skills covered in this course.</p>
+                  </div>
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                </summary>
+                <div className="border-t border-border px-5 py-4">
+                  <div className="flex flex-wrap gap-2">
+                    {course.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-lg border border-border bg-muted px-3 py-1.5 text-sm text-muted-foreground"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <div className="hidden min-w-0 space-y-10 lg:block lg:col-span-2">
               <div>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium text-primary-blue">{course.categoryName}</span>
@@ -318,29 +644,15 @@ export function CourseDetailClient({
               </div>
             </div>
 
-            <div className="lg:col-span-1">
+            <div className="hidden lg:block lg:col-span-1">
               <div className="sticky top-20 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                <div className="group relative flex aspect-video cursor-pointer items-center justify-center bg-slate-800">
-                  <Image
-                    src={course.thumbnailUrl || thumbnailFallback}
-                    alt={course.title}
-                    fill
-                    quality={100}
-                    className="object-cover opacity-60 transition-all group-hover:opacity-80"
-                  />
-                  <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm transition-all group-hover:bg-white/30">
-                    <Play className="ml-1 h-7 w-7 text-white" />
-                  </div>
-                  <div className="absolute inset-x-0 bottom-3 text-center text-xs text-white/80">
-                    Preview this course
-                  </div>
-                </div>
+                {renderPreviewTrigger()}
 
                 <div className="p-6">
                   {hasAccess ? (
                     <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      {courseAccess?.statusLabel}
+                      {resolvedCourseAccess?.statusLabel}
                     </div>
                   ) : null}
                   {isFreeCourse ? (
@@ -368,7 +680,7 @@ export function CourseDetailClient({
                         onClick={handlePrimaryAction}
                         className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90"
                       >
-                        {courseAccess?.actionLabel ?? "Continue Learning"}
+                        {resolvedCourseAccess?.actionLabel ?? "Continue Learning"}
                       </button>
                     ) : canInstantEnroll ? (
                       <button
@@ -431,6 +743,19 @@ export function CourseDetailClient({
         </div>
       </div>
 
+      <CoursePreviewModal
+        accessActionLabel={previewAccessActionLabel}
+        course={course}
+        hasAccess={hasAccess}
+        lockedActionLabel={previewLockedActionLabel}
+        lockedActionPending={enrolling}
+        lockedActionVariant={inCart ? "cart" : "primary"}
+        onAccessAction={handlePreviewAccessAction}
+        onLockedAction={handleLockedCourseAction}
+        onOpenChange={setPreviewOpen}
+        open={previewOpen}
+        previewState={previewState}
+      />
       {copilotOpen && <AICopilot courseTitle={course.title} onClose={() => setCopilotOpen(false)} />}
 
       <Footer />

@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
       items,
       planSlug,
       user: dbUser ? { earnedDiscountCode: dbUser.earnedDiscountCode } : null,
+      userId: dbUser?.id ?? null,
     });
 
     return NextResponse.json({ quote });

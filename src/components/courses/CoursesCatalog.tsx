@@ -47,6 +47,7 @@ export function CoursesCatalog({
   initialCategory = "all",
   initialFilter,
   initialSearch = "",
+  initialPriceFilter,
   viewerId,
   courseAccessMap,
   wishlistCourseIds,
@@ -56,6 +57,7 @@ export function CoursesCatalog({
   initialCategory?: string;
   initialFilter?: string;
   initialSearch?: string;
+  initialPriceFilter?: string;
   viewerId?: string | null;
   courseAccessMap?: Record<string, CourseAccessState>;
   wishlistCourseIds?: string[];
@@ -65,7 +67,9 @@ export function CoursesCatalog({
   const [search, setSearch] = useState(initialSearch);
   const [category, setCategory] = useState(initialCategory);
   const [level, setLevel] = useState<Level | "ALL">("ALL");
-  const [priceFilter, setPriceFilter] = useState<"all" | "free" | "paid">("all");
+  const [priceFilter, setPriceFilter] = useState<"all" | "free" | "paid">(
+    initialPriceFilter === "free" || initialPriceFilter === "paid" ? initialPriceFilter : "all"
+  );
   const [specialFilter, setSpecialFilter] = useState<SpecialFilter>(normalizeSpecialFilter(initialFilter));
   const [sort, setSort] = useState(initialFilter === "popular" ? "popular" : "popular");
   const routeSignature = `${pathname}?${searchParams.toString()}`;
@@ -84,6 +88,12 @@ export function CoursesCatalog({
   useEffect(() => {
     setSearch(initialSearch);
   }, [initialSearch]);
+
+  useEffect(() => {
+    setPriceFilter(
+      initialPriceFilter === "free" || initialPriceFilter === "paid" ? initialPriceFilter : "all"
+    );
+  }, [initialPriceFilter]);
 
   const filtered = useMemo(() => {
     let filteredCourses = [...courses];

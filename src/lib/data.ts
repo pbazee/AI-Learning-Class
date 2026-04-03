@@ -22,6 +22,7 @@ import {
   type HomepageParagraphSectionKey,
 } from "@/lib/homepage-paragraphs";
 import { getCompletedCourseCertificateRecords } from "@/lib/learner-records";
+import { getAccessibleCourseAccessByCourseId } from "@/lib/access-control";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
 import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "./prisma";
 import { ensureSubscriptionPlansTable, mapSubscriptionPlan } from "@/lib/subscription-plans";
@@ -489,7 +490,35 @@ type CourseAccessComputation = CourseAccessState & {
   completedLessonIds: string[];
 };
 
-async function computeUserCourseAccess(userId: string, courseIds: string[]) {
+function getCourseAccessLabels(accessSource?: CourseAccessState["accessSource"]) {
+  if (accessSource === "team") {
+    return { statusLabel: "Team Access" as const };
+  }
+
+  if (accessSource === "subscription") {
+    return { statusLabel: "Pro Access" as const };
+  }
+
+  if (accessSource === "purchase") {
+    return { statusLabel: "Owned" as const };
+  }
+
+  return { statusLabel: "Enrolled" as const };
+}
+
+async function computeUserCourseAccess(
+  userId: string,
+  courseIds: string[],
+  accessByCourseId?: Map<
+    string,
+    {
+      source: "purchase" | "free_enrollment" | "subscription" | "team";
+      expiresAt: Date | null;
+      planSlug: string | null;
+      teamWorkspaceId: string | null;
+    }
+  >
+) {
   if (courseIds.length === 0) {
     return [];
   }
@@ -575,7 +604,7 @@ async function computeUserCourseAccess(userId: string, courseIds: string[]) {
       courseId: course.id,
       courseSlug: course.slug,
       hasAccess: true,
-      statusLabel: course.isFree || course.price === 0 ? "Enrolled" : "Owned",
+      statusLabel: getCourseAccessLabels(accessByCourseId?.get(course.id)?.source).statusLabel,
       actionLabel: latestProgress ? "Continue Learning" : "Go to Classroom",
       lessonHref: resumeLessonId ? `/learn/${course.slug}/${resumeLessonId}` : `/courses/${course.slug}`,
       progress,
@@ -583,6 +612,8 @@ async function computeUserCourseAccess(userId: string, courseIds: string[]) {
       totalLessons,
       lastLessonTitle: latestProgress?.lesson.title,
       completedLessonIds: Array.from(completedLessonIds),
+      accessSource: accessByCourseId?.get(course.id)?.source,
+      expiresAt: accessByCourseId?.get(course.id)?.expiresAt?.toISOString() ?? null,
     };
   });
 }
@@ -596,86 +627,17 @@ export async function getUserCourseAccessMap(
       return {};
     }
 
-    const now = new Date();
-    const [enrollments, requestedCourses, activeSubscriptions] = await Promise.all([
-      prisma.enrollment.findMany({
-        where: {
-          userId,
-          courseId: { in: courseIds },
-          status: { in: ["ACTIVE", "COMPLETED"] },
-          OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
-        },
-        select: {
-          courseId: true,
-        },
-      }),
-      prisma.course.findMany({
-        where: {
-          id: { in: courseIds },
-        },
-        select: {
-          id: true,
-          isFree: true,
-          price: true,
-        },
-      }),
-      prisma.userSubscription.findMany({
-        where: {
-          userId,
-          status: { in: ["ACTIVE", "TRIALING"] },
-          currentPeriodEnd: { gte: now },
-        },
-        select: {
-          plan: {
-            select: {
-              coursesIncluded: true,
-            },
-          },
-        },
-      }),
-    ]);
-    const accessibleCourseIds = new Set(
-      enrollments.map((enrollment) => enrollment.courseId)
-    );
+    const accessByCourseId = await getAccessibleCourseAccessByCourseId(userId, courseIds);
+    const accessibleCourseIds = Array.from(accessByCourseId.keys());
 
-    if (activeSubscriptions.length > 0) {
-      const coveredEntries = new Set<string>();
-
-      activeSubscriptions.forEach((subscription) => {
-        subscription.plan.coursesIncluded.forEach((entry) => {
-          const normalizedEntry = entry.trim();
-
-          if (normalizedEntry) {
-            coveredEntries.add(normalizedEntry);
-          }
-        });
-      });
-
-      if (coveredEntries.has("ALL")) {
-        courseIds.forEach((courseId) => accessibleCourseIds.add(courseId));
-      } else {
-        const includesFreeCourses = coveredEntries.has("FREE");
-
-        requestedCourses.forEach((course) => {
-          if (coveredEntries.has(course.id)) {
-            accessibleCourseIds.add(course.id);
-            return;
-          }
-
-          if (includesFreeCourses && (course.isFree || course.price === 0)) {
-            accessibleCourseIds.add(course.id);
-          }
-        });
-      }
-    }
-
-    if (accessibleCourseIds.size === 0) {
+    if (accessibleCourseIds.length === 0) {
       return {};
     }
 
     const accessRows = await computeUserCourseAccess(
       userId,
-      Array.from(accessibleCourseIds)
+      accessibleCourseIds,
+      accessByCourseId
     );
 
     return accessRows.reduce<Record<string, CourseAccessState>>((accumulator, row) => {
@@ -689,6 +651,8 @@ export async function getUserCourseAccessMap(
         completedLessons: row.completedLessons,
         totalLessons: row.totalLessons,
         lastLessonTitle: row.lastLessonTitle,
+        accessSource: row.accessSource,
+        expiresAt: row.expiresAt,
       };
       return accumulator;
     }, {});

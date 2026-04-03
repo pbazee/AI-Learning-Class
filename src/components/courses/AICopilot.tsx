@@ -22,6 +22,8 @@ type CopilotQuota = {
 interface AICopilotProps {
   courseTitle: string;
   onClose: () => void;
+  variant?: "overlay" | "embedded";
+  className?: string;
 }
 
 const suggestions = [
@@ -31,7 +33,12 @@ const suggestions = [
   "What projects will I build?",
 ];
 
-export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
+export function AICopilot({
+  courseTitle,
+  onClose,
+  variant = "overlay",
+  className,
+}: AICopilotProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -179,13 +186,29 @@ export function AICopilot({ courseTitle, onClose }: AICopilotProps) {
       : quotaError || "Please sign in to use AI Copilot";
 
   const inputDisabled = loading || quotaLoading || !quota || quota.remaining <= 0;
+  const motionProps =
+    variant === "overlay"
+      ? {
+          initial: { opacity: 0, x: 60 },
+          animate: { opacity: 1, x: 0 },
+          exit: { opacity: 0, x: 60 },
+        }
+      : {
+          initial: { opacity: 0, y: 16 },
+          animate: { opacity: 1, y: 0 },
+          exit: { opacity: 0, y: 16 },
+        };
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 60 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 60 }}
-      className="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-border bg-white shadow-[0_0_60px_rgba(15,23,42,0.12)] sm:w-96 dark:bg-slate-950"
+      {...motionProps}
+      className={cn(
+        "flex h-full w-full flex-col bg-white dark:bg-slate-950",
+        variant === "overlay"
+          ? "fixed right-0 top-0 z-50 border-l border-border shadow-[0_0_60px_rgba(15,23,42,0.12)] sm:w-96"
+          : "border-0 shadow-none",
+        className
+      )}
     >
       <div className="flex items-center justify-between border-b border-border bg-blue-50/70 p-4 dark:bg-blue-950/20">
         <div className="flex items-center gap-3">

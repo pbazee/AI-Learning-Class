@@ -29,7 +29,12 @@ export function TrustedLogosMarquee({ logos }: { logos: TrustedLogo[] }) {
             {marqueeItems.map((logo, index) => {
               const content = (
                 <div className="trusted-logo-card">
-                  <img src={logo.imageUrl} alt={logo.name} className="trusted-logo-image" />
+                  <img
+                    src={logo.imageUrl}
+                    alt={logo.name}
+                    className="trusted-logo-image"
+                    data-logo-name={logo.name.toLowerCase()}
+                  />
                 </div>
               );
 

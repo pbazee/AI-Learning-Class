@@ -50,8 +50,17 @@ export async function POST(request: NextRequest) {
       apiVersion: "2024-06-20",
     });
     const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const stripeSubscription =
+      typeof session.subscription === "string"
+        ? await stripe.subscriptions.retrieve(session.subscription)
+        : null;
 
-    if (session.payment_status !== "paid") {
+    const paymentConfirmed =
+      session.mode === "subscription"
+        ? session.status === "complete"
+        : session.payment_status === "paid";
+
+    if (!paymentConfirmed) {
       return NextResponse.json(
         { error: "Stripe has not confirmed this payment yet." },
         { status: 400 }
@@ -67,10 +76,25 @@ export async function POST(request: NextRequest) {
       gateway: "stripe",
       orderId: session.metadata?.order_id,
       providerReference: session.id,
-      planSlug: session.metadata?.plan_slug,
+      planSlug: session.metadata?.plan_slug || stripeSubscription?.metadata?.plan_slug,
       couponCode: session.metadata?.applied_coupon,
       affiliateCode: session.metadata?.aff_code,
       customerEmail: session.customer_email,
+      customerId: typeof session.customer === "string" ? session.customer : null,
+      stripeSubscriptionId:
+        typeof session.subscription === "string" ? session.subscription : null,
+      currentPeriodStart: stripeSubscription
+        ? new Date(stripeSubscription.current_period_start * 1000)
+        : null,
+      currentPeriodEnd: stripeSubscription
+        ? new Date(stripeSubscription.current_period_end * 1000)
+        : null,
+      billingCycle:
+        stripeSubscription?.items.data[0]?.price.recurring?.interval === "year"
+          ? "yearly"
+          : stripeSubscription
+            ? "monthly"
+            : null,
       receiptUrl,
     });
 

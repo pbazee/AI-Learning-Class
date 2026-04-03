@@ -23,6 +23,7 @@ import {
 } from "@/lib/data";
 import { getUserWorkspaceNotes } from "@/lib/lesson-player";
 import { prisma } from "@/lib/prisma";
+import { getUserTeamWorkspaceSummary } from "@/lib/team-workspace";
 import { formatDuration } from "@/lib/utils";
 import { ReferEarnCard } from "@/components/dashboard/refer-earn-card";
 
@@ -36,7 +37,7 @@ export default async function DashboardPage() {
     redirect("/login?redirect=/dashboard");
   }
 
-  const [enrollments, certificates, workspaceNotes, completedLessons, affiliateStatus] = await Promise.all([
+  const [enrollments, certificates, workspaceNotes, completedLessons, affiliateStatus, teamWorkspace] = await Promise.all([
     getUserEnrollments(user.id),
     getUserCertificates(user.id),
     getUserWorkspaceNotes(user.id, 8),
@@ -65,6 +66,7 @@ export default async function DashboardPage() {
       take: 6,
     }),
     getUserAffiliateStatus(user.id),
+    getUserTeamWorkspaceSummary(user.id),
   ]);
 
   const totalCompletedSeconds = completedLessons.reduce(
@@ -252,6 +254,24 @@ export default async function DashboardPage() {
 
             <div className="space-y-6">
               <ReferEarnCard />
+
+              {teamWorkspace ? (
+                <div className="rounded-2xl border border-primary-blue/20 bg-primary-blue/10 p-5 shadow-sm">
+                  <div className="mb-3 flex items-center gap-2">
+                    <BadgeCheck className="h-4 w-4 text-primary-blue" />
+                    <h2 className="text-sm font-bold text-foreground">Teams workspace</h2>
+                  </div>
+                  <p className="mb-4 text-xs leading-5 text-muted-foreground">
+                    {teamWorkspace.workspaceName} is active on your account. Manage invites, member progress, bulk course assignments, and exports from the Teams dashboard.
+                  </p>
+                  <Link
+                    href="/dashboard/teams"
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                  >
+                    Open Teams Dashboard <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              ) : null}
 
               {affiliateStatus.hasJoined ? (
                 <div id="affiliate-program" className="rounded-2xl border border-primary-blue/20 bg-primary-blue/10 p-5 shadow-sm">

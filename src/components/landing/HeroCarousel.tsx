@@ -40,6 +40,25 @@ function getMobileCtaText(label?: string) {
   return fallback;
 }
 
+function getPrimaryCtaText(label?: string) {
+  const fallback = "Explore Courses";
+  if (!label?.trim()) {
+    return fallback;
+  }
+
+  const normalized = label.trim();
+
+  if (/explore/i.test(normalized) && /course/i.test(normalized)) {
+    return fallback;
+  }
+
+  if (normalized.length <= 18) {
+    return normalized;
+  }
+
+  return fallback;
+}
+
 export function HeroCarousel({
   slides,
   stats,
@@ -157,7 +176,7 @@ export function HeroCarousel({
               transition={{ duration: 0.42 }}
               className="max-w-2xl"
             >
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/88 backdrop-blur-sm sm:text-xs">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white backdrop-blur-sm sm:text-xs">
                 <Sparkles className="h-3.5 w-3.5 text-white" />
                 {currentSlide.subtitle || "Master LLM Engineering"}
               </div>
@@ -167,7 +186,7 @@ export function HeroCarousel({
               </h1>
 
               {currentSlide.description ? (
-                <p className="mt-4 max-w-xl text-sm leading-7 text-white/84 sm:mt-5 sm:text-base lg:text-lg">
+                <p className="mt-4 max-w-xl text-sm leading-7 text-white sm:mt-5 sm:text-base lg:text-lg">
                   {currentSlide.description}
                 </p>
               ) : null}
@@ -175,19 +194,11 @@ export function HeroCarousel({
               <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:flex-wrap">
                 <Link
                   href={currentSlide.ctaLink || "/courses"}
-                  className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white shadow-[0_22px_50px_-28px_rgba(0,86,210,0.9)] transition hover:bg-primary-blue/90 sm:px-6 sm:py-3.5 sm:text-base"
+                  className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white shadow-[0_22px_50px_-28px_rgba(0,86,210,0.9)] transition hover:bg-primary-blue/90 sm:px-5 sm:py-3"
                 >
                   <span className="sm:hidden">{getMobileCtaText(currentSlide.ctaText || "Explore LLM Courses")}</span>
-                  <span className="hidden sm:inline">{currentSlide.ctaText || "Explore LLM Courses"}</span>
+                  <span className="hidden sm:inline">{getPrimaryCtaText(currentSlide.ctaText || "Explore LLM Courses")}</span>
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-
-                <Link
-                  href="/paths"
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/18 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/14 sm:px-6 sm:py-3.5 sm:text-base"
-                >
-                  <span className="sm:hidden">View Paths</span>
-                  <span className="hidden sm:inline">See Learning Paths</span>
                 </Link>
               </div>
 
@@ -206,7 +217,7 @@ export function HeroCarousel({
                         </div>
                         <div>
                           <p className="text-lg font-black leading-none text-white">{stat.value}</p>
-                          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-white/68">{stat.label}</p>
+                          <p className="mt-1 text-xs uppercase tracking-[0.14em] text-white">{stat.label}</p>
                         </div>
                       </div>
                     </div>
@@ -215,7 +226,7 @@ export function HeroCarousel({
               </div>
 
               {averageRating ? (
-                <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-white/88">
+                <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-white">
                   <Star className="h-4 w-4 fill-current text-[#facc15]" />
                   <span>{averageRating} average rating from active learners</span>
                 </div>
@@ -227,9 +238,9 @@ export function HeroCarousel({
                     key={card.eyebrow}
                     className="rounded-[24px] border border-white/14 bg-white/10 p-4 backdrop-blur-md"
                   >
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">{card.eyebrow}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white">{card.eyebrow}</p>
                     <p className="mt-2 text-lg font-black text-white">{card.title}</p>
-                    <p className="mt-2 text-xs leading-6 text-white/78">{card.body}</p>
+                    <p className="mt-2 text-xs leading-6 text-white">{card.body}</p>
                   </div>
                 ))}
               </div>
@@ -258,9 +269,9 @@ export function HeroCarousel({
                       : "right-5 bottom-[8%] max-w-[300px]"
                 }`}
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/64">{card.eyebrow}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white">{card.eyebrow}</p>
                 <p className="mt-3 text-[1.9rem] font-black leading-tight">{card.title}</p>
-                <p className="mt-3 text-sm leading-7 text-white/82">{card.body}</p>
+                <p className="mt-3 text-sm leading-7 text-white">{card.body}</p>
               </motion.div>
             ))}
           </div>

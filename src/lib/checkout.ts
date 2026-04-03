@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Coupon, User } from "@prisma/client";
 import type { NextRequest } from "next/server";
+import { getAccessibleCourseAccessByCourseId } from "@/lib/access-control";
 import { CHECKOUT_CURRENCY } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
@@ -128,7 +129,7 @@ async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | 
   };
 }
 
-async function sanitizeCartItems(items: CheckoutItemInput[]) {
+async function sanitizeCartItems(items: CheckoutItemInput[], userId?: string | null) {
   const requestedCourseIds = Array.from(
     new Set(
       items
@@ -140,6 +141,14 @@ async function sanitizeCartItems(items: CheckoutItemInput[]) {
   if (requestedCourseIds.length === 0) {
     return [] as CheckoutLineItem[];
   }
+
+  const accessibleCourseIds = userId
+    ? new Set(
+        Array.from(
+          (await getAccessibleCourseAccessByCourseId(userId, requestedCourseIds)).keys()
+        )
+      )
+    : new Set<string>();
 
   const courses = await prisma.course.findMany({
     where: {
@@ -167,7 +176,11 @@ async function sanitizeCartItems(items: CheckoutItemInput[]) {
 
     const course = courseById.get(courseId);
 
-    if (!course || (course.currency && course.currency !== CHECKOUT_CURRENCY)) {
+    if (
+      !course ||
+      accessibleCourseIds.has(courseId) ||
+      (course.currency && course.currency !== CHECKOUT_CURRENCY)
+    ) {
       return [];
     }
 
@@ -190,15 +203,17 @@ export async function buildCheckoutQuote({
   items,
   planSlug,
   user,
+  userId,
 }: {
   request: NextRequest;
   items?: CheckoutItemInput[];
   planSlug?: string | null;
   user?: Pick<User, "earnedDiscountCode"> | null;
+  userId?: string | null;
 }): Promise<CheckoutQuote> {
   const normalizedPlanSlug = planSlug?.trim().toLowerCase() || null;
   const planItem = normalizedPlanSlug ? await getManagedPlanItem(normalizedPlanSlug) : null;
-  const lineItems = planItem ? [planItem] : await sanitizeCartItems(items ?? []);
+  const lineItems = planItem ? [planItem] : await sanitizeCartItems(items ?? [], userId);
   const subtotal = roundCurrencyAmount(lineItems.reduce((sum, item) => sum + item.price, 0));
   const coupon = await resolveActiveReferralCoupon(request, user);
   const discountAmount = applyCouponDiscount(subtotal, coupon);

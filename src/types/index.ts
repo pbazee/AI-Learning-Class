@@ -8,6 +8,9 @@ export type CourseAssetType = "AUDIO" | "VIDEO" | "PDF";
 export type ContentStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type PopupShowOn = "HOMEPAGE_ONLY" | "COURSE_PAGES" | "BLOG_PAGES" | "ALL_PAGES";
 export type ContactMessageStatus = "UNREAD" | "READ" | "REPLIED";
+export type TeamWorkspaceRole = "OWNER" | "ADMIN" | "MEMBER";
+export type TeamWorkspaceMemberStatus = "ACTIVE" | "REVOKED";
+export type TeamWorkspaceInviteStatus = "PENDING" | "ACCEPTED" | "REVOKED" | "EXPIRED";
 
 export interface Course {
   id: string;
@@ -49,13 +52,40 @@ export interface Course {
 export interface CourseAccessState {
   courseId: string;
   hasAccess: boolean;
-  statusLabel: "Owned" | "Enrolled";
+  statusLabel: "Owned" | "Enrolled" | "Pro Access" | "Team Access";
   actionLabel: "Continue Learning" | "Go to Classroom";
   lessonHref: string;
   progress: number;
   completedLessons: number;
   totalLessons: number;
   lastLessonTitle?: string;
+  accessSource?: "purchase" | "free_enrollment" | "subscription" | "team";
+  expiresAt?: string | null;
+}
+
+export interface CoursePreviewLessonState {
+  id: string;
+  title: string;
+  type: Lesson["type"];
+  sourceUrl?: string;
+  content?: string;
+  duration?: number;
+  previewPages?: number;
+  previewMinutes?: number;
+  moduleTitle?: string;
+}
+
+export interface CoursePreviewState {
+  courseId: string;
+  courseSlug: string;
+  courseTitle: string;
+  thumbnailUrl?: string;
+  previewVideoUrl?: string;
+  coursePrice: number;
+  courseCurrency?: string;
+  isFreeCourse: boolean;
+  previewLessons: CoursePreviewLessonState[];
+  courseAccess?: CourseAccessState;
 }
 
 export interface Category {
@@ -214,6 +244,53 @@ export interface SubscriptionPlan {
   features: string[];
   isPopular: boolean;
   isActive: boolean;
+}
+
+export interface TeamWorkspaceDashboardData {
+  workspace: {
+    id: string;
+    name: string;
+    inviteCode: string;
+    seatLimit: number;
+    seatsUsed: number;
+    seatsAvailable: number;
+    role: TeamWorkspaceRole;
+    planEndsAt: string | null;
+  };
+  metrics: {
+    activeMembers: number;
+    pendingInvites: number;
+    assignedCourses: number;
+    averageProgress: number;
+  };
+  members: Array<{
+    id: string;
+    userId: string;
+    name: string;
+    email: string;
+    role: TeamWorkspaceRole;
+    status: TeamWorkspaceMemberStatus;
+    joinedAt: string;
+    assignedCourses: number;
+    startedCourses: number;
+    completedLessons: number;
+    averageProgress: number;
+    lastActivity: string | null;
+  }>;
+  invites: Array<{
+    id: string;
+    invitedEmail: string | null;
+    token: string;
+    status: TeamWorkspaceInviteStatus;
+    expiresAt: string;
+    createdAt: string;
+    inviteLink: string;
+  }>;
+  availableCourses: Array<{
+    id: string;
+    title: string;
+    slug: string;
+  }>;
 }
 
 export interface Testimonial {

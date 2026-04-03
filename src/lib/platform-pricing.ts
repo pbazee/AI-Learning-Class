@@ -48,8 +48,9 @@ export const PLATFORM_SUBSCRIPTION_PLANS = [
     currency: "USD",
     features: [
       "Everything in Pro",
-      "Admin dashboard",
+      "Admin dashboard with invites",
       "Team progress tracking",
+      "Bulk assignments and CSV exports",
     ],
     coursesIncluded: ["ALL"],
     isPopular: false,

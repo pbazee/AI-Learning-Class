@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getUserCourseAccessMap } from "@/lib/data";
+import { recordUserCourseOwnership } from "@/lib/learner-records";
 import { prisma } from "@/lib/prisma";
 import { getCourseProgressState } from "@/lib/lesson-player";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
@@ -48,6 +50,39 @@ export async function POST(
     if (!lesson) {
       return NextResponse.json({ error: "Lesson not found." }, { status: 404 });
     }
+
+    const accessMap = await getUserCourseAccessMap(profile.id, [lesson.module.courseId]);
+    const courseAccess = accessMap[lesson.module.courseId];
+
+    if (!courseAccess?.hasAccess) {
+      return NextResponse.json({ error: "You do not have access to this course yet." }, { status: 403 });
+    }
+
+    await prisma.enrollment.upsert({
+      where: {
+        userId_courseId: {
+          userId: profile.id,
+          courseId: lesson.module.courseId,
+        },
+      },
+      update: {
+        status: "ACTIVE",
+        expiresAt: courseAccess.expiresAt ? new Date(courseAccess.expiresAt) : null,
+      },
+      create: {
+        userId: profile.id,
+        courseId: lesson.module.courseId,
+        status: "ACTIVE",
+        expiresAt: courseAccess.expiresAt ? new Date(courseAccess.expiresAt) : null,
+      },
+    });
+
+    await recordUserCourseOwnership(profile.id, [lesson.module.courseId], {
+      accessSource: courseAccess.accessSource ?? "subscription",
+      lifetimeAccess: !courseAccess.expiresAt,
+      expiresAt: courseAccess.expiresAt ? new Date(courseAccess.expiresAt) : null,
+      ownedAt: new Date(),
+    });
 
     if (payload.touchOnly) {
       await prisma.lessonProgress.upsert({

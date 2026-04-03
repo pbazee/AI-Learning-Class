@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordUserCourseOwnership } from "@/lib/learner-records";
 import { prisma } from "@/lib/prisma";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
@@ -70,6 +71,12 @@ export async function POST(
         courseId: course.id,
         status: "ACTIVE",
       },
+    });
+
+    await recordUserCourseOwnership(profile.id, [course.id], {
+      accessSource: "free_enrollment",
+      lifetimeAccess: true,
+      ownedAt: new Date(),
     });
 
     const firstLessonId = course.modules.flatMap((module) => module.lessons.map((lesson) => lesson.id))[0];

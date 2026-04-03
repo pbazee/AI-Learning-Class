@@ -74,7 +74,7 @@ export default async function CertificatesPage() {
                         </div>
                       </div>
                     </div>
-                    <CertificateCardActions code={certificate.code} pdfUrl={certificate.pdfUrl} />
+                    <CertificateCardActions code={certificate.code} />
                   </div>
                 </div>
               ))}

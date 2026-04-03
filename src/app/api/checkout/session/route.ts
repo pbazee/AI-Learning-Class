@@ -15,6 +15,7 @@ import {
 import { createPaypalAccessToken } from "@/lib/paypal";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
+import { prisma } from "@/lib/prisma";
 
 function getAppOrigin(request: NextRequest) {
   return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest) {
       items,
       planSlug,
       user: { earnedDiscountCode: dbUser.earnedDiscountCode },
+      userId: dbUser.id,
     });
 
     if (quote.items.length === 0) {
@@ -75,6 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     const origin = getAppOrigin(request);
+    const isPlanCheckout = Boolean(quote.planSlug);
     const checkoutLabel =
       quote.items.length === 1
         ? quote.items[0].title
@@ -95,6 +98,14 @@ export async function POST(request: NextRequest) {
       affiliateCode,
     });
 
+    if (isPlanCheckout && method !== "stripe") {
+      await markCheckoutOrderFailed(pendingOrder.id);
+      return NextResponse.json(
+        { error: "Pro and Teams subscriptions are processed securely through Stripe." },
+        { status: 400 }
+      );
+    }
+
     if (method === "stripe") {
       if (!process.env.STRIPE_SECRET_KEY) {
         return NextResponse.json(
@@ -108,20 +119,37 @@ export async function POST(request: NextRequest) {
           apiVersion: "2024-06-20",
         });
         const session = await stripe.checkout.sessions.create({
-          mode: "payment",
-          line_items: [
-            {
-              price_data: {
-                currency: CHECKOUT_CURRENCY.toLowerCase(),
-                product_data: {
-                  name: checkoutLabel,
+          mode: isPlanCheckout ? "subscription" : "payment",
+          line_items: isPlanCheckout
+            ? [
+                {
+                  price_data: {
+                    currency: CHECKOUT_CURRENCY.toLowerCase(),
+                    product_data: {
+                      name: checkoutLabel,
+                    },
+                    recurring: {
+                      interval: "month",
+                    },
+                    unit_amount: Math.round(quote.total * 100),
+                  },
+                  quantity: 1,
                 },
-                unit_amount: Math.round(quote.total * 100),
-              },
-              quantity: 1,
-            },
-          ],
-          customer_email: customerEmail || dbUser.email || undefined,
+              ]
+            : [
+                {
+                  price_data: {
+                    currency: CHECKOUT_CURRENCY.toLowerCase(),
+                    product_data: {
+                      name: checkoutLabel,
+                    },
+                    unit_amount: Math.round(quote.total * 100),
+                  },
+                  quantity: 1,
+                },
+              ],
+          customer: dbUser.stripeCustomerId || undefined,
+          customer_email: dbUser.stripeCustomerId ? undefined : customerEmail || dbUser.email || undefined,
           success_url: `${origin}/checkout/complete?gateway=stripe&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: cancelUrl,
           metadata: {
@@ -133,7 +161,29 @@ export async function POST(request: NextRequest) {
             applied_coupon: quote.appliedCouponCode ?? "",
             ...(affiliateCode ? { aff_code: affiliateCode } : {}),
           },
+          subscription_data: isPlanCheckout
+            ? {
+                metadata: {
+                  source: "ai-learning-class",
+                  gateway: "stripe",
+                  customer_name: customerName,
+                  order_id: pendingOrder.id,
+                  plan_slug: quote.planSlug ?? "",
+                  applied_coupon: quote.appliedCouponCode ?? "",
+                  ...(affiliateCode ? { aff_code: affiliateCode } : {}),
+                },
+              }
+            : undefined,
         });
+
+        if (typeof session.customer === "string" && session.customer !== dbUser.stripeCustomerId) {
+          await prisma.user.updateMany({
+            where: { id: dbUser.id },
+            data: {
+              stripeCustomerId: session.customer,
+            },
+          });
+        }
 
         await attachProviderReferenceToOrder({
           orderId: pendingOrder.id,
@@ -231,6 +281,7 @@ export async function POST(request: NextRequest) {
             email: customerEmail || dbUser.email,
             amount: Math.round(quote.total * 100),
             currency: CHECKOUT_CURRENCY,
+            channels: ["card", "mobile_money", "bank_transfer"],
             metadata: {
               source: "ai-learning-class",
               customer_name: customerName,
@@ -250,7 +301,8 @@ export async function POST(request: NextRequest) {
       if (
         !paystackResponse.ok ||
         !paystackPayload?.status ||
-        typeof paystackPayload?.data?.reference !== "string"
+        typeof paystackPayload?.data?.reference !== "string" ||
+        typeof paystackPayload?.data?.access_code !== "string"
       ) {
         await markCheckoutOrderFailed(pendingOrder.id);
         return NextResponse.json(
@@ -269,7 +321,11 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({
-        url: paystackPayload.data.authorization_url,
+        accessCode: paystackPayload.data.access_code,
+        callbackUrl: `${origin}/checkout/complete?gateway=paystack`,
+        channels: ["card", "mobile_money", "bank_transfer"],
+        gateway: "paystack",
+        reference: paystackPayload.data.reference,
         sessionId: paystackPayload.data.reference,
       });
     } catch (error) {

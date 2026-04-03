@@ -297,6 +297,31 @@ export function AffiliateDashboard() {
         </div>
       </section>
 
+      <section className="rounded-[30px] border border-primary-blue/20 bg-primary-blue p-5 text-white shadow-[0_26px_65px_-40px_rgba(0,86,210,0.85)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">{data.program.commissionRate}% Commission Flow</p>
+            <h2 className="mt-2 text-2xl font-black text-white">
+              Lead with your link, let the QR do the rest, and collect payouts from one workspace.
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-white">
+              Your summary metrics stay visible first, your link generator and QR stay front-and-center, and payout requests sit beside clear history so the partner flow feels instant and trustworthy.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              `${data.program.commissionRate}% per referred sale`,
+              `${data.program.cookieDays}-day attribution cookie`,
+              `${formatPrice(data.program.minPayout)} minimum payout`,
+            ].map((item) => (
+              <div key={item} className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white">
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {data.affiliate.status !== "active" ? (
         <div className="rounded-[30px] border border-primary-blue/20 bg-primary-blue p-5 text-[#ffffff]">
           <p className="font-semibold">Your affiliate account is currently {data.affiliate.status.replace("_", " ")}.</p>
@@ -323,51 +348,6 @@ export function AffiliateDashboard() {
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <div className="space-y-6">
-          <div className="rounded-[32px] border border-border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
-                <LineChart className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-foreground">Earnings Overview</p>
-                <p className="text-sm text-muted-foreground">Recent commission performance and attributed sales.</p>
-              </div>
-            </div>
-
-            <div className="mt-6 h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="affiliateCommission" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 16,
-                      borderColor: "#e2e8f0",
-                      background: "#ffffff",
-                    }}
-                    formatter={(value: number, name) => [
-                      name === "commission" ? formatPrice(value) : formatPrice(value),
-                      name === "commission" ? "Commission" : "Sales",
-                    ]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="commission"
-                    stroke="#3B82F6"
-                    strokeWidth={3}
-                    fill="url(#affiliateCommission)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
           <div className="rounded-[32px] border border-border bg-card p-6 shadow-sm">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -435,9 +415,78 @@ export function AffiliateDashboard() {
               </div>
             </div>
           </div>
+
+          <div className="rounded-[32px] border border-border bg-card p-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
+                <LineChart className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-foreground">Earnings Overview</p>
+                <p className="text-sm text-muted-foreground">Recent commission performance and attributed sales.</p>
+              </div>
+            </div>
+
+            <div className="mt-6 h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="affiliateCommission" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 16,
+                      borderColor: "#e2e8f0",
+                      background: "#ffffff",
+                    }}
+                    formatter={(value: number, name) => [
+                      name === "commission" ? formatPrice(value) : formatPrice(value),
+                      name === "commission" ? "Commission" : "Sales",
+                    ]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="commission"
+                    stroke="#3B82F6"
+                    strokeWidth={3}
+                    fill="url(#affiliateCommission)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 xl:sticky xl:top-24">
+          <div className="rounded-[32px] border border-border bg-card p-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
+                <Globe className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-foreground">Partner Snapshot</p>
+                <p className="text-sm text-muted-foreground">Keep the commission story, cookie window, and payout threshold in view.</p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              {[
+                { label: "Commission", value: `${data.program.commissionRate}%` },
+                { label: "Cookie Window", value: `${data.program.cookieDays} days` },
+                { label: "Minimum Payout", value: formatPrice(data.program.minPayout) },
+              ].map((item) => (
+                <div key={item.label} className="rounded-[24px] border border-border bg-muted/20 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">{item.label}</p>
+                  <p className="mt-2 text-lg font-black text-foreground">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-[32px] border border-border bg-card p-6 shadow-sm">
             <p className="text-lg font-bold text-foreground">Request Payout</p>
             <p className="mt-1 text-sm text-muted-foreground">

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomBytes } from "crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 type WishlistRow = {
@@ -72,7 +72,7 @@ async function ensureUserWishlistsTable() {
   await userWishlistsTableReady;
 }
 
-async function ensureUserCoursesTable() {
+export async function ensureUserCoursesTable() {
   if (!userCoursesTableReady) {
     userCoursesTableReady = (async () => {
       await prisma.$executeRawUnsafe(`
@@ -82,6 +82,10 @@ async function ensureUserCoursesTable() {
           course_id TEXT NOT NULL REFERENCES "Course"(id) ON DELETE CASCADE,
           completed BOOLEAN NOT NULL DEFAULT FALSE,
           completed_at TIMESTAMPTZ NULL,
+          access_source TEXT NULL DEFAULT 'enrollment',
+          lifetime_access BOOLEAN NOT NULL DEFAULT FALSE,
+          owned_at TIMESTAMPTZ NULL,
+          expires_at TIMESTAMPTZ NULL,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE (user_id, course_id)
         );
@@ -91,6 +95,11 @@ async function ensureUserCoursesTable() {
         CREATE INDEX IF NOT EXISTS user_courses_lookup_idx
         ON user_courses (user_id, completed, updated_at DESC);
       `);
+
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS user_courses_access_idx
+        ON user_courses (user_id, lifetime_access, expires_at, updated_at DESC);
+      `);
     })().catch((error) => {
       userCoursesTableReady = null;
       throw error;
@@ -98,6 +107,65 @@ async function ensureUserCoursesTable() {
   }
 
   await userCoursesTableReady;
+}
+
+export async function recordUserCourseOwnership(
+  userId: string,
+  courseIds: string[],
+  options?: {
+    accessSource?: "purchase" | "free_enrollment" | "subscription" | "team";
+    lifetimeAccess?: boolean;
+    expiresAt?: Date | null;
+    ownedAt?: Date;
+  },
+  db: Prisma.TransactionClient | PrismaClient = prisma
+) {
+  await ensureUserCoursesTable();
+
+  const uniqueCourseIds = Array.from(new Set(courseIds.filter(Boolean)));
+
+  if (uniqueCourseIds.length === 0) {
+    return;
+  }
+
+  const accessSource = options?.accessSource ?? "purchase";
+  const lifetimeAccess = options?.lifetimeAccess ?? false;
+  const expiresAt = options?.expiresAt ?? null;
+  const ownedAt = options?.ownedAt ?? new Date();
+
+  for (const courseId of uniqueCourseIds) {
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO user_courses (
+        user_id,
+        course_id,
+        completed,
+        completed_at,
+        access_source,
+        lifetime_access,
+        owned_at,
+        expires_at,
+        updated_at
+      )
+      VALUES (
+        ${userId},
+        ${courseId},
+        FALSE,
+        NULL,
+        ${accessSource},
+        ${lifetimeAccess},
+        ${ownedAt},
+        ${expiresAt},
+        NOW()
+      )
+      ON CONFLICT (user_id, course_id)
+      DO UPDATE SET
+        access_source = EXCLUDED.access_source,
+        lifetime_access = EXCLUDED.lifetime_access,
+        owned_at = COALESCE(user_courses.owned_at, EXCLUDED.owned_at),
+        expires_at = EXCLUDED.expires_at,
+        updated_at = NOW()
+    `);
+  }
 }
 
 export async function getUserWishlistCourseIds(userId: string, courseIds?: string[]) {
@@ -253,12 +321,33 @@ export async function syncUserCourseRecords(userId: string) {
       : null;
 
     await prisma.$executeRaw(Prisma.sql`
-      INSERT INTO user_courses (user_id, course_id, completed, completed_at, updated_at)
-      VALUES (${userId}, ${enrollment.courseId}, ${completed}, ${completedAt}, NOW())
+      INSERT INTO user_courses (
+        user_id,
+        course_id,
+        completed,
+        completed_at,
+        access_source,
+        lifetime_access,
+        owned_at,
+        expires_at,
+        updated_at
+      )
+      VALUES (
+        ${userId},
+        ${enrollment.courseId},
+        ${completed},
+        ${completedAt},
+        'enrollment',
+        ${enrollment.expiresAt === null},
+        ${enrollment.enrolledAt},
+        ${enrollment.expiresAt},
+        NOW()
+      )
       ON CONFLICT (user_id, course_id)
       DO UPDATE SET
         completed = EXCLUDED.completed,
         completed_at = EXCLUDED.completed_at,
+        expires_at = COALESCE(user_courses.expires_at, EXCLUDED.expires_at),
         updated_at = NOW()
     `);
 

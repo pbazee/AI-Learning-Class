@@ -321,6 +321,15 @@ export function Navbar() {
               ) : (
                 <Link href="/login" className="inline-flex h-10 items-center rounded-full bg-primary-blue px-4 text-sm font-bold text-white shadow-[0_18px_40px_-24px_rgba(0,86,210,0.95)] transition hover:bg-primary-blue/90">Login</Link>
               )}
+              <Dialog.Trigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-primary-blue/25 hover:bg-primary-blue/5 hover:text-primary-blue dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
+                  aria-label="Open full site menu"
+                >
+                  <Menu className="h-[18px] w-[18px]" />
+                </button>
+              </Dialog.Trigger>
             </div>
           </div>
 

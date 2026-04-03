@@ -35,6 +35,14 @@ model User {
   blogPosts          BlogPost[]         @relation("BlogAuthor")
   blogComments       BlogComment[]
   subscriptions      UserSubscription[]
+  entitlements       UserEntitlement[]
+  ownedTeamWorkspaces TeamWorkspace[]     @relation("TeamWorkspaceOwner")
+  teamMemberships    TeamWorkspaceMember[] @relation("TeamWorkspaceMemberships")
+  sentTeamInvites    TeamWorkspaceInvite[] @relation("TeamWorkspaceInviteSender")
+  acceptedTeamInvites TeamWorkspaceInvite[] @relation("TeamWorkspaceInvitedUser")
+  invitedTeamMembers TeamWorkspaceMember[] @relation("TeamWorkspaceInvitedBy")
+  teamAssignmentsGiven TeamCourseAssignment[] @relation("TeamCourseAssignmentsGiven")
+  teamAssignmentsReceived TeamCourseAssignment[] @relation("TeamCourseAssignmentsReceived")
   affiliate          Affiliate?
   referralCode       String?            @unique
   referredById       String?
@@ -118,6 +126,8 @@ model Course {
   reviews      Review[]
   certificates Certificate[]
   orderItems   OrderItem[]
+  entitlements UserEntitlement[]
+  teamAssignments TeamCourseAssignment[]
 }
 
 enum Level {
@@ -384,6 +394,147 @@ enum SubscriptionStatus {
   CANCELLED
   PAST_DUE
   TRIALING
+}
+
+model UserEntitlement {
+  id                   String            @id @default(cuid())
+  userId               String            @map("user_id")
+  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId             String?           @map("course_id")
+  course               Course?           @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  teamWorkspaceId      String?           @map("team_workspace_id")
+  teamWorkspace        TeamWorkspace?    @relation(fields: [teamWorkspaceId], references: [id], onDelete: SetNull)
+  scope                EntitlementScope
+  source               EntitlementSource
+  status               EntitlementStatus @default(ACTIVE)
+  planSlug             String?           @map("plan_slug")
+  stripeSubscriptionId String?           @map("stripe_subscription_id")
+  startsAt             DateTime          @default(now()) @map("starts_at")
+  endsAt               DateTime?         @map("ends_at")
+  metadata             Json?
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  @@index([userId, status, endsAt])
+  @@index([teamWorkspaceId, status])
+  @@index([planSlug, status])
+  @@map("user_entitlements")
+}
+
+enum EntitlementScope {
+  ALL_COURSES
+  FREE_COURSES
+  SPECIFIC_COURSE
+}
+
+enum EntitlementSource {
+  SUBSCRIPTION
+  TEAM
+  PURCHASE
+  FREE_ENROLLMENT
+  ADMIN
+}
+
+enum EntitlementStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  REVOKED
+}
+
+model TeamWorkspace {
+  id         String                @id @default(cuid())
+  ownerUserId String               @map("owner_user_id")
+  ownerUser  User                  @relation("TeamWorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  name       String
+  inviteCode String                @unique @map("invite_code")
+  seatLimit  Int                   @default(10) @map("seat_limit")
+  createdAt  DateTime              @default(now()) @map("created_at")
+  updatedAt  DateTime              @updatedAt @map("updated_at")
+
+  members      TeamWorkspaceMember[]
+  invites      TeamWorkspaceInvite[]
+  assignments  TeamCourseAssignment[]
+  entitlements UserEntitlement[]
+
+  @@index([ownerUserId])
+  @@map("team_workspaces")
+}
+
+model TeamWorkspaceMember {
+  id          String                    @id @default(cuid())
+  workspaceId String                    @map("workspace_id")
+  workspace   TeamWorkspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String                    @map("user_id")
+  user        User                      @relation("TeamWorkspaceMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  role        TeamWorkspaceRole         @default(MEMBER)
+  status      TeamWorkspaceMemberStatus @default(ACTIVE)
+  invitedById String?                   @map("invited_by_id")
+  invitedBy   User?                     @relation("TeamWorkspaceInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  joinedAt    DateTime                  @default(now()) @map("joined_at")
+  revokedAt   DateTime?                 @map("revoked_at")
+  createdAt   DateTime                  @default(now()) @map("created_at")
+  updatedAt   DateTime                  @updatedAt @map("updated_at")
+
+  @@unique([workspaceId, userId])
+  @@index([userId, status])
+  @@map("team_workspace_members")
+}
+
+enum TeamWorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum TeamWorkspaceMemberStatus {
+  ACTIVE
+  REVOKED
+}
+
+model TeamWorkspaceInvite {
+  id            String                    @id @default(cuid())
+  workspaceId    String                   @map("workspace_id")
+  workspace      TeamWorkspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedEmail   String?                  @map("invited_email")
+  invitedUserId  String?                  @map("invited_user_id")
+  invitedUser    User?                    @relation("TeamWorkspaceInvitedUser", fields: [invitedUserId], references: [id], onDelete: SetNull)
+  invitedById    String                   @map("invited_by_id")
+  invitedBy      User                     @relation("TeamWorkspaceInviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
+  token          String                   @unique
+  status         TeamWorkspaceInviteStatus @default(PENDING)
+  expiresAt      DateTime                 @map("expires_at")
+  acceptedAt     DateTime?                @map("accepted_at")
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
+
+  @@index([workspaceId, status])
+  @@index([token, status])
+  @@map("team_workspace_invites")
+}
+
+enum TeamWorkspaceInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model TeamCourseAssignment {
+  id               String        @id @default(cuid())
+  workspaceId      String        @map("workspace_id")
+  workspace        TeamWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courseId         String        @map("course_id")
+  course           Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignedToUserId String        @map("assigned_to_user_id")
+  assignedToUser   User          @relation("TeamCourseAssignmentsReceived", fields: [assignedToUserId], references: [id], onDelete: Cascade)
+  assignedByUserId String        @map("assigned_by_user_id")
+  assignedByUser   User          @relation("TeamCourseAssignmentsGiven", fields: [assignedByUserId], references: [id], onDelete: Cascade)
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  @@unique([workspaceId, courseId, assignedToUserId])
+  @@index([workspaceId, assignedToUserId])
+  @@map("team_course_assignments")
 }
 
 // ====================== CMS ======================

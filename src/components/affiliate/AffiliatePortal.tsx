@@ -98,12 +98,14 @@ export function AffiliatePortal() {
     availablePayout >= (program?.minPayout ?? 10) &&
     !hasOpenPayout;
 
+  const commissionRate = program?.commissionRate ?? 30;
+
   if (affiliate) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-black text-foreground">Affiliate Program</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="text-3xl font-black text-white">Affiliate Program</h1>
+          <p className="mt-2 text-white">
             Your full partner workspace now lives in the dedicated dashboard.
           </p>
         </div>
@@ -114,7 +116,7 @@ export function AffiliatePortal() {
           </div>
         )}
         {successMsg && (
-          <div className="rounded-2xl border border-primary-blue/30 bg-primary-blue/10 px-4 py-3 text-sm text-primary-blue">
+          <div className="rounded-2xl border border-primary-blue/30 bg-primary-blue/10 px-4 py-3 text-sm text-white">
             {successMsg}
           </div>
         )}
@@ -126,23 +128,23 @@ export function AffiliatePortal() {
             { label: "Available Payout", value: `$${availablePayout.toFixed(2)}`, icon: DollarSign, color: "text-primary-blue" },
             { label: "In Grace Window", value: `$${heldBalance.toFixed(2)}`, icon: Clock, color: "text-primary-blue" },
           ].map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="rounded-2xl border border-border bg-card p-5">
+            <div key={label} className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-current/10 ${color}`}>
                 <Icon className="h-5 w-5" />
               </div>
-              <p className="text-2xl font-black text-foreground">{value}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{label}</p>
+              <p className="text-2xl font-black text-white">{value}</p>
+              <p className="mt-1 text-sm text-white">{label}</p>
             </div>
           ))}
         </div>
 
-        <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-lg font-bold text-foreground">Open the Affiliate Dashboard</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              <p className="text-lg font-bold text-white">Open the Affiliate Dashboard</p>
+              <p className="mt-2 text-sm leading-6 text-white">
                 Generate your link and QR code, manage payout details for M-Pesa, bank, or PayPal,
-                and track commission history with the new 2026 dashboard experience.
+                and track commission history with the new {commissionRate}% commission dashboard experience.
               </p>
             </div>
             <Link
@@ -154,7 +156,7 @@ export function AffiliatePortal() {
           </div>
 
           {hasOpenPayout || !canRequestPayout ? (
-            <div className="mt-5 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-4 py-3 text-sm text-primary-blue">
+            <div className="mt-5 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-4 py-3 text-sm text-white">
               {hasOpenPayout
                 ? "You already have a payout request under review."
                 : `Payouts unlock once your eligible balance reaches $${(program?.minPayout ?? 10).toFixed(2)}.`}
@@ -168,9 +170,9 @@ export function AffiliatePortal() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-black text-foreground">Affiliate Program</h1>
-        <p className="mt-2 text-muted-foreground">
-          Earn {program?.commissionRate ?? 20}% commission on every sale you refer.
+        <h1 className="text-3xl font-black text-white">Affiliate Program</h1>
+        <p className="mt-2 text-white">
+          Earn {commissionRate}% commission on every sale you refer.
         </p>
       </div>
 
@@ -180,31 +182,31 @@ export function AffiliatePortal() {
         </div>
       )}
       {successMsg && (
-        <div className="rounded-2xl border border-primary-blue/30 bg-primary-blue/10 px-4 py-3 text-sm text-primary-blue">
+        <div className="rounded-2xl border border-primary-blue/30 bg-primary-blue/10 px-4 py-3 text-sm text-white">
           {successMsg}
         </div>
       )}
 
-      <div className="rounded-3xl border border-border bg-card p-10 text-center">
+      <div className="rounded-3xl border border-white/10 bg-white/5 p-10 text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-blue/12">
           <DollarSign className="h-8 w-8 text-primary-blue" />
         </div>
-        <h2 className="text-xl font-bold text-foreground">Join our Affiliate Program</h2>
-        <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-          Share your unique link and earn {program?.commissionRate ?? 20}% commission for every student
+        <h2 className="text-xl font-bold text-white">Join our Affiliate Program</h2>
+        <p className="mx-auto mt-3 max-w-md text-white">
+          Share your unique link and earn {commissionRate}% commission for every student
           who enrolls. Minimum payout is ${program?.minPayout ?? 10}.
         </p>
-        <div className="mt-6 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-          <div className="rounded-2xl border border-border bg-muted/40 p-4">
-            <p className="font-bold text-foreground">{program?.commissionRate ?? 20}%</p>
+        <div className="mt-6 grid gap-3 text-sm text-white sm:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <p className="font-bold text-white">{commissionRate}%</p>
             <p>Commission per sale</p>
           </div>
-          <div className="rounded-2xl border border-border bg-muted/40 p-4">
-            <p className="font-bold text-foreground">${program?.minPayout ?? 10}</p>
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <p className="font-bold text-white">${program?.minPayout ?? 10}</p>
             <p>Minimum payout</p>
           </div>
-          <div className="rounded-2xl border border-border bg-muted/40 p-4">
-            <p className="font-bold text-foreground">{program?.cookieDays ?? 30} days</p>
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <p className="font-bold text-white">{program?.cookieDays ?? 30} days</p>
             <p>Cookie duration</p>
           </div>
         </div>
@@ -216,7 +218,7 @@ export function AffiliatePortal() {
           {applying ? "Applying..." : "Apply to Become an Affiliate"}
         </button>
         {program?.isActive === false && (
-          <p className="mt-3 text-sm text-muted-foreground">The affiliate program is currently paused.</p>
+          <p className="mt-3 text-sm text-white">The affiliate program is currently paused.</p>
         )}
       </div>
     </div>

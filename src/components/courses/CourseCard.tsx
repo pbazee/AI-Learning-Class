@@ -157,7 +157,7 @@ export function CourseCard({
           aria-label={`Open ${course.title}`}
           className="absolute inset-0 z-10 rounded-[30px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-blue/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070b]"
         />
-        <div className="pointer-events-none relative z-20 grid h-full min-h-[560px] aspect-[11/20] grid-rows-[73%_27%]">
+        <div className="pointer-events-none relative z-20 grid h-full min-h-[580px] aspect-[11/20] grid-rows-[73%_27%]">
           <div className="relative overflow-hidden">
             <Image
               src={heroImage}
@@ -194,7 +194,13 @@ export function CourseCard({
           </div>
 
           <div className="flex min-h-0 flex-col bg-[#070a0f] px-5 pb-5 pt-4 text-white sm:px-6 sm:pb-6">
-            <h3 className="line-clamp-2 text-[1.24rem] font-black leading-[1.08] text-white sm:text-[1.34rem]">
+            {hasAccess ? (
+              <div className="mb-3 inline-flex items-center self-start rounded-full border border-primary-blue/25 bg-primary-blue/14 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-blue">
+                {courseAccess?.statusLabel ?? "Enrolled"}
+              </div>
+            ) : null}
+
+            <h3 className="line-clamp-3 text-[1.08rem] font-black leading-[1.12] text-white sm:text-[1.16rem]">
               {course.title}
             </h3>
 
@@ -226,12 +232,27 @@ export function CourseCard({
               <span>{formatNumber(course.totalStudents)} students</span>
             </div>
 
+            {hasAccess && (courseAccess?.progress ?? 0) > 0 ? (
+              <div className="mt-3">
+                <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-medium text-white/68">
+                  <span>{courseAccess?.actionLabel ?? "Continue Learning"}</span>
+                  <span className="text-white">{courseAccess?.progress ?? 0}%</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-primary-blue"
+                    style={{ width: `${courseAccess?.progress ?? 0}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
             <button
               type="button"
               onClick={hasAccess ? handleResumeLearning : handlePrimaryAction}
               disabled={enrolling && !hasAccess}
               className={cn(
-                "pointer-events-auto mt-auto inline-flex w-full items-center justify-center rounded-[18px] px-5 py-3.5 text-base font-semibold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                "pointer-events-auto mt-auto inline-flex w-full items-center justify-center rounded-[16px] px-4 py-2.5 text-sm font-semibold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                 buttonClassName
               )}
             >

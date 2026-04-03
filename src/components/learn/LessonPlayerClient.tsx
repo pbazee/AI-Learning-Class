@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { AICopilot } from "@/components/courses/AICopilot";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
@@ -181,6 +182,7 @@ export function LessonPlayerClient({
   hasFullCourseAccess: boolean;
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const modules = course.modules ?? [];
   const allLessons = useMemo(() => modules.flatMap((module) => module.lessons), [modules]);
   const isLessonUnlocked = useCallback(
@@ -249,6 +251,7 @@ export function LessonPlayerClient({
     offsetX: number;
     offsetY: number;
   } | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setCompletedLessonIds(initialCompletedLessonIds);
@@ -291,6 +294,8 @@ export function LessonPlayerClient({
 
       if (nextIsDesktop) {
         setNotesPanelPosition((current) => clampPanelPosition(current, notesPanelSize));
+      } else {
+        setSidebarOpen(false);
       }
     };
 
@@ -586,6 +591,39 @@ export function LessonPlayerClient({
     [isDesktopPanel, notesPanelPosition.x, notesPanelPosition.y]
   );
 
+  const handlePlayerTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  }, []);
+
+  const handlePlayerTouchEnd = useCallback(
+    (event: React.TouchEvent<HTMLDivElement>) => {
+      const start = swipeStartRef.current;
+      swipeStartRef.current = null;
+
+      if (!start) {
+        return;
+      }
+
+      const touch = event.changedTouches[0];
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+
+      if (Math.abs(deltaX) < 72 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
+        return;
+      }
+
+      if (deltaX < 0 && nextLesson) {
+        router.push(`/learn/${course.slug}/${nextLesson.id}`);
+      }
+
+      if (deltaX > 0 && prevLesson) {
+        router.push(`/learn/${course.slug}/${prevLesson.id}`);
+      }
+    },
+    [course.slug, nextLesson, prevLesson, router]
+  );
+
   const notesStatusLabel =
     noteState === "saving"
       ? "Saving notes..."
@@ -595,9 +633,15 @@ export function LessonPlayerClient({
           : "Saved"
         : noteState === "error"
           ? "Save failed"
-          : noteState === "dirty"
+        : noteState === "dirty"
             ? "Unsaved changes"
             : "No saved notes yet";
+  const mobileNotesHeight = copilotOpen ? 34 : 44;
+  const mobileCopilotHeight = notesPanelOpen ? 28 : 40;
+  const mobileSheetBottom = "5.75rem";
+  const mobileCopilotOffset = notesPanelOpen
+    ? `calc(${mobileNotesHeight}vh + 6.25rem)`
+    : mobileSheetBottom;
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -792,8 +836,8 @@ export function LessonPlayerClient({
           )}
         </AnimatePresence>
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="border-b border-border bg-card">
+        <main className="flex-1 overflow-y-auto pb-32 lg:pb-0">
+          <div className="sticky top-0 z-20 border-b border-border bg-card lg:static">
             <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
               <div className="mb-4 flex items-center justify-between gap-4 md:hidden">
                 <div>
@@ -834,7 +878,11 @@ export function LessonPlayerClient({
                   </div>
                 ) : null}
 
-                <div className="relative flex aspect-video w-full items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900">
+                <div
+                  className="relative flex aspect-video w-full items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900"
+                  onTouchStart={handlePlayerTouchStart}
+                  onTouchEnd={handlePlayerTouchEnd}
+                >
                   {currentLesson.type === "VIDEO" && primaryAssetUrl ? (
                     <>
                       <video
@@ -1246,7 +1294,7 @@ export function LessonPlayerClient({
         </main>
 
         <AnimatePresence>
-          {copilotOpen && (
+          {copilotOpen && isDesktopPanel && (
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: 384 }}
@@ -1260,21 +1308,131 @@ export function LessonPlayerClient({
       </div>
 
       <AnimatePresence>
+        {!isDesktopPanel && copilotOpen ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.18 }}
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex flex-col lg:hidden"
+          >
+            <div
+              className="pointer-events-auto mx-3 overflow-hidden rounded-[28px] border border-border bg-card shadow-[0_32px_90px_-40px_rgba(15,23,42,0.72)]"
+              style={{ height: `${mobileCopilotHeight}vh`, marginBottom: mobileCopilotOffset }}
+            >
+              <AICopilot
+                courseTitle={course.title}
+                onClose={() => setCopilotOpen(false)}
+                variant="embedded"
+              />
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 pt-3 backdrop-blur-xl lg:hidden">
+        <div className="rounded-[24px] border border-border bg-card px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_24px_60px_-38px_rgba(15,23,42,0.45)]">
+          <div className="mb-3 flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span>
+              Lesson {Math.max(currentIndex + 1, 1)} of {allLessons.length}
+            </span>
+            <span>{progress}% complete</span>
+          </div>
+
+          <div className="grid grid-cols-5 gap-2">
+            {prevLesson ? (
+              <Link
+                href={`/learn/${course.slug}/${prevLesson.id}`}
+                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-border px-2 py-2 text-[11px] font-semibold text-foreground"
+              >
+                <ChevronLeft className="h-4 w-4 text-primary-blue" />
+                Prev
+              </Link>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-border px-2 py-2 text-[11px] font-semibold text-muted-foreground">
+                <ChevronLeft className="h-4 w-4" />
+                Prev
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setNotesPanelOpen((current) => !current)}
+              className={cn(
+                "flex flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-[11px] font-semibold transition-colors",
+                notesPanelOpen
+                  ? "border-primary-blue bg-primary-blue text-white"
+                  : "border-border text-foreground"
+              )}
+            >
+              <NotebookText className="h-4 w-4" />
+              Notes
+            </button>
+
+            <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-2 py-2 text-[11px] font-semibold text-primary-blue">
+              <CheckCircle2 className="h-4 w-4" />
+              {completedCount}/{allLessons.length}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setCopilotOpen((current) => !current)}
+              className={cn(
+                "flex flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-[11px] font-semibold transition-colors",
+                copilotOpen
+                  ? "border-primary-blue bg-primary-blue text-white"
+                  : "border-border text-foreground"
+              )}
+            >
+              <Sparkles className="h-4 w-4" />
+              Copilot
+            </button>
+
+            {nextLesson ? (
+              <Link
+                href={`/learn/${course.slug}/${nextLesson.id}`}
+                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-border px-2 py-2 text-[11px] font-semibold text-foreground"
+              >
+                <ChevronRight className="h-4 w-4 text-primary-blue" />
+                Next
+              </Link>
+            ) : hasLockedLessonsAhead ? (
+              <Link
+                href={`/courses/${course.slug}`}
+                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-2 py-2 text-[11px] font-semibold text-primary-blue"
+              >
+                <Lock className="h-4 w-4" />
+                Unlock
+              </Link>
+            ) : (
+              <Link
+                href={`/courses/${course.slug}`}
+                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-border px-2 py-2 text-[11px] font-semibold text-foreground"
+              >
+                <Award className="h-4 w-4 text-primary-blue" />
+                Course
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
         {notesPanelOpen && (
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ duration: 0.18 }}
-            className="pointer-events-none fixed inset-0 z-40"
+            className="pointer-events-none fixed inset-0 z-40 flex flex-col"
           >
             <div
               ref={notesPanelRef}
               className={cn(
-                "pointer-events-auto fixed overflow-hidden rounded-[28px] border border-border bg-card/96 shadow-[0_32px_90px_-40px_rgba(15,23,42,0.72)] backdrop-blur-xl",
+                "overflow-hidden rounded-[28px] border border-border bg-card/96 shadow-[0_32px_90px_-40px_rgba(15,23,42,0.72)] backdrop-blur-xl",
                 isDesktopPanel
-                  ? "resize overflow-auto"
-                  : "inset-x-3 bottom-3 top-[5.25rem]"
+                  ? "pointer-events-auto fixed resize overflow-auto"
+                  : "pointer-events-auto mx-3 mt-auto"
               )}
               style={
                 isDesktopPanel
@@ -1286,7 +1444,10 @@ export function LessonPlayerClient({
                       minWidth: DESKTOP_PANEL_MIN_WIDTH,
                       minHeight: DESKTOP_PANEL_MIN_HEIGHT,
                     }
-                  : undefined
+                  : {
+                      height: `${mobileNotesHeight}vh`,
+                      marginBottom: mobileSheetBottom,
+                    }
               }
             >
               {/* Updated: floating notes panel is draggable on desktop and stays open while the learner navigates the player. */}

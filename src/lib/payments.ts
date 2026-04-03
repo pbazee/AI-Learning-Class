@@ -1,10 +1,19 @@
 import "server-only";
 
-import { Prisma, type EnrollmentStatus } from "@prisma/client";
+import { EntitlementSource, Prisma, type EnrollmentStatus } from "@prisma/client";
+import {
+  revokeCatalogEntitlements,
+  upsertManagedSubscriptionEntitlement,
+} from "@/lib/access-control";
 import type { CheckoutGateway, CheckoutQuote } from "@/lib/checkout";
 import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
 import { evaluateAffiliateFraud } from "@/lib/growth-utils";
+import { recordUserCourseOwnership } from "@/lib/learner-records";
 import { prisma } from "@/lib/prisma";
+import {
+  ensureOwnerTeamWorkspace,
+  syncWorkspaceMemberAccessWindow,
+} from "@/lib/team-workspace";
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -256,13 +265,19 @@ async function resolvePlanCourseIds(
 async function activatePlanAccess(
   transaction: TransactionClient,
   userId: string,
-  planSlug: string
+  planSlug: string,
+  options?: {
+    stripeSubscriptionId?: string | null;
+    currentPeriodStart?: Date;
+    currentPeriodEnd?: Date;
+    billingCycle?: string;
+  }
 ) {
   const plan = await transaction.subscriptionPlan.findUnique({
     where: { slug: planSlug },
     select: {
       id: true,
-      coursesIncluded: true,
+      slug: true,
       isActive: true,
     },
   });
@@ -272,28 +287,52 @@ async function activatePlanAccess(
   }
 
   const now = new Date();
-  const activeSubscription = await transaction.userSubscription.findFirst({
+  const currentPeriodStart = options?.currentPeriodStart ?? now;
+  const currentPeriodEnd = options?.currentPeriodEnd ?? addMonths(currentPeriodStart, 1);
+  const billingCycle = options?.billingCycle ?? "monthly";
+  const stripeSubscriptionId = normalizeOptionalValue(options?.stripeSubscriptionId);
+
+  const existingSubscription = stripeSubscriptionId
+    ? await transaction.userSubscription.findFirst({
+        where: {
+          stripeSubscriptionId,
+        },
+        select: {
+          id: true,
+        },
+      })
+    : await transaction.userSubscription.findFirst({
+        where: {
+          userId,
+          planId: plan.id,
+          status: { in: ["ACTIVE", "TRIALING"] },
+          currentPeriodEnd: { gte: now },
+        },
+        orderBy: { currentPeriodEnd: "desc" },
+        select: {
+          id: true,
+        },
+      });
+
+  await transaction.userSubscription.updateMany({
     where: {
       userId,
-      planId: plan.id,
       status: { in: ["ACTIVE", "TRIALING"] },
-      currentPeriodEnd: { gte: now },
+      ...(existingSubscription ? { id: { not: existingSubscription.id } } : {}),
     },
-    orderBy: { currentPeriodEnd: "desc" },
-    select: {
-      id: true,
-      currentPeriodEnd: true,
+    data: {
+      status: "CANCELLED",
     },
   });
 
-  const billingAnchor = activeSubscription?.currentPeriodEnd ?? now;
-  const currentPeriodEnd = addMonths(billingAnchor, 1);
-
-  const subscription = activeSubscription
+  const subscription = existingSubscription
     ? await transaction.userSubscription.update({
-        where: { id: activeSubscription.id },
+        where: { id: existingSubscription.id },
         data: {
           status: "ACTIVE",
+          billingCycle,
+          stripeSubscriptionId,
+          currentPeriodStart,
           currentPeriodEnd,
         },
         select: { id: true },
@@ -303,21 +342,35 @@ async function activatePlanAccess(
           userId,
           planId: plan.id,
           status: "ACTIVE",
-          billingCycle: "monthly",
-          currentPeriodStart: now,
+          billingCycle,
+          stripeSubscriptionId,
+          currentPeriodStart,
           currentPeriodEnd,
         },
         select: { id: true },
       });
 
-  const coveredCourseIds = await resolvePlanCourseIds(
-    transaction,
-    plan.coursesIncluded
-  );
+  let teamWorkspaceId: string | null = null;
 
-  await grantTimedCourseAccess(transaction, userId, coveredCourseIds, currentPeriodEnd);
+  if (plan.slug === "teams") {
+    const workspace = await ensureOwnerTeamWorkspace(transaction, userId, "AI Learning Class Team");
+    teamWorkspaceId = workspace.id;
+    await syncWorkspaceMemberAccessWindow(transaction, workspace.id, currentPeriodEnd);
+  }
 
-  return subscription.id;
+  await upsertManagedSubscriptionEntitlement(transaction, {
+    userId,
+    planSlug,
+    stripeSubscriptionId,
+    teamWorkspaceId,
+    startsAt: currentPeriodStart,
+    endsAt: currentPeriodEnd,
+  });
+
+  return {
+    subscriptionId: subscription.id,
+    teamWorkspaceId,
+  };
 }
 
 async function incrementCouponUsage(
@@ -548,11 +601,16 @@ export async function finalizeCheckoutOrder({
   affiliateCode,
   couponCode,
   customerEmail,
+  customerId,
   gateway,
   orderId,
   planSlug,
   providerReference,
   receiptUrl,
+  stripeSubscriptionId,
+  currentPeriodStart,
+  currentPeriodEnd,
+  billingCycle,
 }: {
   gateway: CheckoutGateway;
   orderId?: string | null;
@@ -562,11 +620,18 @@ export async function finalizeCheckoutOrder({
   couponCode?: string | null;
   affiliateCode?: string | null;
   customerEmail?: string | null;
+  customerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  currentPeriodStart?: Date | null;
+  currentPeriodEnd?: Date | null;
+  billingCycle?: string | null;
 }) {
   const normalizedOrderId = normalizeOptionalValue(orderId);
   const normalizedPlanSlug = normalizeOptionalValue(planSlug);
   const normalizedReceiptUrl = normalizeOptionalValue(receiptUrl);
   const normalizedCustomerEmail = normalizeOptionalValue(customerEmail);
+  const normalizedCustomerId = normalizeOptionalValue(customerId);
+  const normalizedStripeSubscriptionId = normalizeOptionalValue(stripeSubscriptionId);
 
   return prisma.$transaction(async (transaction) => {
     const order = normalizedOrderId
@@ -638,11 +703,40 @@ export async function finalizeCheckoutOrder({
 
     if (purchasedCourseIds.length > 0) {
       await grantLifetimeCourseAccess(transaction, order.userId, purchasedCourseIds);
+      await recordUserCourseOwnership(
+        order.userId,
+        purchasedCourseIds,
+        {
+          accessSource: "purchase",
+          lifetimeAccess: true,
+          ownedAt: new Date(),
+        },
+        transaction
+      );
     }
 
     const subscriptionId = normalizedPlanSlug
-      ? await activatePlanAccess(transaction, order.userId, normalizedPlanSlug)
+      ? (
+          await activatePlanAccess(transaction, order.userId, normalizedPlanSlug, {
+            stripeSubscriptionId: normalizedStripeSubscriptionId,
+            currentPeriodStart: currentPeriodStart ?? undefined,
+            currentPeriodEnd: currentPeriodEnd ?? undefined,
+            billingCycle: billingCycle ?? undefined,
+          })
+        ).subscriptionId
       : null;
+
+    if (normalizedCustomerId) {
+      await transaction.user.updateMany({
+        where: {
+          id: order.userId,
+          OR: [{ stripeCustomerId: null }, { stripeCustomerId: { not: normalizedCustomerId } }],
+        },
+        data: {
+          stripeCustomerId: normalizedCustomerId,
+        },
+      });
+    }
 
     await incrementCouponUsage(transaction, couponCode ?? null);
     await recordAffiliateConversion(transaction, {
@@ -657,5 +751,125 @@ export async function finalizeCheckoutOrder({
       orderId: order.id,
       subscriptionId,
     };
+  });
+}
+
+export async function syncManagedStripeSubscription({
+  stripeSubscriptionId,
+  customerId,
+  status,
+  currentPeriodStart,
+  currentPeriodEnd,
+  billingCycle,
+}: {
+  stripeSubscriptionId: string;
+  customerId?: string | null;
+  status: "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELLED";
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+  billingCycle: string;
+}) {
+  const normalizedStripeSubscriptionId = normalizeOptionalValue(stripeSubscriptionId);
+
+  if (!normalizedStripeSubscriptionId) {
+    throw new Error("Missing Stripe subscription identifier.");
+  }
+
+  return prisma.$transaction(async (transaction) => {
+    const subscription = await transaction.userSubscription.findFirst({
+      where: {
+        stripeSubscriptionId: normalizedStripeSubscriptionId,
+      },
+      include: {
+        plan: {
+          select: {
+            slug: true,
+          },
+        },
+      },
+    });
+
+    if (!subscription) {
+      return null;
+    }
+
+    await transaction.userSubscription.update({
+      where: { id: subscription.id },
+      data: {
+        status,
+        billingCycle,
+        currentPeriodStart,
+        currentPeriodEnd,
+      },
+    });
+
+    if (customerId) {
+      await transaction.user.updateMany({
+        where: {
+          id: subscription.userId,
+          OR: [{ stripeCustomerId: null }, { stripeCustomerId: { not: customerId } }],
+        },
+        data: {
+          stripeCustomerId: customerId,
+        },
+      });
+    }
+
+    if (status === "ACTIVE" || status === "TRIALING") {
+      let teamWorkspaceId: string | null = null;
+
+      if (subscription.plan.slug === "teams") {
+        const workspace = await ensureOwnerTeamWorkspace(
+          transaction,
+          subscription.userId,
+          "AI Learning Class Team"
+        );
+        teamWorkspaceId = workspace.id;
+        await syncWorkspaceMemberAccessWindow(transaction, workspace.id, currentPeriodEnd);
+      }
+
+      await upsertManagedSubscriptionEntitlement(transaction, {
+        userId: subscription.userId,
+        planSlug: subscription.plan.slug,
+        stripeSubscriptionId: normalizedStripeSubscriptionId,
+        teamWorkspaceId,
+        startsAt: currentPeriodStart,
+        endsAt: currentPeriodEnd,
+      });
+
+      return subscription.id;
+    }
+
+    await transaction.userEntitlement.updateMany({
+      where: {
+        userId: subscription.userId,
+        stripeSubscriptionId: normalizedStripeSubscriptionId,
+        source: "SUBSCRIPTION",
+        status: "ACTIVE",
+      },
+      data: {
+        status: "CANCELLED",
+        endsAt: currentPeriodEnd,
+      },
+    });
+
+    if (subscription.plan.slug === "teams") {
+      const workspace = await transaction.teamWorkspace.findFirst({
+        where: { ownerUserId: subscription.userId },
+        select: { id: true },
+      });
+
+      if (workspace) {
+        await syncWorkspaceMemberAccessWindow(transaction, workspace.id, null);
+      }
+    }
+
+    await revokeCatalogEntitlements(transaction, {
+      userId: subscription.userId,
+      source: EntitlementSource.SUBSCRIPTION,
+      at: currentPeriodEnd,
+    });
+
+    return subscription.id;
   });
 }

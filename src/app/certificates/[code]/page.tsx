@@ -1,10 +1,20 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { Award, Brain, Download, ExternalLink, ShieldCheck } from "lucide-react";
-import { Navbar } from "@/components/layout/Navbar";
+import { notFound, redirect } from "next/navigation";
+import { Download, ExternalLink, Linkedin, Mail, ShieldCheck } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
+import { Navbar } from "@/components/layout/Navbar";
+import { buildCertificatePresentation, getCertificatePdfHref } from "@/lib/certificate-presenter";
 import { getPublicCertificateByCode } from "@/lib/learner-records";
-import { CertificatePrintTrigger } from "@/components/certificates/CertificatePrintTrigger";
+
+function CertificateLogoMark() {
+  return (
+    <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-white/15 bg-[radial-gradient(circle_at_30%_20%,rgba(141,180,255,0.28),transparent_45%),linear-gradient(145deg,#10203f,#0b1327)] shadow-[0_28px_80px_-42px_rgba(0,86,210,0.95)]">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-slate-950/60 text-3xl font-black tracking-[-0.08em] text-white">
+        AI
+      </div>
+    </div>
+  );
+}
 
 export default async function CertificateDetailPage({
   params,
@@ -14,160 +24,197 @@ export default async function CertificateDetailPage({
   searchParams: Promise<{ download?: string }>;
 }) {
   const [{ code }, { download }] = await Promise.all([params, searchParams]);
+
+  if (download === "1") {
+    redirect(getCertificatePdfHref(code, { download: true }));
+  }
+
   const certificate = await getPublicCertificateByCode(code);
 
   if (!certificate) {
     notFound();
   }
 
-  const shouldPrint = download === "1";
-  const recipientName = certificate.user.name || certificate.user.email || "AI Learning Class Learner";
-  const issuedLabel = new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(certificate.issuedAt));
-  const certificateHref = `/certificates/${encodeURIComponent(certificate.code)}`;
-  const publicBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "";
-  const verifyUrl = publicBaseUrl ? `${publicBaseUrl}${certificateHref}` : certificateHref;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(verifyUrl)}`;
+  const presentation = await buildCertificatePresentation(certificate);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="print:hidden">
-        <Navbar />
-      </div>
-      <CertificatePrintTrigger shouldPrint={shouldPrint} />
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fc_0%,#edf2ff_34%,#eef2f9_100%)] dark:bg-[linear-gradient(180deg,#030712_0%,#07101d_36%,#020617_100%)]">
+      <Navbar />
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12 print:max-w-none print:px-0 print:py-0">
-        <div className="relative overflow-hidden rounded-[30px] border border-primary-blue/20 bg-[#0b1730] text-white shadow-[0_40px_120px_-60px_rgba(15,23,42,0.95)] print:rounded-none print:border-0 print:shadow-none">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.28),transparent_42%),linear-gradient(180deg,rgba(15,23,42,0.05),rgba(15,23,42,0.32))]" />
-          <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.12)_1px,transparent_1px)] [background-size:36px_36px]" />
-          <div className="pointer-events-none absolute inset-4 rounded-[24px] border border-white/10 sm:inset-5" />
-          <div className="pointer-events-none absolute inset-[22px] rounded-[18px] border border-primary-blue/20" />
+      <main className="relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(circle_at_top,rgba(0,86,210,0.22),transparent_58%)]" />
 
-          <div className="relative p-6 sm:p-8 lg:p-12">
-            <div className="print:hidden mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-              <Link
-                href={certificateHref}
-                scroll
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/[0.15] bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/15"
-              >
-                <ExternalLink className="h-4 w-4" /> View Certificate
-              </Link>
-              <Link
-                href={`${certificateHref}?download=1`}
-                scroll
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-blue/90"
-              >
-                <Download className="h-4 w-4" /> Download
-              </Link>
-            </div>
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-14">
+          <section className="relative overflow-hidden rounded-[34px] border border-slate-200/70 bg-[#0b1327] text-white shadow-[0_42px_120px_-56px_rgba(2,6,23,0.92)] dark:border-slate-800">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(141,180,255,0.16),transparent_32%),radial-gradient(circle_at_bottom_left,rgba(37,99,235,0.12),transparent_32%)]" />
+            <div className="pointer-events-none absolute -right-12 top-12 h-72 w-72 rounded-full bg-primary-blue/10 blur-3xl" />
+            <div className="pointer-events-none absolute -left-16 bottom-0 h-80 w-80 rounded-full bg-white/5 blur-3xl" />
+            <div className="pointer-events-none absolute inset-4 rounded-[28px] border border-white/10 sm:inset-5" />
 
-            <div className="mx-auto max-w-4xl text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-primary-blue shadow-[0_24px_60px_-34px_rgba(59,130,246,0.8)]">
-                <Brain className="h-8 w-8" />
-              </div>
-              <p className="mt-5 text-xs font-semibold uppercase tracking-[0.34em] text-primary-blue sm:text-sm">
-                AI Learning Class
-              </p>
-              <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/70 sm:text-xs">
-                Official Learning Credential
-              </p>
-
-              <div className="mt-10 inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.08] px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/80">
-                <Award className="h-3.5 w-3.5 text-primary-blue" />
-                Certificate of Completion
+            <div className="relative p-5 sm:p-8 lg:p-12">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                <Link
+                  href={presentation.viewPdfHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  View Certificate
+                </Link>
+                <Link
+                  href={presentation.downloadPdfHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white shadow-[0_22px_50px_-26px_rgba(0,86,210,0.95)] transition hover:bg-primary-blue/90"
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </Link>
               </div>
 
-              <h1 className="mt-6 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">
-                Certificate of Completion
-              </h1>
-              <p className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-white/[0.78] sm:text-base">
-                This certifies that
-              </p>
-              <p className="mt-4 break-words text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
-                {recipientName}
-              </p>
-              <p className="mx-auto mt-6 max-w-3xl text-base leading-8 text-white/[0.84] sm:text-lg">
-                successfully completed <span className="font-semibold text-white">{certificate.course.title}</span>
-                , demonstrating practical achievement through AI Learning Class coursework.
-              </p>
-            </div>
+              <div className="mx-auto mt-8 max-w-4xl text-center sm:mt-10">
+                <CertificateLogoMark />
+                <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.34em] text-[#8db4ff] sm:text-xs">
+                  OFFICIAL LEARNING CREDENTIAL
+                </p>
+                <h1 className="mt-6 text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-[4.35rem] lg:leading-[0.95]">
+                  Certificate of Completion
+                </h1>
+                <p className="mt-8 text-sm font-medium text-white/78 sm:text-base">
+                  This certifies that
+                </p>
+                <p className="mt-4 break-words text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-[4.2rem] lg:leading-[0.96]">
+                  {presentation.recipientName}
+                </p>
+                <p className="mx-auto mt-6 max-w-3xl text-base leading-8 text-white/80 sm:text-lg">
+                  {presentation.completionStatement}
+                </p>
+              </div>
 
-            <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)] lg:items-start">
-              <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-5 backdrop-blur-sm sm:p-6">
-                <div className="grid gap-5 sm:grid-cols-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-blue">
-                      Certificate Code
-                    </p>
-                    <p className="mt-2 break-all font-mono text-sm text-white">{certificate.code}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-blue">
-                      Issued Date
-                    </p>
-                    <p className="mt-2 text-sm text-white">{issuedLabel}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-blue">
-                      Credential Status
-                    </p>
-                    <p className="mt-2 flex items-center gap-2 text-sm text-white">
-                      <ShieldCheck className="h-4 w-4 text-primary-blue" />
-                      Lifetime credential
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-6 border-t border-white/10 pt-6">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/60">
-                    Digital Signature
-                  </p>
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div className="mt-10 grid gap-6 lg:mt-14 lg:grid-cols-[minmax(0,1.15fr)_320px]">
+                <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm sm:p-7">
+                  <div className="space-y-6">
                     <div>
-                      <p className="text-2xl font-semibold italic tracking-[0.08em] text-white">AI Learning Class</p>
-                      <p className="mt-1 text-sm font-medium text-white/[0.82]">Admin Signature</p>
-                      <p className="mt-1 text-xs leading-6 text-white/[0.62]">
-                        Authorized by the AI Learning Class credential office.
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8db4ff]">
+                        Credential Code
+                      </p>
+                      <p className="mt-2 break-all font-mono text-sm text-white sm:text-base">
+                        {presentation.code}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-left text-xs text-white/[0.72]">
-                      <p className="font-semibold uppercase tracking-[0.18em] text-primary-blue">
-                        Verify Online
+
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8db4ff]">
+                        Issued Date
                       </p>
-                      <Link href={certificateHref} scroll className="mt-2 block break-all text-white transition-colors hover:text-primary-blue">
-                        {verifyUrl}
-                      </Link>
+                      <p className="mt-2 text-lg font-semibold text-white">
+                        {presentation.issuedLabel}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8db4ff]">
+                        Lifetime Status
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-sm font-semibold text-white">
+                        <ShieldCheck className="h-4 w-4 text-[#8db4ff]" />
+                        {presentation.statusLabel}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 border-t border-white/10 pt-7">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
+                      Digital Signature
+                    </p>
+                    <div className="mt-5 max-w-[260px]">
+                      <p className="text-[2rem] font-semibold italic tracking-[-0.05em] text-white">
+                        AI Learning Class
+                      </p>
+                      <div className="mt-1 h-px w-full bg-white/45" />
+                      <p className="mt-3 text-sm font-medium text-white/80">
+                        Admin Signature
+                      </p>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-5 text-center backdrop-blur-sm sm:p-6">
-                <div className="mx-auto flex h-36 w-36 items-center justify-center overflow-hidden rounded-[24px] border border-white/[0.12] bg-white p-3 shadow-[0_28px_60px_-36px_rgba(15,23,42,0.8)] sm:h-40 sm:w-40">
-                  <img
-                    src={qrUrl}
-                    alt="Verification QR code for this certificate"
-                    className="h-full w-full rounded-[16px] object-cover"
-                  />
+                <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm sm:p-7">
+                  <div className="mx-auto flex w-full max-w-[224px] items-center justify-center rounded-[28px] bg-white p-4 shadow-[0_28px_70px_-38px_rgba(2,6,23,0.8)]">
+                    <img
+                      src={presentation.qrDataUrl}
+                      alt={`Verification QR code for ${presentation.courseTitle}`}
+                      className="aspect-square w-full rounded-[18px] object-contain"
+                    />
+                  </div>
+                  <p className="mt-6 text-2xl font-bold tracking-tight text-white">
+                    Scan to Verify
+                  </p>
+                  <p className="mx-auto mt-3 max-w-[240px] text-sm leading-6 text-white/72">
+                    Employers and teams can validate this credential online instantly.
+                  </p>
+                  <a
+                    href={presentation.verifyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 block break-all text-sm font-medium text-[#8db4ff] transition hover:text-white"
+                  >
+                    {presentation.verifyDisplayUrl}
+                  </a>
                 </div>
-                <p className="mt-5 text-sm font-semibold uppercase tracking-[0.2em] text-primary-blue">
-                  Scan to verify
-                </p>
-                <p className="mt-2 text-sm leading-6 text-white/[0.72]">
-                  Employers and teams can validate this credential online using the QR code or the verification link.
-                </p>
               </div>
             </div>
-          </div>
+          </section>
+
+          <section className="mx-auto mt-6 max-w-5xl">
+            <div className="rounded-[28px] border border-slate-200/70 bg-white/80 p-4 shadow-[0_20px_60px_-46px_rgba(15,23,42,0.45)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/70">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Share your credential
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Add this certificate to your professional profiles and send a verified link.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2.5">
+                  <a
+                    href={presentation.shareLinks.linkedin}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary-blue/30 hover:bg-primary-blue/5 hover:text-primary-blue"
+                  >
+                    <Linkedin className="h-4 w-4" />
+                    LinkedIn
+                  </a>
+                  <a
+                    href={presentation.shareLinks.x}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary-blue/30 hover:bg-primary-blue/5 hover:text-primary-blue"
+                  >
+                    <span className="inline-flex h-4 w-4 items-center justify-center text-xs font-black">
+                      X
+                    </span>
+                    X
+                  </a>
+                  <a
+                    href={presentation.shareLinks.email}
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary-blue/30 hover:bg-primary-blue/5 hover:text-primary-blue"
+                  >
+                    <Mail className="h-4 w-4" />
+                    Email
+                  </a>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </main>
 
-      <div className="print:hidden">
-        <Footer />
-      </div>
+      <Footer />
     </div>
   );
 }

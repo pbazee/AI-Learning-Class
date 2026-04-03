@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { DollarSign, ArrowRight, Share2, TrendingUp } from "lucide-react";
 
 export function AffiliateSection({ hasJoined = false }: { hasJoined?: boolean }) {
-  const [commissionRate, setCommissionRate] = useState<number>(20);
+  const [commissionRate, setCommissionRate] = useState<number>(30);
 
   useEffect(() => {
     fetch("/api/admin/affiliate-program")
@@ -57,7 +57,7 @@ export function AffiliateSection({ hasJoined = false }: { hasJoined?: boolean })
 
             <div className="w-full shrink-0 sm:w-auto">
               <Link
-                href={hasJoined ? "/dashboard#affiliate-program" : "/affiliate"}
+                href={hasJoined ? "/affiliate/dashboard" : "/affiliate"}
                 className="group inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-8 py-4 text-base font-semibold text-primary-blue shadow-[0_20px_40px_rgba(0,0,0,0.22)] transition-all hover:bg-white/95 sm:w-auto"
               >
                 {hasJoined ? "Open Affiliate Dashboard" : "Join Affiliate Program"}

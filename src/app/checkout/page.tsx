@@ -30,6 +30,15 @@ type CheckoutQuote = {
   planSlug: string | null;
 };
 
+type CheckoutSessionResponse = {
+  accessCode?: string;
+  callbackUrl?: string;
+  gateway?: PaymentMethod;
+  reference?: string;
+  sessionId?: string;
+  url?: string;
+};
+
 function StripeMark() {
   return <span className="text-sm font-black tracking-[0.08em] text-[#635BFF]">Stripe</span>;
 }
@@ -104,6 +113,17 @@ export default function CheckoutPage() {
       })),
     [items]
   );
+  const isPlanCheckout = Boolean(planSlug);
+  const availablePaymentOptions = useMemo(
+    () => (isPlanCheckout ? paymentOptions.filter((option) => option.id === "stripe") : paymentOptions),
+    [isPlanCheckout]
+  );
+
+  useEffect(() => {
+    if (isPlanCheckout) {
+      setMethod("stripe");
+    }
+  }, [isPlanCheckout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,6 +171,47 @@ export default function CheckoutPage() {
     };
   }, [planSlug, requestItems]);
 
+  async function launchPaystackModal(payload: CheckoutSessionResponse) {
+    if (!payload.accessCode) {
+      throw new Error("Unable to load Paystack checkout right now.");
+    }
+
+    const { default: Paystack } = await import("@paystack/inline-js");
+    const popup = new Paystack();
+
+    popup.resumeTransaction(payload.accessCode, {
+      onLoad: () => {
+        setProcessing(false);
+      },
+      onCancel: () => {
+        setProcessing(false);
+        setQuoteError("Paystack checkout was cancelled before payment completed.");
+      },
+      onError: (error: { message?: string }) => {
+        setProcessing(false);
+        setQuoteError(error.message || "Unable to load Paystack checkout right now.");
+      },
+      onSuccess: (transaction: { reference?: string; trxref?: string }) => {
+        const reference = transaction.reference || transaction.trxref || payload.reference;
+
+        if (!reference) {
+          setProcessing(false);
+          setQuoteError("Paystack completed, but we could not read the payment reference.");
+          return;
+        }
+
+        const completionUrl = new URL(
+          payload.callbackUrl || "/checkout/complete?gateway=paystack",
+          window.location.origin
+        );
+        completionUrl.searchParams.set("gateway", "paystack");
+        completionUrl.searchParams.set("reference", reference);
+
+        window.location.assign(completionUrl.toString());
+      },
+    });
+  }
+
   async function handleCheckout(event: React.FormEvent) {
     event.preventDefault();
 
@@ -177,8 +238,18 @@ export default function CheckoutPage() {
       });
       const payload = await response.json().catch(() => null);
 
-      if (!response.ok || !payload?.url) {
+      if (!response.ok) {
         throw new Error(payload?.error || "Unable to start checkout right now.");
+      }
+
+      if (method === "paystack") {
+        setQuoteError(null);
+        await launchPaystackModal(payload as CheckoutSessionResponse);
+        return;
+      }
+
+      if (!payload?.url) {
+        throw new Error("Unable to start checkout right now.");
       }
 
       window.location.assign(payload.url);
@@ -256,7 +327,7 @@ export default function CheckoutPage() {
                     <div className="surface-card p-5 sm:p-6">
                       <h2 className="mb-5 text-base font-bold text-foreground">Payment method</h2>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        {paymentOptions.map((option) => (
+                        {availablePaymentOptions.map((option) => (
                           <button
                             key={option.id}
                             type="button"
@@ -286,11 +357,13 @@ export default function CheckoutPage() {
                       </div>
 
                       <div className="mt-5 rounded-2xl border border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
-                        {method === "stripe"
+                        {isPlanCheckout
+                          ? "Plan billing is handled through Stripe so your Pro or Teams access stays synced with your live subscription period."
+                          : method === "stripe"
                           ? "You will be redirected to Stripe Checkout to complete payment securely."
                           : method === "paypal"
                             ? "You will be redirected to PayPal to approve and complete payment."
-                            : "You will be redirected to Paystack to finish payment with your preferred regional method."}
+                            : "Paystack will open its secure checkout modal here so customers can choose card, mobile money, or bank transfer methods enabled for their region."}
                       </div>
                     </div>
                   ) : (
@@ -326,7 +399,9 @@ export default function CheckoutPage() {
                       ) : (
                         <>
                           <Lock className="h-5 w-5" />
-                          Pay {quote ? formatPrice(quote.total) : ""}
+                          {isPlanCheckout
+                            ? `Start ${quote?.planSlug === "teams" ? "Teams" : "Pro"} Subscription`
+                            : `Pay ${quote ? formatPrice(quote.total) : ""}`}
                         </>
                       )}
                     </button>

@@ -41,8 +41,8 @@ export default async function AffiliatePage() {
     }),
     getUserAffiliateStatus(user.id),
   ]);
-  const commissionRate = program?.commissionRate ?? 20;
-  const ctaHref = affiliateStatus.hasJoined ? "/dashboard#affiliate-program" : "#affiliate-application";
+  const commissionRate = program?.commissionRate ?? 30;
+  const ctaHref = affiliateStatus.hasJoined ? "/affiliate/dashboard" : "#affiliate-application";
   const ctaLabel = affiliateStatus.hasJoined ? "Open Affiliate Dashboard" : "Apply Now";
 
   return (
@@ -68,20 +68,20 @@ export default async function AffiliatePage() {
         </div>
       </section>
 
-      <section className="border-b border-border py-12 sm:py-16">
+      <section className="border-b border-border bg-[#050813] py-12 sm:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <h2 className="mb-10 text-center text-2xl font-bold text-foreground sm:mb-12">How It Works</h2>
+          <h2 className="mb-10 text-center text-2xl font-bold text-white sm:mb-12">How It Works</h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 sm:gap-8">
             {steps.map((step, index) => (
-              <div key={step.title} className="flex flex-col items-center rounded-3xl border border-border bg-card p-6 text-center shadow-sm">
+              <div key={step.title} className="flex flex-col items-center rounded-3xl border border-white/10 bg-white/5 p-6 text-center shadow-[0_24px_60px_-42px_rgba(15,23,42,0.85)]">
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-blue/12 ring-1 ring-primary-blue/20">
                   <step.icon className="h-8 w-8 text-primary-blue" />
                 </div>
                 <div className="mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary-blue text-xs font-bold text-white">
                   {index + 1}
                 </div>
-                <h3 className="mt-2 font-bold text-foreground">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.description}</p>
+                <h3 className="mt-2 font-bold text-white">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-white">{step.description}</p>
               </div>
             ))}
           </div>

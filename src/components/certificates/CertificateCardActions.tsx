@@ -8,16 +8,14 @@ import { useToast } from "@/components/ui/ToastProvider";
 
 export function CertificateCardActions({
   code,
-  pdfUrl,
 }: {
   code: string;
-  pdfUrl?: string;
 }) {
   const { toast } = useToast();
   const router = useRouter();
 
   const certificateHref = useMemo(() => `/certificates/${encodeURIComponent(code)}`, [code]);
-  const downloadHref = pdfUrl || `${certificateHref}?download=1`;
+  const downloadHref = useMemo(() => `/api/certificates/${encodeURIComponent(code)}/pdf?download=1`, [code]);
 
   function navigateTo(href: string) {
     router.push(href, { scroll: true });
@@ -59,23 +57,14 @@ export function CertificateCardActions({
       >
         <Share2 className="h-4 w-4" /> Share
       </button>
-      {pdfUrl ? (
-        <Link
-          href={downloadHref}
-          target="_blank"
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/80"
-        >
-          <Download className="h-4 w-4" /> Download
-        </Link>
-      ) : (
-        <button
-          type="button"
-          onClick={() => navigateTo(downloadHref)}
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/80"
-        >
-          <Download className="h-4 w-4" /> Download
-        </button>
-      )}
+      <Link
+        href={downloadHref}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/80"
+      >
+        <Download className="h-4 w-4" /> Download
+      </Link>
     </div>
   );
 }

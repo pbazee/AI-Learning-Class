@@ -1,6 +1,9 @@
 // src/app/api/stripe/webhook/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { finalizeCheckoutOrder } from "@/lib/payments";
+import {
+  finalizeCheckoutOrder,
+  syncManagedStripeSubscription,
+} from "@/lib/payments";
 
 async function getStripeReceiptUrl(
   stripe: import("stripe").default,
@@ -48,6 +51,10 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as import("stripe").Stripe.Checkout.Session;
+        const subscription =
+          typeof session.subscription === "string"
+            ? await stripe.subscriptions.retrieve(session.subscription)
+            : null;
         const receiptUrl = await getStripeReceiptUrl(
           stripe,
           typeof session.payment_intent === "string"
@@ -59,14 +66,54 @@ export async function POST(req: NextRequest) {
           gateway: "stripe",
           orderId: session.metadata?.order_id,
           providerReference: session.id,
-          planSlug: session.metadata?.plan_slug,
+          planSlug: session.metadata?.plan_slug || subscription?.metadata?.plan_slug,
           couponCode: session.metadata?.applied_coupon,
           affiliateCode: session.metadata?.aff_code,
           customerEmail: session.customer_email,
+          customerId: typeof session.customer === "string" ? session.customer : null,
+          stripeSubscriptionId:
+            typeof session.subscription === "string" ? session.subscription : null,
+          currentPeriodStart: subscription
+            ? new Date(subscription.current_period_start * 1000)
+            : null,
+          currentPeriodEnd: subscription
+            ? new Date(subscription.current_period_end * 1000)
+            : null,
+          billingCycle:
+            subscription?.items.data[0]?.price.recurring?.interval === "year"
+              ? "yearly"
+              : subscription
+                ? "monthly"
+                : null,
           receiptUrl,
         });
 
         console.log("[stripe.webhook] Payment completed for:", session.customer_email);
+        break;
+      }
+
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as import("stripe").Stripe.Subscription;
+
+        await syncManagedStripeSubscription({
+          stripeSubscriptionId: subscription.id,
+          customerId: typeof subscription.customer === "string" ? subscription.customer : null,
+          status:
+            subscription.status === "active"
+              ? "ACTIVE"
+              : subscription.status === "trialing"
+                ? "TRIALING"
+                : subscription.status === "past_due"
+                  ? "PAST_DUE"
+                  : "CANCELLED",
+          currentPeriodStart: new Date(subscription.current_period_start * 1000),
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          billingCycle:
+            subscription.items.data[0]?.price.recurring?.interval === "year"
+              ? "yearly"
+              : "monthly",
+        });
+
         break;
       }
 
@@ -77,6 +124,20 @@ export async function POST(req: NextRequest) {
       }
 
       case "customer.subscription.deleted": {
+        const subscription = event.data.object as import("stripe").Stripe.Subscription;
+
+        await syncManagedStripeSubscription({
+          stripeSubscriptionId: subscription.id,
+          customerId: typeof subscription.customer === "string" ? subscription.customer : null,
+          status: "CANCELLED",
+          currentPeriodStart: new Date(subscription.current_period_start * 1000),
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          billingCycle:
+            subscription.items.data[0]?.price.recurring?.interval === "year"
+              ? "yearly"
+              : "monthly",
+        });
+
         console.log("[stripe.webhook] Subscription cancelled");
         break;
       }
