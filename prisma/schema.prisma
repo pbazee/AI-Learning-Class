@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,106 +8,93 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ====================== USERS ======================
 model User {
-  id                String   @id @default(uuid())
-  email             String   @unique
-  name              String?
-  avatarUrl         String?
-  role              Role     @default(STUDENT)
-  bio               String?
-  country           String?
-  preferredCurrency String   @default("USD")
-  stripeCustomerId  String?  @unique
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  coursesTaught      Course[]           @relation("InstructorCourses")
-  enrollments        Enrollment[]
-  orders             Order[]
-  certificates       Certificate[]
-  reviews            Review[]
-  progress           LessonProgress[]
-  quizResults        QuizResult[]
-  aiChatSessions     AIChatSession[]
-  blogPosts          BlogPost[]         @relation("BlogAuthor")
-  blogComments       BlogComment[]
-  subscriptions      UserSubscription[]
-  entitlements       UserEntitlement[]
-  ownedTeamWorkspaces TeamWorkspace[]     @relation("TeamWorkspaceOwner")
-  teamMemberships    TeamWorkspaceMember[] @relation("TeamWorkspaceMemberships")
-  sentTeamInvites    TeamWorkspaceInvite[] @relation("TeamWorkspaceInviteSender")
-  acceptedTeamInvites TeamWorkspaceInvite[] @relation("TeamWorkspaceInvitedUser")
-  invitedTeamMembers TeamWorkspaceMember[] @relation("TeamWorkspaceInvitedBy")
-  teamAssignmentsGiven TeamCourseAssignment[] @relation("TeamCourseAssignmentsGiven")
+  id                      String                 @id @default(uuid())
+  email                   String                 @unique
+  name                    String?
+  avatarUrl               String?
+  role                    Role                   @default(STUDENT)
+  bio                     String?
+  country                 String?
+  preferredCurrency       String                 @default("USD")
+  stripeCustomerId        String?                @unique
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  earnedDiscountCode      String?
+  referralCode            String?                @unique
+  referredById            String?
+  aiChatSessions          AIChatSession[]
+  affiliate               Affiliate?
+  auditLogs               AuditLog[]
+  blogComments            BlogComment[]
+  blogPosts               BlogPost[]             @relation("BlogAuthor")
+  certificates            Certificate[]
+  coursesTaught           Course[]               @relation("InstructorCourses")
+  enrollments             Enrollment[]
+  progress                LessonProgress[]
+  orders                  Order[]
+  quizResults             QuizResult[]
+  referredBy              Referral?              @relation("ReferredReferral")
+  referrals               Referral[]             @relation("ReferrerReferrals")
+  reviews                 Review[]
+  subscriptions           UserSubscription[]
+  lesson_notes            lesson_notes[]
+  teamAssignmentsGiven    TeamCourseAssignment[] @relation("TeamCourseAssignmentsGiven")
   teamAssignmentsReceived TeamCourseAssignment[] @relation("TeamCourseAssignmentsReceived")
-  affiliate          Affiliate?
-  referralCode       String?            @unique
-  referredById       String?
-  earnedDiscountCode String?
-  referrals          Referral[]         @relation("ReferrerReferrals")
-  referredBy         Referral?          @relation("ReferredReferral")
-  auditLogs          AuditLog[]
+  sentTeamInvites         TeamWorkspaceInvite[]  @relation("TeamWorkspaceInviteSender")
+  acceptedTeamInvites     TeamWorkspaceInvite[]  @relation("TeamWorkspaceInvitedUser")
+  invitedTeamMembers      TeamWorkspaceMember[]  @relation("TeamWorkspaceInvitedBy")
+  teamMemberships         TeamWorkspaceMember[]  @relation("TeamWorkspaceMemberships")
+  ownedTeamWorkspaces     TeamWorkspace[]        @relation("TeamWorkspaceOwner")
+  user_ai_usage           user_ai_usage[]
+  user_courses            user_courses[]
+  entitlements            UserEntitlement[]
+  user_wishlists          user_wishlists[]
 }
 
-enum Role {
-  STUDENT
-  INSTRUCTOR
-  ADMIN
-  SUPER_ADMIN
-}
-
-// ====================== CATEGORIES ======================
 model Category {
-    id          String     @id @default(uuid())
-    name        String     @unique
-    slug        String     @unique
-    description String?
-    imageUrl    String?    @map("image_url")
-    imagePath   String?    @map("image_path")
-    icon        String?
-    color       String?
-    isActive    Boolean    @default(true)
+  id          String     @id @default(uuid())
+  name        String     @unique
+  slug        String     @unique
+  description String?
+  icon        String?
+  color       String?
   parentId    String?
+  createdAt   DateTime   @default(now())
+  isActive    Boolean    @default(true)
+  imageUrl    String?    @map("image_url")
+  imagePath   String?    @map("image_path")
+  blogPosts   BlogPost[]
   parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children    Category[] @relation("CategoryTree")
   courses     Course[]
-  blogPosts   BlogPost[]
-  createdAt   DateTime   @default(now())
 }
 
-// ====================== COURSES ======================
 model Course {
-  id               String   @id @default(uuid())
+  id               String                 @id @default(uuid())
   title            String
-  slug             String   @unique
+  slug             String                 @unique
   description      String
   shortDescription String?
-  imageUrl         String?  @map("image_url")
-  imagePath        String?  @map("image_path")
   thumbnailUrl     String?
-  thumbnailPath    String?
   previewVideoUrl  String?
   categoryId       String
-  category         Category @relation(fields: [categoryId], references: [id])
   instructorId     String
-  instructor       User     @relation("InstructorCourses", fields: [instructorId], references: [id])
-  level            Level    @default(BEGINNER)
-  language         String   @default("English")
-  price            Float    @default(0)
+  level            Level                  @default(BEGINNER)
+  language         String                 @default("English")
+  price            Float                  @default(0)
   originalPrice    Float?
-  currency         String   @default("USD")
-  isFree           Boolean  @default(false)
-  isPublished      Boolean  @default(false)
-  isFeatured       Boolean  @default(false)
-  isTrending       Boolean  @default(false)
-  isRecommended    Boolean  @default(false)
-  isNew            Boolean  @default(true)
-  totalDuration    Int      @default(0) // in minutes
-  totalLessons     Int      @default(0)
-  totalStudents    Int      @default(0)
-  rating           Float    @default(0)
-  totalRatings     Int      @default(0)
+  currency         String                 @default("USD")
+  isFree           Boolean                @default(false)
+  isPublished      Boolean                @default(false)
+  isFeatured       Boolean                @default(false)
+  isTrending       Boolean                @default(false)
+  isNew            Boolean                @default(true)
+  totalDuration    Int                    @default(0)
+  totalLessons     Int                    @default(0)
+  totalStudents    Int                    @default(0)
+  rating           Float                  @default(0)
+  totalRatings     Int                    @default(0)
   tags             String[]
   whatYouLearn     String[]
   requirements     String[]
@@ -117,30 +102,29 @@ model Course {
   certificateType  String?
   metaTitle        String?
   metaDescription  String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  modules      Module[]
-  assets       CourseAsset[]
-  enrollments  Enrollment[]
-  reviews      Review[]
-  certificates Certificate[]
-  orderItems   OrderItem[]
-  entitlements UserEntitlement[]
-  teamAssignments TeamCourseAssignment[]
-}
-
-enum Level {
-  BEGINNER
-  INTERMEDIATE
-  ADVANCED
-  ALL_LEVELS
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  isRecommended    Boolean                @default(false)
+  thumbnailPath    String?
+  imageUrl         String?                @map("image_url")
+  imagePath        String?                @map("image_path")
+  certificates     Certificate[]
+  category         Category               @relation(fields: [categoryId], references: [id])
+  instructor       User                   @relation("InstructorCourses", fields: [instructorId], references: [id])
+  assets           CourseAsset[]
+  enrollments      Enrollment[]
+  modules          Module[]
+  orderItems       OrderItem[]
+  reviews          Review[]
+  teamAssignments  TeamCourseAssignment[]
+  user_courses     user_courses[]
+  entitlements     UserEntitlement[]
+  user_wishlists   user_wishlists[]
 }
 
 model CourseAsset {
   id          String          @id @default(uuid())
   courseId    String
-  course      Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   type        CourseAssetType
   title       String
   fileName    String
@@ -151,406 +135,315 @@ model CourseAsset {
   order       Int             @default(0)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+  course      Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
-enum CourseAssetType {
-  AUDIO
-  VIDEO
-  PDF
-}
-
-// ====================== MODULES & LESSONS ======================
 model Module {
   id          String   @id @default(uuid())
   courseId    String
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   title       String
   description String?
   order       Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  lessons Lesson[]
+  lessons     Lesson[]
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
 model Lesson {
-  id             String     @id @default(uuid())
+  id             String           @id @default(uuid())
   moduleId       String
-  module         Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   title          String
   description    String?
-  type           LessonType @default(VIDEO)
+  type           LessonType       @default(VIDEO)
   videoUrl       String?
-  assetUrl       String?
-  assetPath      String?
-  duration       Int? // in seconds
-  content        String? // for text/markdown lessons
-  isPreview      Boolean    @default(false)
-  previewPages   Int?       @map("preview_pages")
-  previewMinutes Int?       @map("preview_minutes")
-  allowDownload  Boolean    @default(false)
-  sellSeparately Boolean    @default(false)
+  duration       Int?
+  content        String?
+  isPreview      Boolean          @default(false)
   order          Int
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-
-  progress  LessonProgress[]
-  quizzes   Quiz[]
-  aiPrompts AIPrompt[]
+  createdAt      DateTime         @default(now())
+  allowDownload  Boolean          @default(false)
+  assetPath      String?
+  assetUrl       String?
+  sellSeparately Boolean          @default(false)
+  updatedAt      DateTime         @updatedAt
+  previewPages   Int?             @map("preview_pages")
+  previewMinutes Int?             @map("preview_minutes")
+  aiPrompts      AIPrompt[]
+  module         Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress       LessonProgress[]
+  quizzes        Quiz[]
+  lesson_notes   lesson_notes[]
 }
 
-enum LessonType {
-  VIDEO
-  AUDIO
-  PDF
-  TEXT
-  QUIZ
-  ASSIGNMENT
-  PROJECT
-  LIVE
-}
-
-// ====================== QUIZZES ======================
 model Quiz {
   id        String       @id @default(uuid())
   lessonId  String
-  lesson    Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   title     String
-  questions Question[]
-  results   QuizResult[]
   createdAt DateTime     @default(now())
+  questions Question[]
+  lesson    Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  results   QuizResult[]
 }
 
 model Question {
   id          String   @id @default(uuid())
   quizId      String
-  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
   text        String
   options     String[]
-  answer      Int // index of correct option
+  answer      Int
   explanation String?
   order       Int
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
 }
 
 model QuizResult {
   id          String   @id @default(uuid())
   quizId      String
-  quiz        Quiz     @relation(fields: [quizId], references: [id])
   userId      String
-  user        User     @relation(fields: [userId], references: [id])
   score       Float
   answers     Json
   completedAt DateTime @default(now())
+  quiz        Quiz     @relation(fields: [quizId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
 }
 
-// ====================== AI PROMPTS ======================
 model AIPrompt {
   id        String   @id @default(uuid())
   lessonId  String
-  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   prompt    String
   context   String?
   createdAt DateTime @default(now())
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 }
 
-// ====================== PROGRESS ======================
 model LessonProgress {
   id             String    @id @default(uuid())
   userId         String
-  user           User      @relation(fields: [userId], references: [id])
   lessonId       String
-  lesson         Lesson    @relation(fields: [lessonId], references: [id])
   isCompleted    Boolean   @default(false)
   watchedSeconds Int       @default(0)
   completedAt    DateTime?
   updatedAt      DateTime  @updatedAt
+  lesson         Lesson    @relation(fields: [lessonId], references: [id])
+  user           User      @relation(fields: [userId], references: [id])
 
   @@unique([userId, lessonId])
 }
 
-// ====================== ENROLLMENTS ======================
 model Enrollment {
   id          String           @id @default(uuid())
   userId      String
-  user        User             @relation(fields: [userId], references: [id])
   courseId    String
-  course      Course           @relation(fields: [courseId], references: [id])
   status      EnrollmentStatus @default(ACTIVE)
   enrolledAt  DateTime         @default(now())
   completedAt DateTime?
   expiresAt   DateTime?
+  course      Course           @relation(fields: [courseId], references: [id])
+  user        User             @relation(fields: [userId], references: [id])
 
   @@unique([userId, courseId])
 }
 
-enum EnrollmentStatus {
-  ACTIVE
-  COMPLETED
-  SUSPENDED
-  EXPIRED
-}
-
-// ====================== CERTIFICATES ======================
 model Certificate {
   id             String   @id @default(uuid())
   userId         String
-  user           User     @relation(fields: [userId], references: [id])
   courseId       String
-  course         Course   @relation(fields: [courseId], references: [id])
   code           String   @unique
   pdfUrl         String?
   blockchainHash String?
   issuedAt       DateTime @default(now())
+  course         Course   @relation(fields: [courseId], references: [id])
+  user           User     @relation(fields: [userId], references: [id])
 }
 
-// ====================== REVIEWS ======================
 model Review {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
   courseId   String
-  course     Course   @relation(fields: [courseId], references: [id])
-  rating     Int // 1-5
+  rating     Int
   title      String?
   body       String
   isApproved Boolean  @default(false)
-  isFeatured Boolean  @default(false)
   createdAt  DateTime @default(now())
+  isFeatured Boolean  @default(false)
+  course     Course   @relation(fields: [courseId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, courseId])
 }
 
-// ====================== ORDERS ======================
 model Order {
   id              String      @id @default(uuid())
   userId          String
-  user            User        @relation(fields: [userId], references: [id])
   status          OrderStatus @default(PENDING)
   totalAmount     Float
   currency        String      @default("USD")
-  paymentMethod   String? // stripe | paypal | paystack
+  paymentMethod   String?
   paymentIntentId String?
   receiptUrl      String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
-
-  items OrderItem[]
-}
-
-enum OrderStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
+  user            User        @relation(fields: [userId], references: [id])
+  items           OrderItem[]
 }
 
 model OrderItem {
   id       String @id @default(uuid())
   orderId  String
-  order    Order  @relation(fields: [orderId], references: [id])
   courseId String
-  course   Course @relation(fields: [courseId], references: [id])
   price    Float
   currency String @default("USD")
+  course   Course @relation(fields: [courseId], references: [id])
+  order    Order  @relation(fields: [orderId], references: [id])
 }
 
-// ====================== SUBSCRIPTIONS ======================
 model SubscriptionPlan {
-  id                  String   @id @default(uuid())
+  id                  String             @id @default(uuid())
   name                String
-  slug                String   @unique
+  slug                String             @unique
   description         String?
   price               Float
   yearlyPrice         Float?
-  currency            String   @default("USD")
+  currency            String             @default("USD")
   features            String[]
-  coursesIncluded     String[] // course IDs or "ALL"
-  isPopular           Boolean  @default(false)
-  isActive            Boolean  @default(true)
+  coursesIncluded     String[]
+  isPopular           Boolean            @default(false)
+  isActive            Boolean            @default(true)
   stripePriceId       String?
   stripeYearlyPriceId String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  subscriptions UserSubscription[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  subscriptions       UserSubscription[]
 }
 
 model UserSubscription {
   id                   String             @id @default(uuid())
   userId               String
-  user                 User               @relation(fields: [userId], references: [id])
   planId               String
-  plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
   status               SubscriptionStatus @default(ACTIVE)
   billingCycle         String             @default("monthly")
   stripeSubscriptionId String?
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
   createdAt            DateTime           @default(now())
-}
-
-enum SubscriptionStatus {
-  ACTIVE
-  CANCELLED
-  PAST_DUE
-  TRIALING
+  plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
+  user                 User               @relation(fields: [userId], references: [id])
 }
 
 model UserEntitlement {
-  id                   String            @id @default(cuid())
-  userId               String            @map("user_id")
-  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courseId             String?           @map("course_id")
-  course               Course?           @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  teamWorkspaceId      String?           @map("team_workspace_id")
-  teamWorkspace        TeamWorkspace?    @relation(fields: [teamWorkspaceId], references: [id], onDelete: SetNull)
-  scope                EntitlementScope
-  source               EntitlementSource
-  status               EntitlementStatus @default(ACTIVE)
-  planSlug             String?           @map("plan_slug")
-  stripeSubscriptionId String?           @map("stripe_subscription_id")
-  startsAt             DateTime          @default(now()) @map("starts_at")
-  endsAt               DateTime?         @map("ends_at")
+  id                   String         @id @default(cuid())
+  userId               String         @map("user_id")
+  courseId             String?        @map("course_id")
+  teamWorkspaceId      String?        @map("team_workspace_id")
+  scope                String
+  source               String
+  status               String         @default("ACTIVE")
+  planSlug             String?        @map("plan_slug")
+  stripeSubscriptionId String?        @map("stripe_subscription_id")
+  startsAt             DateTime       @default(now()) @map("starts_at") @db.Timestamptz(6)
+  endsAt               DateTime?      @map("ends_at") @db.Timestamptz(6)
   metadata             Json?
-  createdAt            DateTime          @default(now()) @map("created_at")
-  updatedAt            DateTime          @updatedAt @map("updated_at")
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  course               Course?        @relation(fields: [courseId], references: [id], onUpdate: NoAction)
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  teamWorkspace        TeamWorkspace? @relation(fields: [teamWorkspaceId], references: [id], onUpdate: NoAction, map: "user_entitlements_workspace_fk")
 
-  @@index([userId, status, endsAt])
-  @@index([teamWorkspaceId, status])
-  @@index([planSlug, status])
+  @@index([planSlug, status], map: "user_entitlements_plan_status_idx")
+  @@index([userId, status, endsAt], map: "user_entitlements_user_status_idx")
   @@map("user_entitlements")
 }
 
-enum EntitlementScope {
-  ALL_COURSES
-  FREE_COURSES
-  SPECIFIC_COURSE
-}
-
-enum EntitlementSource {
-  SUBSCRIPTION
-  TEAM
-  PURCHASE
-  FREE_ENROLLMENT
-  ADMIN
-}
-
-enum EntitlementStatus {
-  ACTIVE
-  EXPIRED
-  CANCELLED
-  REVOKED
-}
-
 model TeamWorkspace {
-  id         String                @id @default(cuid())
-  ownerUserId String               @map("owner_user_id")
-  ownerUser  User                  @relation("TeamWorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
-  name       String
-  inviteCode String                @unique @map("invite_code")
-  seatLimit  Int                   @default(10) @map("seat_limit")
-  createdAt  DateTime              @default(now()) @map("created_at")
-  updatedAt  DateTime              @updatedAt @map("updated_at")
-
-  members      TeamWorkspaceMember[]
-  invites      TeamWorkspaceInvite[]
+  id           String                 @id @default(cuid())
+  ownerUserId  String                 @map("owner_user_id")
+  name         String
+  inviteCode   String                 @unique @map("invite_code")
+  seatLimit    Int                    @default(10) @map("seat_limit")
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   assignments  TeamCourseAssignment[]
+  invites      TeamWorkspaceInvite[]
+  members      TeamWorkspaceMember[]
+  ownerUser    User                   @relation("TeamWorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   entitlements UserEntitlement[]
 
-  @@index([ownerUserId])
+  @@index([ownerUserId], map: "team_workspaces_owner_idx")
   @@map("team_workspaces")
 }
 
 model TeamWorkspaceMember {
-  id          String                    @id @default(cuid())
-  workspaceId String                    @map("workspace_id")
-  workspace   TeamWorkspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  userId      String                    @map("user_id")
-  user        User                      @relation("TeamWorkspaceMemberships", fields: [userId], references: [id], onDelete: Cascade)
-  role        TeamWorkspaceRole         @default(MEMBER)
-  status      TeamWorkspaceMemberStatus @default(ACTIVE)
-  invitedById String?                   @map("invited_by_id")
-  invitedBy   User?                     @relation("TeamWorkspaceInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
-  joinedAt    DateTime                  @default(now()) @map("joined_at")
-  revokedAt   DateTime?                 @map("revoked_at")
-  createdAt   DateTime                  @default(now()) @map("created_at")
-  updatedAt   DateTime                  @updatedAt @map("updated_at")
+  id          String        @id @default(cuid())
+  workspaceId String        @map("workspace_id")
+  userId      String        @map("user_id")
+  role        String        @default("MEMBER")
+  status      String        @default("ACTIVE")
+  invitedById String?       @map("invited_by_id")
+  joinedAt    DateTime      @default(now()) @map("joined_at") @db.Timestamptz(6)
+  revokedAt   DateTime?     @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  invitedBy   User?         @relation("TeamWorkspaceInvitedBy", fields: [invitedById], references: [id], onUpdate: NoAction)
+  user        User          @relation("TeamWorkspaceMemberships", fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspace   TeamWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([workspaceId, userId])
-  @@index([userId, status])
+  @@index([userId, status], map: "team_workspace_members_user_status_idx")
   @@map("team_workspace_members")
 }
 
-enum TeamWorkspaceRole {
-  OWNER
-  ADMIN
-  MEMBER
-}
-
-enum TeamWorkspaceMemberStatus {
-  ACTIVE
-  REVOKED
-}
-
 model TeamWorkspaceInvite {
-  id            String                    @id @default(cuid())
-  workspaceId    String                   @map("workspace_id")
-  workspace      TeamWorkspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  invitedEmail   String?                  @map("invited_email")
-  invitedUserId  String?                  @map("invited_user_id")
-  invitedUser    User?                    @relation("TeamWorkspaceInvitedUser", fields: [invitedUserId], references: [id], onDelete: SetNull)
-  invitedById    String                   @map("invited_by_id")
-  invitedBy      User                     @relation("TeamWorkspaceInviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
-  token          String                   @unique
-  status         TeamWorkspaceInviteStatus @default(PENDING)
-  expiresAt      DateTime                 @map("expires_at")
-  acceptedAt     DateTime?                @map("accepted_at")
-  createdAt      DateTime                 @default(now()) @map("created_at")
-  updatedAt      DateTime                 @updatedAt @map("updated_at")
+  id            String        @id @default(cuid())
+  workspaceId   String        @map("workspace_id")
+  invitedEmail  String?       @map("invited_email")
+  invitedUserId String?       @map("invited_user_id")
+  invitedById   String        @map("invited_by_id")
+  token         String        @unique
+  status        String        @default("PENDING")
+  expiresAt     DateTime      @map("expires_at") @db.Timestamptz(6)
+  acceptedAt    DateTime?     @map("accepted_at") @db.Timestamptz(6)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  invitedBy     User          @relation("TeamWorkspaceInviteSender", fields: [invitedById], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  invitedUser   User?         @relation("TeamWorkspaceInvitedUser", fields: [invitedUserId], references: [id], onUpdate: NoAction)
+  workspace     TeamWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@index([workspaceId, status])
   @@index([token, status])
+  @@index([workspaceId, status], map: "team_workspace_invites_workspace_status_idx")
   @@map("team_workspace_invites")
-}
-
-enum TeamWorkspaceInviteStatus {
-  PENDING
-  ACCEPTED
-  REVOKED
-  EXPIRED
 }
 
 model TeamCourseAssignment {
   id               String        @id @default(cuid())
   workspaceId      String        @map("workspace_id")
-  workspace        TeamWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   courseId         String        @map("course_id")
-  course           Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
   assignedToUserId String        @map("assigned_to_user_id")
-  assignedToUser   User          @relation("TeamCourseAssignmentsReceived", fields: [assignedToUserId], references: [id], onDelete: Cascade)
   assignedByUserId String        @map("assigned_by_user_id")
-  assignedByUser   User          @relation("TeamCourseAssignmentsGiven", fields: [assignedByUserId], references: [id], onDelete: Cascade)
-  createdAt        DateTime      @default(now()) @map("created_at")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  assignedByUser   User          @relation("TeamCourseAssignmentsGiven", fields: [assignedByUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  assignedToUser   User          @relation("TeamCourseAssignmentsReceived", fields: [assignedToUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  course           Course        @relation(fields: [courseId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspace        TeamWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([workspaceId, courseId, assignedToUserId])
-  @@index([workspaceId, assignedToUserId])
+  @@index([workspaceId, assignedToUserId], map: "team_course_assignments_workspace_user_idx")
   @@map("team_course_assignments")
 }
 
-// ====================== CMS ======================
 model HeroSlide {
   id                String   @id @default(uuid())
   title             String
   subtitle          String?
   description       String?
   imageUrl          String
-  imagePath         String?
   ctaText           String?
   ctaLink           String?
   order             Int      @default(0)
   isActive          Boolean  @default(true)
-  autoSlideInterval Int? // seconds; null = use global default (6s)
   createdAt         DateTime @default(now())
+  imagePath         String?
+  autoSlideInterval Int?
 }
 
 model Announcement {
@@ -572,36 +465,29 @@ model BlogPost {
   excerpt        String?
   content        String
   coverImage     String?
-  coverImagePath String?
   authorId       String
-  author         User          @relation("BlogAuthor", fields: [authorId], references: [id])
-  categoryId     String?
-  category       Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   tags           String[]
-  status         ContentStatus @default(DRAFT)
   isPublished    Boolean       @default(false)
   publishedAt    DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-
-  comments BlogComment[]
-}
-
-enum ContentStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
+  categoryId     String?
+  coverImagePath String?
+  status         ContentStatus @default(DRAFT)
+  comments       BlogComment[]
+  author         User          @relation("BlogAuthor", fields: [authorId], references: [id])
+  category       Category?     @relation(fields: [categoryId], references: [id])
 }
 
 model BlogComment {
   id         String   @id @default(uuid())
   postId     String
-  post       BlogPost @relation(fields: [postId], references: [id])
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
   content    String
   isApproved Boolean  @default(false)
   createdAt  DateTime @default(now())
+  post       BlogPost @relation(fields: [postId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
 }
 
 model NewsletterSubscriber {
@@ -626,11 +512,6 @@ model Coupon {
   updatedAt    DateTime           @updatedAt
 }
 
-enum CouponDiscountType {
-  PERCENTAGE
-  FIXED_AMOUNT
-}
-
 model Popup {
   id           String      @id @default(uuid())
   title        String
@@ -640,20 +521,13 @@ model Popup {
   buttonText   String?
   link         String?
   isActive     Boolean     @default(false)
-  showOn       PopupShowOn @default(HOMEPAGE_ONLY)
-  delaySeconds Int         @default(4)
   triggerRules Json?
   startsAt     DateTime?
   endsAt       DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
-}
-
-enum PopupShowOn {
-  HOMEPAGE_ONLY
-  COURSE_PAGES
-  BLOG_PAGES
-  ALL_PAGES
+  delaySeconds Int         @default(4)
+  showOn       PopupShowOn @default(HOMEPAGE_ONLY)
 }
 
 model FAQ {
@@ -672,13 +546,13 @@ model SiteSettings {
   supportEmail      String?
   supportPhone      String?
   adminEmail        String?
-  supportAddress    String?
   logoUrl           String?
   faviconUrl        String?
   socialLinks       Json?
   maintenanceMode   Boolean  @default(false)
-  heroSlideInterval Int      @default(6) // seconds between auto-slides
   updatedAt         DateTime @updatedAt
+  supportAddress    String?
+  heroSlideInterval Int      @default(6)
 }
 
 model HomepageParagraph {
@@ -691,7 +565,7 @@ model HomepageParagraph {
 }
 
 model TrustedLogo {
-  id         String   @id @default(uuid())
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name       String   @unique
   imageUrl   String   @map("image_url")
   imagePath  String?  @map("image_path")
@@ -699,44 +573,36 @@ model TrustedLogo {
   order      Int      @default(0)
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  updatedAt  DateTime @default(now()) @updatedAt
 }
 
 model ContactMessage {
-  id        String               @id @default(uuid())
+  id        String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String
   email     String
   subject   String
   message   String
-  status    ContactMessageStatus @default(UNREAD)
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
-
-  replies ContactMessageReply[]
+  status    ContactMessageStatus  @default(UNREAD)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @default(now()) @updatedAt
+  replies   ContactMessageReply[]
 
   @@index([status, createdAt])
 }
 
 model ContactMessageReply {
-  id          String         @id @default(uuid())
-  messageId   String         @map("message_id")
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId   String         @map("message_id") @db.Uuid
   senderName  String?        @map("sender_name")
   senderEmail String?        @map("sender_email")
   body        String
   isAdmin     Boolean        @default(true) @map("is_admin")
   createdAt   DateTime       @default(now())
-  message     ContactMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message     ContactMessage @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([messageId, createdAt])
 }
 
-enum ContactMessageStatus {
-  UNREAD
-  READ
-  REPLIED
-}
-
-// ====================== REFERRALS ======================
 model ReferralProgram {
   id                    String   @id @default(cuid())
   isActive              Boolean  @default(true)
@@ -744,12 +610,12 @@ model ReferralProgram {
   discountType          String   @default("percent")
   discountValue         Float    @default(20)
   discountExpiry        Int      @default(30)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
   doubleSidedRewards    Boolean  @default(true)
   friendDiscountType    String   @default("percent")
   friendDiscountValue   Float    @default(10)
   fraudDetectionEnabled Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
 }
 
 model Referral {
@@ -758,27 +624,26 @@ model Referral {
   referredId         String   @unique
   status             String   @default("pending")
   rewardIssued       Boolean  @default(false)
+  createdAt          DateTime @default(now())
   fraudStatus        String   @default("clear")
   fraudReason        String?
   referrerRewardCode String?
   friendRewardCode   String?
-  createdAt          DateTime @default(now())
-  referrer           User     @relation("ReferrerReferrals", fields: [referrerId], references: [id])
   referred           User     @relation("ReferredReferral", fields: [referredId], references: [id])
+  referrer           User     @relation("ReferrerReferrals", fields: [referrerId], references: [id])
 }
 
-// ====================== AFFILIATE ======================
 model AffiliateProgram {
   id                        String   @id @default(cuid())
   isActive                  Boolean  @default(true)
   commissionRate            Float    @default(20)
   minPayout                 Float    @default(10)
   cookieDays                Int      @default(30)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
   payoutGraceDays           Int      @default(30)
   fraudDetectionEnabled     Boolean  @default(true)
   allowRecurringCommissions Boolean  @default(false)
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
 }
 
 model Affiliate {
@@ -805,11 +670,11 @@ model AffiliateConversion {
   amount      Float
   commission  Float
   status      String    @default("pending")
+  createdAt   DateTime  @default(now())
   fraudStatus String    @default("clear")
   fraudReason String?
   eligibleAt  DateTime?
   creditedAt  DateTime?
-  createdAt   DateTime  @default(now())
   affiliate   Affiliate @relation(fields: [affiliateId], references: [id])
 }
 
@@ -820,36 +685,177 @@ model AffiliatePayout {
   method             String
   status             String    @default("pending")
   notes              String?
+  createdAt          DateTime  @default(now())
   destinationDetails Json?
   eligibleAt         DateTime?
   processedAt        DateTime?
-  createdAt          DateTime  @default(now())
   affiliate          Affiliate @relation(fields: [affiliateId], references: [id])
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  actorId   String?
-  actor     User?    @relation(fields: [actorId], references: [id])
-  action    String
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
   entityType String
-  entityId  String?
-  summary   String?
-  metadata  Json?
-  createdAt DateTime @default(now())
+  entityId   String?
+  summary    String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation(fields: [actorId], references: [id])
 
   @@index([entityType, entityId])
   @@index([createdAt])
 }
 
-// ====================== AI CHAT ======================
 model AIChatSession {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
   courseId  String?
   lessonId  String?
   messages  Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model lesson_notes {
+  id        BigInt   @id @default(autoincrement())
+  user_id   String
+  lesson_id String
+  content   String
+  timestamp DateTime @default(now()) @db.Timestamptz(6)
+  Lesson    Lesson   @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  User      User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, lesson_id, timestamp(sort: Desc)], map: "lesson_notes_lookup_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_ai_usage {
+  id            BigInt   @id @default(autoincrement())
+  user_id       String
+  month_key     String
+  request_count Int      @default(0)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+  User          User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, month_key])
+  @@index([user_id, month_key], map: "user_ai_usage_lookup_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_courses {
+  id              BigInt    @id @default(autoincrement())
+  user_id         String
+  course_id       String
+  completed       Boolean   @default(false)
+  completed_at    DateTime? @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @db.Timestamptz(6)
+  access_source   String?   @default("enrollment")
+  lifetime_access Boolean   @default(false)
+  owned_at        DateTime? @db.Timestamptz(6)
+  expires_at      DateTime? @db.Timestamptz(6)
+  Course          Course    @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  User            User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, course_id])
+  @@index([user_id, lifetime_access, expires_at, updated_at(sort: Desc)], map: "user_courses_access_idx")
+  @@index([user_id, completed, updated_at(sort: Desc)], map: "user_courses_lookup_idx")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_wishlists {
+  id         BigInt   @id @default(autoincrement())
+  user_id    String
+  course_id  String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  Course     Course   @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  User       User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, course_id])
+  @@index([user_id, created_at(sort: Desc)], map: "user_wishlists_lookup_idx")
+}
+
+enum Role {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Level {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ALL_LEVELS
+}
+
+enum CourseAssetType {
+  AUDIO
+  VIDEO
+  PDF
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+  QUIZ
+  PROJECT
+  LIVE
+  AUDIO
+  PDF
+  ASSIGNMENT
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+  EXPIRED
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+  TRIALING
+}
+
+enum EntitlementStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CouponDiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum PopupShowOn {
+  HOMEPAGE_ONLY
+  COURSE_PAGES
+  BLOG_PAGES
+  ALL_PAGES
+}
+
+enum ContactMessageStatus {
+  UNREAD
+  READ
+  REPLIED
 }
