@@ -264,6 +264,7 @@ export function Navbar() {
   const showSearchSuggestions = searchFocused;
   const profileLinks = [
     { label: "My Dashboard", href: "/dashboard", icon: GraduationCap },
+    { label: "Profile Settings", href: "/settings", icon: UserRound },
     { label: "Wishlist", href: "/wishlist", icon: Heart },
     ...(isAdmin ? [{ label: "Admin Console", href: "/admin", icon: Shield }] : []),
   ];

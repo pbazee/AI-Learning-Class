@@ -17,7 +17,7 @@ export function CountryCombobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const selectedCountry = COUNTRIES.find((country) => country.code === value) ?? COUNTRIES[0];
+  const selectedCountry = COUNTRIES.find((country) => country.code === value) ?? null;
 
   const filteredCountries = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();

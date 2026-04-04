@@ -18,8 +18,6 @@ import {
 
 type TransactionClient = Prisma.TransactionClient;
 
-export const CHECKOUT_CURRENCY = "USD";
-
 function normalizeOptionalValue(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -526,7 +524,7 @@ export async function createPendingCheckoutOrder({
       {
         courseId: item.courseId,
         price: item.price,
-        currency: CHECKOUT_CURRENCY,
+        currency: quote.currency,
       },
     ];
   });
@@ -536,7 +534,7 @@ export async function createPendingCheckoutOrder({
       userId,
       status: "PENDING",
       totalAmount: quote.total,
-      currency: CHECKOUT_CURRENCY,
+      currency: quote.currency,
       paymentMethod: gateway,
       items:
         courseItems.length > 0

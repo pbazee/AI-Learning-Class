@@ -34,3 +34,21 @@ export const COUNTRIES = COUNTRY_CODES
     name: displayNames.of(code) ?? code,
   }))
   .sort((left, right) => left.name.localeCompare(right.name));
+
+export function getCountryNameFromCode(code?: string | null) {
+  if (!code) {
+    return null;
+  }
+
+  const normalizedCode = code.trim().toUpperCase();
+  return COUNTRIES.find((country) => country.code === normalizedCode)?.name ?? null;
+}
+
+export function findCountryCodeByName(name?: string | null) {
+  if (!name) {
+    return null;
+  }
+
+  const normalizedName = name.trim().toLowerCase();
+  return COUNTRIES.find((country) => country.name.toLowerCase() === normalizedName)?.code ?? null;
+}

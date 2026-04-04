@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { getPrimaryAdminEmail, normalizeEmail } from "@/lib/admin-email";
 
-const protectedPaths = ["/dashboard", "/admin", "/checkout", "/affiliate/dashboard"];
+const protectedPaths = ["/dashboard", "/admin", "/checkout", "/affiliate/dashboard", "/settings"];
 const authPaths = ["/login", "/signup", "/sign-in", "/sign-up"];
 type CookieToSet = {
   name: string;

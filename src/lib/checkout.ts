@@ -3,7 +3,13 @@ import "server-only";
 import type { Coupon, User } from "@prisma/client";
 import type { NextRequest } from "next/server";
 import { getAccessibleCourseAccessByCourseId } from "@/lib/access-control";
-import { CHECKOUT_CURRENCY } from "@/lib/payments";
+import {
+  BASE_CHECKOUT_CURRENCY,
+  convertCheckoutAmount,
+  normalizeCheckoutCurrency,
+  resolveCheckoutCurrency,
+  type SupportedCheckoutCurrency,
+} from "@/lib/checkout-currency";
 import { prisma } from "@/lib/prisma";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
@@ -17,10 +23,12 @@ export type CheckoutItemInput = {
 };
 
 export type CheckoutLineItem = CheckoutItemInput & {
+  currency: SupportedCheckoutCurrency;
   kind: "course" | "plan";
 };
 
 export type CheckoutQuote = {
+  currency: SupportedCheckoutCurrency;
   items: CheckoutLineItem[];
   subtotal: number;
   discountAmount: number;
@@ -59,7 +67,11 @@ function isCouponRedeemable(coupon: Coupon) {
   return true;
 }
 
-function applyCouponDiscount(subtotal: number, coupon: Coupon | null) {
+function applyCouponDiscount(
+  subtotal: number,
+  coupon: Coupon | null,
+  currency: SupportedCheckoutCurrency
+) {
   if (!coupon || subtotal <= 0) {
     return 0;
   }
@@ -67,7 +79,7 @@ function applyCouponDiscount(subtotal: number, coupon: Coupon | null) {
   const rawDiscount =
     coupon.discountType === "PERCENTAGE"
       ? subtotal * (coupon.value / 100)
-      : coupon.value;
+      : convertCheckoutAmount(coupon.value, BASE_CHECKOUT_CURRENCY, currency);
 
   return roundCurrencyAmount(Math.min(subtotal, rawDiscount));
 }
@@ -118,11 +130,8 @@ async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | 
     return null;
   }
 
-  if (plan.currency && plan.currency !== CHECKOUT_CURRENCY) {
-    return null;
-  }
-
   return {
+    currency: normalizeCheckoutCurrency(plan.currency),
     kind: "plan",
     title: `${plan.name} Plan`,
     price: plan.price,
@@ -180,8 +189,7 @@ async function sanitizeCartItems(items: CheckoutItemInput[], userId?: string | n
       !course ||
       course.isFree ||
       course.price === 0 ||
-      accessibleCourseIds.has(courseId) ||
-      (course.currency && course.currency !== CHECKOUT_CURRENCY)
+      accessibleCourseIds.has(courseId)
     ) {
       return [];
     }
@@ -190,6 +198,7 @@ async function sanitizeCartItems(items: CheckoutItemInput[], userId?: string | n
 
     return [
       {
+        currency: normalizeCheckoutCurrency(course.currency),
         kind: "course",
         courseId,
         title: course.title,
@@ -204,24 +213,42 @@ export async function buildCheckoutQuote({
   request,
   items,
   planSlug,
+  gateway,
+  country,
+  preferredCurrency,
   user,
   userId,
 }: {
   request: NextRequest;
   items?: CheckoutItemInput[];
   planSlug?: string | null;
+  gateway?: CheckoutGateway | null;
+  country?: string | null;
+  preferredCurrency?: string | null;
   user?: Pick<User, "earnedDiscountCode"> | null;
   userId?: string | null;
 }): Promise<CheckoutQuote> {
   const normalizedPlanSlug = planSlug?.trim().toLowerCase() || null;
   const planItem = normalizedPlanSlug ? await getManagedPlanItem(normalizedPlanSlug) : null;
-  const lineItems = planItem ? [planItem] : await sanitizeCartItems(items ?? [], userId);
+  const sourceLineItems = planItem ? [planItem] : await sanitizeCartItems(items ?? [], userId);
+  const quoteCurrency = resolveCheckoutCurrency({
+    gateway,
+    country,
+    preferredCurrency,
+    sourceCurrencies: sourceLineItems.map((item) => item.currency),
+  });
+  const lineItems = sourceLineItems.map((item) => ({
+    ...item,
+    currency: quoteCurrency,
+    price: convertCheckoutAmount(item.price, item.currency, quoteCurrency),
+  }));
   const subtotal = roundCurrencyAmount(lineItems.reduce((sum, item) => sum + item.price, 0));
   const coupon = await resolveActiveReferralCoupon(request, user);
-  const discountAmount = applyCouponDiscount(subtotal, coupon);
+  const discountAmount = applyCouponDiscount(subtotal, coupon, quoteCurrency);
   const total = roundCurrencyAmount(subtotal - discountAmount);
 
   return {
+    currency: quoteCurrency,
     items: lineItems,
     subtotal,
     discountAmount,

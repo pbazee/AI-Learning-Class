@@ -435,6 +435,42 @@ async function deleteAssetPath(path?: string | null) {
   await deleteAdminStorageObjects([path]);
 }
 
+async function deleteLessonDependencies(
+  tx: Prisma.TransactionClient,
+  lessonIds: string[]
+) {
+  const uniqueLessonIds = Array.from(new Set(lessonIds.filter(Boolean)));
+
+  if (uniqueLessonIds.length === 0) {
+    return;
+  }
+
+  const quizIds = (
+    await tx.quiz.findMany({
+      where: {
+        lessonId: { in: uniqueLessonIds },
+      },
+      select: {
+        id: true,
+      },
+    })
+  ).map((quiz) => quiz.id);
+
+  if (quizIds.length > 0) {
+    await tx.quizResult.deleteMany({
+      where: {
+        quizId: { in: quizIds },
+      },
+    });
+  }
+
+  await tx.lessonProgress.deleteMany({
+    where: {
+      lessonId: { in: uniqueLessonIds },
+    },
+  });
+}
+
 async function syncCourseCurriculum(
   courseId: string,
   sections: Array<z.output<typeof sectionSchema>>
@@ -458,14 +494,23 @@ async function syncCourseCurriculum(
   const modulesToDelete = existingModules.filter((module) => !incomingModuleIds.has(module.id));
 
   if (modulesToDelete.length > 0) {
-    await deleteAdminStorageObjects(
-      modulesToDelete.flatMap((module) => module.lessons.map((lesson) => lesson.assetPath))
+    const lessonIdsToDelete = modulesToDelete.flatMap((module) =>
+      module.lessons.map((lesson) => lesson.id)
     );
-    await prisma.module.deleteMany({
-      where: {
-        id: { in: modulesToDelete.map((module) => module.id) },
-      },
+    const lessonAssetPaths = modulesToDelete.flatMap((module) =>
+      module.lessons.map((lesson) => lesson.assetPath)
+    );
+
+    await prisma.$transaction(async (tx) => {
+      await deleteLessonDependencies(tx, lessonIdsToDelete);
+      await tx.module.deleteMany({
+        where: {
+          id: { in: modulesToDelete.map((module) => module.id) },
+        },
+      });
     });
+
+    await deleteAdminStorageObjects(lessonAssetPaths);
   }
 
   for (const [sectionIndex, section] of sections.entries()) {
@@ -495,12 +540,18 @@ async function syncCourseCurriculum(
     );
 
     if (lessonsToDelete.length > 0) {
-      await deleteAdminStorageObjects(lessonsToDelete.map((lesson) => lesson.assetPath));
-      await prisma.lesson.deleteMany({
-        where: {
-          id: { in: lessonsToDelete.map((lesson) => lesson.id) },
-        },
+      const lessonIdsToDelete = lessonsToDelete.map((lesson) => lesson.id);
+
+      await prisma.$transaction(async (tx) => {
+        await deleteLessonDependencies(tx, lessonIdsToDelete);
+        await tx.lesson.deleteMany({
+          where: {
+            id: { in: lessonIdsToDelete },
+          },
+        });
       });
+
+      await deleteAdminStorageObjects(lessonsToDelete.map((lesson) => lesson.assetPath));
     }
 
     for (const [lessonIndex, lesson] of section.lessons.entries()) {

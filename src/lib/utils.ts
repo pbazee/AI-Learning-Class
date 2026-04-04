@@ -8,10 +8,13 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatPrice(price: number, currency = "USD"): string {
   if (price === 0) return "Free";
+  const hasFractionalValue = !Number.isInteger(price);
+
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
-    minimumFractionDigits: 0,
+    minimumFractionDigits: hasFractionalValue ? 2 : 0,
+    maximumFractionDigits: 2,
   }).format(price);
 }
 

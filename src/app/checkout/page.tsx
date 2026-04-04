@@ -4,10 +4,10 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Lock, Shield, Check } from "lucide-react";
+import { Check, Loader2, Lock, Shield } from "lucide-react";
 import { CountryCombobox } from "@/components/checkout/CountryCombobox";
 import { Navbar } from "@/components/layout/Navbar";
-import { formatPrice, cn } from "@/lib/utils";
+import { cn, formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
 
 type PaymentMethod = "stripe" | "paypal" | "paystack";
@@ -21,6 +21,7 @@ type QuoteItem = {
 };
 
 type CheckoutQuote = {
+  currency: string;
   items: QuoteItem[];
   subtotal: number;
   discountAmount: number;
@@ -30,9 +31,12 @@ type CheckoutQuote = {
   planSlug: string | null;
 };
 
-type CheckoutSessionResponse = {
-  sessionId?: string;
-  url?: string;
+type AccountProfileResponse = {
+  profile?: {
+    email?: string;
+    name?: string | null;
+    countryCode?: string;
+  };
 };
 
 function StripeMark() {
@@ -122,7 +126,10 @@ export default function CheckoutPage() {
 
   const cartSavings = useMemo(
     () =>
-      items.reduce((sum, item) => sum + Math.max(0, (item.originalPrice || item.price) - item.price), 0),
+      items.reduce(
+        (sum, item) => sum + Math.max(0, (item.originalPrice || item.price) - item.price),
+        0
+      ),
     [items]
   );
   const requestItems = useMemo(
@@ -153,6 +160,46 @@ export default function CheckoutPage() {
   useEffect(() => {
     let cancelled = false;
 
+    async function loadProfile() {
+      try {
+        const response = await fetch("/api/account/profile", {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json().catch(() => null)) as AccountProfileResponse | null;
+        const profile = payload?.profile;
+
+        if (!profile || cancelled) {
+          return;
+        }
+
+        setFormData((current) => ({
+          name: current.name || profile.name || "",
+          email: current.email || profile.email || "",
+          country:
+            current.country && current.country !== "US"
+              ? current.country
+              : profile.countryCode || current.country,
+        }));
+      } catch {
+        // Profile hydration should never block checkout.
+      }
+    }
+
+    void loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function loadQuote() {
       setQuoteLoading(true);
       setQuoteError(null);
@@ -166,6 +213,8 @@ export default function CheckoutPage() {
           body: JSON.stringify({
             planSlug,
             items: requestItems,
+            method,
+            country: formData.country,
           }),
         });
         const payload = await response.json().catch(() => null);
@@ -179,7 +228,11 @@ export default function CheckoutPage() {
         }
       } catch (error) {
         if (!cancelled) {
-          setQuoteError(error instanceof Error ? error.message : "Unable to load your checkout summary.");
+          setQuoteError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load your checkout summary."
+          );
           setQuote(null);
         }
       } finally {
@@ -194,7 +247,7 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [planSlug, requestItems]);
+  }, [formData.country, method, planSlug, requestItems]);
 
   async function handleCheckout(event: React.FormEvent) {
     event.preventDefault();
@@ -232,7 +285,9 @@ export default function CheckoutPage() {
 
       window.location.assign(payload.url);
     } catch (error) {
-      setQuoteError(error instanceof Error ? error.message : "Unable to start checkout right now.");
+      setQuoteError(
+        error instanceof Error ? error.message : "Unable to start checkout right now."
+      );
       setProcessing(false);
     }
   }
@@ -268,26 +323,42 @@ export default function CheckoutPage() {
               <div className="min-w-0">
                 <form onSubmit={handleCheckout} className="space-y-6">
                   <div className="surface-card p-5 sm:p-6">
-                    <h2 className="mb-5 text-base font-bold text-foreground">Contact information</h2>
+                    <h2 className="mb-5 text-base font-bold text-foreground">
+                      Contact information
+                    </h2>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Full name</label>
+                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                          Full name
+                        </label>
                         <input
                           type="text"
                           required
                           value={formData.name}
-                          onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))}
+                          onChange={(event) =>
+                            setFormData((current) => ({
+                              ...current,
+                              name: event.target.value,
+                            }))
+                          }
                           className="input-surface w-full"
                           placeholder="Your name"
                         />
                       </div>
                       <div>
-                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Email</label>
+                        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                          Email
+                        </label>
                         <input
                           type="email"
                           required
                           value={formData.email}
-                          onChange={(event) => setFormData((current) => ({ ...current, email: event.target.value }))}
+                          onChange={(event) =>
+                            setFormData((current) => ({
+                              ...current,
+                              email: event.target.value,
+                            }))
+                          }
                           className="input-surface w-full"
                           placeholder="you@example.com"
                         />
@@ -295,7 +366,9 @@ export default function CheckoutPage() {
                       <div className="sm:col-span-2">
                         <CountryCombobox
                           value={formData.country}
-                          onChange={(country) => setFormData((current) => ({ ...current, country }))}
+                          onChange={(country) =>
+                            setFormData((current) => ({ ...current, country }))
+                          }
                         />
                       </div>
                     </div>
@@ -328,8 +401,12 @@ export default function CheckoutPage() {
                                 )}
                               />
                             </div>
-                            <div className="text-sm font-semibold text-foreground">{option.label}</div>
-                            <div className="mt-1 text-xs leading-5 text-muted-foreground">{option.sublabel}</div>
+                            <div className="text-sm font-semibold text-foreground">
+                              {option.label}
+                            </div>
+                            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                              {option.sublabel}
+                            </div>
                           </button>
                         ))}
                       </div>
@@ -341,16 +418,19 @@ export default function CheckoutPage() {
                             : "PayPal and Paystack activate the current billing period for your selected plan and return here for access confirmation after payment."
                           : method === "stripe"
                             ? "You will be redirected to Stripe Checkout to complete payment securely."
-                          : method === "paypal"
-                            ? "You will be redirected to PayPal to approve and complete payment."
-                            : "You will be redirected to Paystack Checkout where card, mobile money, bank transfer, and other eligible regional methods appear based on your region and Paystack settings."}
+                            : method === "paypal"
+                              ? "You will be redirected to PayPal to approve and complete payment."
+                              : `You will be redirected to Paystack Checkout in ${quote?.currency ?? "your selected"} currency so eligible regional methods like mobile money can appear when your account and country support them.`}
                       </div>
                     </div>
                   ) : (
                     <div className="surface-card p-5 sm:p-6">
-                      <h2 className="mb-2 text-base font-bold text-foreground">Free plan selected</h2>
+                      <h2 className="mb-2 text-base font-bold text-foreground">
+                        Free plan selected
+                      </h2>
                       <p className="text-sm text-muted-foreground">
-                        No payment is required for the Free plan. Continue to browse the free course catalog.
+                        No payment is required for the Free plan. Continue to browse the free
+                        course catalog.
                       </p>
                     </div>
                   )}
@@ -362,7 +442,10 @@ export default function CheckoutPage() {
                   ) : null}
 
                   {isFreePlan ? (
-                    <Link href="/courses?price=free" className="action-primary flex w-full justify-center py-4 text-base">
+                    <Link
+                      href="/courses?price=free"
+                      className="action-primary flex w-full justify-center py-4 text-base"
+                    >
                       Explore free courses
                     </Link>
                   ) : (
@@ -381,7 +464,7 @@ export default function CheckoutPage() {
                           <Lock className="h-5 w-5" />
                           {isPlanCheckout
                             ? `${method === "stripe" ? "Start" : "Activate"} ${quote?.planSlug === "teams" ? "Teams" : "Pro"} ${method === "stripe" ? "Subscription" : "Plan"}`
-                            : `Pay ${quote ? formatPrice(quote.total) : ""}`}
+                            : `Pay ${quote ? formatPrice(quote.total, quote.currency) : ""}`}
                         </>
                       )}
                     </button>
@@ -407,10 +490,18 @@ export default function CheckoutPage() {
                     <>
                       <div className="mb-6 space-y-4">
                         {quote.items.map((item) => (
-                          <div key={`${item.kind}-${item.courseId || item.title}`} className="flex items-start gap-3">
+                          <div
+                            key={`${item.kind}-${item.courseId || item.title}`}
+                            className="flex items-start gap-3"
+                          >
                             {item.thumbnailUrl ? (
                               <div className="relative h-12 w-20 shrink-0 overflow-hidden rounded-xl bg-primary-blue/10">
-                                <Image src={item.thumbnailUrl} alt={item.title} fill className="object-cover" />
+                                <Image
+                                  src={item.thumbnailUrl}
+                                  alt={item.title}
+                                  fill
+                                  className="object-cover"
+                                />
                               </div>
                             ) : (
                               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
@@ -418,12 +509,16 @@ export default function CheckoutPage() {
                               </div>
                             )}
                             <div className="min-w-0 flex-1">
-                              <p className="line-clamp-2 text-sm font-medium text-foreground">{item.title}</p>
+                              <p className="line-clamp-2 text-sm font-medium text-foreground">
+                                {item.title}
+                              </p>
                               <p className="mt-1 text-xs text-muted-foreground">
                                 {item.kind === "plan" ? "Subscription plan" : "Course access"}
                               </p>
                             </div>
-                            <span className="text-sm font-semibold text-foreground">{formatPrice(item.price)}</span>
+                            <span className="text-sm font-semibold text-foreground">
+                              {formatPrice(item.price, quote.currency)}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -433,9 +528,12 @@ export default function CheckoutPage() {
                           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
                             Referral discount applied
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-foreground">{quote.appliedCouponCode}</p>
+                          <p className="mt-1 text-sm font-semibold text-foreground">
+                            {quote.appliedCouponCode}
+                          </p>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {quote.appliedCouponDescription || "Your active referral reward was applied automatically."}
+                            {quote.appliedCouponDescription ||
+                              "Your active referral reward was applied automatically."}
                           </p>
                         </div>
                       ) : null}
@@ -443,29 +541,39 @@ export default function CheckoutPage() {
                       <div className="mb-4 space-y-2 border-y border-border py-4">
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Subtotal</span>
-                          <span className="text-foreground">{formatPrice(quote.subtotal)}</span>
+                          <span className="text-foreground">
+                            {formatPrice(quote.subtotal, quote.currency)}
+                          </span>
                         </div>
-                        {cartSavings > 0 ? (
+                        {quote.currency === "USD" && cartSavings > 0 ? (
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Catalog savings</span>
-                            <span className="text-emerald-600">-{formatPrice(cartSavings)}</span>
+                            <span className="text-emerald-600">
+                              -{formatPrice(cartSavings, quote.currency)}
+                            </span>
                           </div>
                         ) : null}
                         {quote.discountAmount > 0 ? (
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Referral discount</span>
-                            <span className="text-emerald-600">-{formatPrice(quote.discountAmount)}</span>
+                            <span className="text-emerald-600">
+                              -{formatPrice(quote.discountAmount, quote.currency)}
+                            </span>
                           </div>
                         ) : null}
                         <div className="flex justify-between text-sm">
                           <span className="text-muted-foreground">Tax</span>
-                          <span className="text-foreground">$0.00</span>
+                          <span className="text-foreground">
+                            {formatPrice(0, quote.currency)}
+                          </span>
                         </div>
                       </div>
 
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-foreground">Total</span>
-                        <span className="text-2xl font-black text-foreground">{formatPrice(quote.total)}</span>
+                        <span className="text-2xl font-black text-foreground">
+                          {formatPrice(quote.total, quote.currency)}
+                        </span>
                       </div>
                     </>
                   ) : (

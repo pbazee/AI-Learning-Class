@@ -209,12 +209,12 @@ export function CourseCard({
               </div>
             ) : null}
 
-            <h3 className="line-clamp-3 text-[1.06rem] font-black leading-[1.14] text-white sm:text-[1.18rem]">
+            <h3 className="min-h-[2.45rem] line-clamp-2 text-[1.06rem] font-black leading-[1.14] text-white sm:min-h-[2.7rem] sm:text-[1.18rem]">
               {course.title}
             </h3>
 
             {courseSummary ? (
-              <p className="mt-2 line-clamp-2 text-sm leading-5 text-white/68">
+              <p className="mt-2 min-h-[2.5rem] line-clamp-2 text-sm leading-5 text-white/68">
                 {courseSummary}
               </p>
             ) : null}

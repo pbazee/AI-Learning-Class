@@ -6,8 +6,11 @@ import {
   type CheckoutItemInput,
 } from "@/lib/checkout";
 import {
+  getPaystackChannels,
+  getPaystackMinimumAmount,
+} from "@/lib/checkout-currency";
+import {
   attachProviderReferenceToOrder,
-  CHECKOUT_CURRENCY,
   createPendingCheckoutOrder,
   encodeProviderState,
   markCheckoutOrderFailed,
@@ -59,6 +62,9 @@ export async function POST(request: NextRequest) {
       request,
       items,
       planSlug,
+      gateway: method,
+      country,
+      preferredCurrency: dbUser.preferredCurrency,
       user: { earnedDiscountCode: dbUser.earnedDiscountCode },
       userId: dbUser.id,
     });
@@ -74,6 +80,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         url: `${getAppOrigin(request)}/courses?price=free`,
       });
+    }
+
+    if (method === "paystack") {
+      const minimumAmount = getPaystackMinimumAmount(quote.currency);
+
+      if (quote.total < minimumAmount) {
+        return NextResponse.json(
+          {
+            error: `Paystack requires at least ${quote.currency} ${minimumAmount.toFixed(2)} for this checkout. Increase the order total or use another payment method.`,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const origin = getAppOrigin(request);
@@ -116,7 +135,7 @@ export async function POST(request: NextRequest) {
             ? [
                 {
                   price_data: {
-                    currency: CHECKOUT_CURRENCY.toLowerCase(),
+                    currency: quote.currency.toLowerCase(),
                     product_data: {
                       name: checkoutLabel,
                     },
@@ -131,7 +150,7 @@ export async function POST(request: NextRequest) {
             : [
                 {
                   price_data: {
-                    currency: CHECKOUT_CURRENCY.toLowerCase(),
+                    currency: quote.currency.toLowerCase(),
                     product_data: {
                       name: checkoutLabel,
                     },
@@ -204,7 +223,7 @@ export async function POST(request: NextRequest) {
             purchase_units: [
               {
                 amount: {
-                  currency_code: CHECKOUT_CURRENCY,
+                  currency_code: quote.currency,
                   value: quote.total.toFixed(2),
                 },
                 description: checkoutLabel.slice(0, 127),
@@ -272,7 +291,11 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             email: customerEmail || dbUser.email,
             amount: Math.round(quote.total * 100),
-            currency: CHECKOUT_CURRENCY,
+            currency: quote.currency,
+            channels: getPaystackChannels({
+              country,
+              currency: quote.currency,
+            }),
             metadata: {
               source: "ai-learning-class",
               customer_name: customerName,
@@ -289,15 +312,15 @@ export async function POST(request: NextRequest) {
 
       const paystackPayload = await paystackResponse.json();
 
-        if (
-          !paystackResponse.ok ||
-          !paystackPayload?.status ||
-          typeof paystackPayload?.data?.authorization_url !== "string" ||
-          typeof paystackPayload?.data?.reference !== "string" ||
-          typeof paystackPayload?.data?.access_code !== "string"
-        ) {
-          await markCheckoutOrderFailed(pendingOrder.id);
-          return NextResponse.json(
+      if (
+        !paystackResponse.ok ||
+        !paystackPayload?.status ||
+        typeof paystackPayload?.data?.authorization_url !== "string" ||
+        typeof paystackPayload?.data?.reference !== "string" ||
+        typeof paystackPayload?.data?.access_code !== "string"
+      ) {
+        await markCheckoutOrderFailed(pendingOrder.id);
+        return NextResponse.json(
           {
             error:
               paystackPayload?.message ||
