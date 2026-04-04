@@ -4,34 +4,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Brain, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
+import {
+  buildAuthCallbackUrl,
+  DEFAULT_AFTER_AUTH,
+  resolvePostAuthDestination,
+  sanitizeAuthRedirectPath,
+} from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase";
-
-const DEFAULT_AFTER_LOGIN = "/dashboard";
-
-function sanitizeRedirectPath(path: string | null) {
-  if (path && path.startsWith("/") && !path.startsWith("//")) {
-    return path;
-  }
-
-  return DEFAULT_AFTER_LOGIN;
-}
-
-function getRedirectTo(nextPath: string = DEFAULT_AFTER_LOGIN) {
-  const appUrl = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const redirectUrl = new URL("/auth/callback", appUrl);
-
-  redirectUrl.searchParams.set("next", sanitizeRedirectPath(nextPath));
-
-  return redirectUrl.toString();
-}
-
-function getPostLoginDestination(redirectPath: string, role?: string) {
-  if (redirectPath !== DEFAULT_AFTER_LOGIN) {
-    return redirectPath;
-  }
-
-  return role && ["ADMIN", "SUPER_ADMIN"].includes(role) ? "/admin" : redirectPath;
-}
 
 async function syncSignedInUser() {
   const response = await fetch("/api/auth/sync-user", {
@@ -72,7 +51,7 @@ function GoogleIcon({ className }: { className?: string }) {
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = sanitizeRedirectPath(searchParams.get("redirect"));
+  const redirectPath = sanitizeAuthRedirectPath(searchParams.get("redirect"));
   const callbackError = searchParams.get("error");
 
   const [showPassword, setShowPassword] = useState(false);
@@ -110,11 +89,11 @@ function LoginPageInner() {
     setLoading(true);
     const supabase = createClient();
     await syncNewsletterPreference(email);
-    console.log("[login] Starting Google OAuth, redirectTo:", getRedirectTo(redirectPath));
+    console.log("[login] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: getRedirectTo(redirectPath) },
+      options: { redirectTo: buildAuthCallbackUrl(redirectPath) },
     });
 
     if (error) {
@@ -135,7 +114,7 @@ function LoginPageInner() {
       console.log("[login] Sending magic link to:", email);
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: getRedirectTo(redirectPath) },
+        options: { emailRedirectTo: buildAuthCallbackUrl(redirectPath) },
       });
 
       if (error) {
@@ -160,7 +139,7 @@ function LoginPageInner() {
 
         try {
           const synced = await syncSignedInUser();
-          nextPath = getPostLoginDestination(redirectPath, synced.user.role);
+          nextPath = resolvePostAuthDestination(redirectPath, synced.user.role);
         } catch (syncError) {
           console.warn("[login] User sync after password sign-in failed:", syncError);
         }
@@ -338,7 +317,14 @@ function LoginPageInner() {
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-blue-600 hover:underline font-medium">
+          <Link
+            href={
+              redirectPath !== DEFAULT_AFTER_AUTH
+                ? `/signup?redirect=${encodeURIComponent(redirectPath)}`
+                : "/signup"
+            }
+            className="text-blue-600 hover:underline font-medium"
+          >
             Sign up
           </Link>
         </p>

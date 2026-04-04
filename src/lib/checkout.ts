@@ -178,6 +178,8 @@ async function sanitizeCartItems(items: CheckoutItemInput[], userId?: string | n
 
     if (
       !course ||
+      course.isFree ||
+      course.price === 0 ||
       accessibleCourseIds.has(courseId) ||
       (course.currency && course.currency !== CHECKOUT_CURRENCY)
     ) {

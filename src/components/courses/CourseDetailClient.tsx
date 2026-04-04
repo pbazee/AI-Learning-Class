@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { AICopilot } from "@/components/courses/AICopilot";
 import { CoursePreviewModal } from "@/components/courses/CoursePreviewModal";
 import { CourseReviewsSection } from "@/components/courses/CourseReviewsSection";
 import { useToast } from "@/components/ui/ToastProvider";
-import { enrollInFreeCourse } from "@/lib/course-enrollment";
+import {
+  buildFreeCourseLoginPath,
+  enrollInFreeCourse,
+} from "@/lib/course-enrollment";
 import { useCartStore } from "@/store/cart";
 import {
   Star,
@@ -54,31 +57,63 @@ export function CourseDetailClient({
   previewState?: CoursePreviewState | null;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const modules = course.modules ?? [];
+  const autoEnrollTriggeredRef = useRef(false);
   const [expandedModule, setExpandedModule] = useState<string | null>(modules[0]?.id ?? null);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
-  const { addItem, isInCart } = useCartStore();
+  const { addItem, isInCart, removeItem } = useCartStore();
   const inCart = isInCart(course.id);
   const isFreeCourse = course.price === 0 || course.isFree;
   const resolvedCourseAccess = courseAccess ?? previewState?.courseAccess;
   const hasAccess = Boolean(resolvedCourseAccess?.hasAccess);
-  const canInstantEnroll = Boolean(viewer?.id) && isFreeCourse;
+  const shouldAutoEnroll = searchParams.get("enroll") === "free";
   const hasPreviewContent =
     Boolean(previewState?.previewLessons?.length) ||
     Boolean(previewState?.previewVideoUrl) ||
     Boolean(course.previewVideoUrl);
-  const previewLockedActionLabel = inCart
-    ? "Go to Cart"
-    : enrolling
-      ? "Enrolling..."
-      : isFreeCourse
-        ? "Enroll Free"
+  const previewLockedActionLabel = enrolling
+    ? "Enrolling..."
+    : isFreeCourse
+      ? "Enroll Free"
+      : inCart
+        ? "Go to Cart"
         : "Add to Cart";
   const previewAccessActionLabel =
     (resolvedCourseAccess?.progress ?? 0) > 0 ? "Continue to Full Course" : "Go to Classroom";
+
+  useEffect(() => {
+    if (
+      !shouldAutoEnroll ||
+      !viewer?.id ||
+      !isFreeCourse ||
+      hasAccess ||
+      autoEnrollTriggeredRef.current
+    ) {
+      return;
+    }
+
+    autoEnrollTriggeredRef.current = true;
+
+    void (async () => {
+      try {
+        setEnrolling(true);
+        removeItem(course.id);
+        const payload = await enrollInFreeCourse(course.id);
+        toast("Enrollment confirmed. Opening your course.", "success");
+        router.replace(payload.redirectTo);
+        router.refresh();
+      } catch (error) {
+        autoEnrollTriggeredRef.current = false;
+        toast(error instanceof Error ? error.message : "Unable to enroll right now.", "error");
+      } finally {
+        setEnrolling(false);
+      }
+    })();
+  }, [course.id, hasAccess, isFreeCourse, removeItem, router, shouldAutoEnroll, toast, viewer?.id]);
 
   function addCourseToCart() {
     if (!inCart) {
@@ -94,14 +129,15 @@ export function CourseDetailClient({
   }
 
   async function handleLockedCourseAction() {
-    if (inCart) {
-      router.push("/cart");
-      return;
-    }
+    if (isFreeCourse) {
+      if (!viewer?.id) {
+        router.push(buildFreeCourseLoginPath(course.slug));
+        return;
+      }
 
-    if (canInstantEnroll) {
       try {
         setEnrolling(true);
+        removeItem(course.id);
         const payload = await enrollInFreeCourse(course.id);
         toast("Enrollment confirmed. Opening your course.", "success");
         router.push(payload.redirectTo);
@@ -111,6 +147,11 @@ export function CourseDetailClient({
       } finally {
         setEnrolling(false);
       }
+      return;
+    }
+
+    if (inCart) {
+      router.push("/cart");
       return;
     }
 
@@ -266,14 +307,14 @@ export function CourseDetailClient({
                         >
                           {resolvedCourseAccess?.actionLabel ?? "Continue Learning"}
                         </button>
-                      ) : canInstantEnroll ? (
+                      ) : isFreeCourse ? (
                         <button
                           type="button"
                           onClick={handlePrimaryAction}
                           disabled={enrolling}
                           className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90 disabled:opacity-70"
                         >
-                          {enrolling ? "Enrolling..." : "Enroll for Free"}
+                          {enrolling ? "Enrolling..." : "Enroll Free"}
                         </button>
                       ) : inCart ? (
                         <Link
@@ -682,14 +723,14 @@ export function CourseDetailClient({
                       >
                         {resolvedCourseAccess?.actionLabel ?? "Continue Learning"}
                       </button>
-                    ) : canInstantEnroll ? (
+                    ) : isFreeCourse ? (
                       <button
                         type="button"
                         onClick={handlePrimaryAction}
                         disabled={enrolling}
                         className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90 disabled:opacity-70"
                       >
-                        {enrolling ? "Enrolling..." : "Enroll for Free"}
+                        {enrolling ? "Enrolling..." : "Enroll Free"}
                       </button>
                     ) : inCart ? (
                       <Link
@@ -749,7 +790,7 @@ export function CourseDetailClient({
         hasAccess={hasAccess}
         lockedActionLabel={previewLockedActionLabel}
         lockedActionPending={enrolling}
-        lockedActionVariant={inCart ? "cart" : "primary"}
+        lockedActionVariant={!isFreeCourse && inCart ? "cart" : "primary"}
         onAccessAction={handlePreviewAccessAction}
         onLockedAction={handleLockedCourseAction}
         onOpenChange={setPreviewOpen}

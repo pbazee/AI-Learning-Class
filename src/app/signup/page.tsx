@@ -1,18 +1,15 @@
 "use client";
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brain, Mail, Lock, Eye, EyeOff, User, ArrowRight, Check, Sparkles, AlertCircle } from "lucide-react";
+import {
+  buildAuthCallbackUrl,
+  DEFAULT_AFTER_AUTH,
+  sanitizeAuthRedirectPath,
+} from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase";
-
-function getRedirectTo() {
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}/auth/callback`;
-  }
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${appUrl}/auth/callback`;
-}
 
 const quizQuestions = [
   {
@@ -70,8 +67,10 @@ function GoogleIcon({ className }: { className?: string }) {
 }
 
 export default function SignupPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const referralCode = searchParams.get("ref") || "";
+  const redirectPath = sanitizeAuthRedirectPath(searchParams.get("redirect"));
   const [step, setStep] = useState<"account" | "quiz" | "roadmap">("account");
   const [showPassword, setShowPassword] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
@@ -105,11 +104,11 @@ export default function SignupPage() {
     setLoading(true);
     const supabase = createClient();
     await syncNewsletterPreference(email, name);
-    console.log("[signup] Starting Google OAuth, redirectTo:", getRedirectTo());
+    console.log("[signup] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: getRedirectTo() },
+      options: { redirectTo: buildAuthCallbackUrl(redirectPath) },
     });
 
     if (error) {
@@ -138,7 +137,7 @@ export default function SignupPage() {
       password,
       options: {
         data: { full_name: name },
-        emailRedirectTo: getRedirectTo(),
+        emailRedirectTo: buildAuthCallbackUrl(redirectPath),
       },
     });
 
@@ -161,7 +160,7 @@ export default function SignupPage() {
     }
 
     // Auto-confirmed (email confirmation disabled in Supabase) → proceed to quiz
-    console.log("[signup] Account created and auto-confirmed, proceeding to quiz");
+    console.log("[signup] Account created and auto-confirmed");
     if (referralCode) {
       fetch("/api/referrals/apply", {
         method: "POST",
@@ -171,6 +170,13 @@ export default function SignupPage() {
     }
     void syncNewsletterPreference(email, name);
     setLoading(false);
+
+    if (redirectPath !== DEFAULT_AFTER_AUTH) {
+      router.push(redirectPath);
+      router.refresh();
+      return;
+    }
+
     setStep("quiz");
   }
 
@@ -325,7 +331,17 @@ export default function SignupPage() {
               )}
 
               <p className="text-center text-sm text-muted-foreground mt-6">
-                Already have an account? <Link href="/login" className="text-blue-600 hover:underline font-medium">Sign in</Link>
+                Already have an account?{" "}
+                <Link
+                  href={
+                    redirectPath !== DEFAULT_AFTER_AUTH
+                      ? `/login?redirect=${encodeURIComponent(redirectPath)}`
+                      : "/login"
+                  }
+                  className="text-blue-600 hover:underline font-medium"
+                >
+                  Sign in
+                </Link>
               </p>
             </motion.div>
           )}

@@ -7,7 +7,10 @@ import { motion } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import { Heart, Loader2, Star } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/media";
-import { enrollInFreeCourse } from "@/lib/course-enrollment";
+import {
+  buildFreeCourseLoginPath,
+  enrollInFreeCourse,
+} from "@/lib/course-enrollment";
 import { useCartStore } from "@/store/cart";
 import { useToast } from "@/components/ui/ToastProvider";
 import { cn, formatNumber, formatPrice, levelLabel } from "@/lib/utils";
@@ -31,14 +34,13 @@ export function CourseCard({
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
-  const { addItem, isInCart } = useCartStore();
+  const { addItem, isInCart, removeItem } = useCartStore();
   const [enrolling, setEnrolling] = useState(false);
   const [wishlistPending, setWishlistPending] = useState(false);
   const [wishlisted, setWishlisted] = useState(isWishlisted);
   const inCart = isInCart(course.id);
   const isFreeCourse = course.price === 0 || course.isFree;
   const hasAccess = Boolean(courseAccess?.hasAccess);
-  const canInstantEnroll = Boolean(viewerId) && isFreeCourse;
   const heroImage = resolveMediaUrl({
     url: course.imageUrl || course.thumbnailUrl,
     path: course.imagePath,
@@ -52,14 +54,14 @@ export function CourseCard({
     ? courseAccess?.actionLabel ?? "Continue Learning"
     : enrolling
       ? "Enrolling..."
-      : inCart
-        ? "Added to Cart"
-        : isFreeCourse
-          ? "Enroll Free"
+      : isFreeCourse
+        ? "Enroll Free"
+        : inCart
+          ? "Added to Cart"
           : "Add to Cart";
   const buttonClassName = hasAccess
     ? "bg-primary-blue text-white shadow-[0_24px_44px_-28px_rgba(0,86,210,0.95)] hover:bg-primary-blue/90"
-    : inCart
+    : !isFreeCourse && inCart
       ? "border border-primary-blue/35 bg-primary-blue/16 text-white hover:bg-primary-blue/24"
       : "bg-primary-blue text-white shadow-[0_24px_44px_-28px_rgba(0,86,210,0.95)] hover:bg-primary-blue/90";
 
@@ -71,9 +73,15 @@ export function CourseCard({
     event.preventDefault();
     event.stopPropagation();
 
-    if (canInstantEnroll) {
+    if (isFreeCourse) {
+      if (!viewerId) {
+        router.push(buildFreeCourseLoginPath(course.slug));
+        return;
+      }
+
       try {
         setEnrolling(true);
+        removeItem(course.id);
         const payload = await enrollInFreeCourse(course.id);
         toast("Enrollment confirmed. Opening your course.", "success");
         router.push(payload.redirectTo);

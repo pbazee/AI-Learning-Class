@@ -11,3 +11,11 @@ export async function enrollInFreeCourse(courseId: string) {
 
   return payload as { redirectTo: string };
 }
+
+export function buildFreeCourseReturnPath(courseSlug: string) {
+  return `/courses/${courseSlug}?enroll=free`;
+}
+
+export function buildFreeCourseLoginPath(courseSlug: string) {
+  return `/login?redirect=${encodeURIComponent(buildFreeCourseReturnPath(courseSlug))}`;
+}

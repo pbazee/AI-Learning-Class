@@ -13,24 +13,43 @@ interface CartStore {
   itemCount: () => number;
 }
 
+function sanitizeCartItems(items: CartItem[] | undefined) {
+  return (items ?? []).filter((item) => Number.isFinite(item.price) && item.price > 0);
+}
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
       items: [],
       addItem: (item) => {
-        const existing = get().items.find((i) => i.courseId === item.courseId);
+        if (item.price <= 0) {
+          return;
+        }
+
+        const existing = sanitizeCartItems(get().items).find((i) => i.courseId === item.courseId);
         if (!existing) {
-          set((state) => ({ items: [...state.items, item] }));
+          set((state) => ({ items: [...sanitizeCartItems(state.items), item] }));
         }
       },
       removeItem: (courseId) => {
         set((state) => ({ items: state.items.filter((i) => i.courseId !== courseId) }));
       },
       clearCart: () => set({ items: [] }),
-      isInCart: (courseId) => get().items.some((i) => i.courseId === courseId),
-      total: () => get().items.reduce((sum, item) => sum + item.price, 0),
-      itemCount: () => get().items.length,
+      isInCart: (courseId) => sanitizeCartItems(get().items).some((i) => i.courseId === courseId),
+      total: () => sanitizeCartItems(get().items).reduce((sum, item) => sum + item.price, 0),
+      itemCount: () => sanitizeCartItems(get().items).length,
     }),
-    { name: "ai-learning-cart" }
+    {
+      name: "ai-learning-cart",
+      merge: (persistedState, currentState) => {
+        const persistedCart = persistedState as Partial<CartStore> | undefined;
+
+        return {
+          ...currentState,
+          ...persistedCart,
+          items: sanitizeCartItems(persistedCart?.items ?? currentState.items),
+        };
+      },
+    }
   )
 );
