@@ -1,6 +1,6 @@
 // src/app/not-found.tsx
 import Link from "next/link";
-import { Brain, Home, BookOpen, ArrowRight } from "lucide-react";
+import { Brain, Home, BookOpen } from "lucide-react";
 
 export default function NotFound() {
   return (
@@ -23,7 +23,7 @@ export default function NotFound() {
           Page Not Found
         </h1>
         <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-          Looks like this page got lost in the neural network. Even AI makes mistakes sometimes.
+          The page you requested could not be found.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">

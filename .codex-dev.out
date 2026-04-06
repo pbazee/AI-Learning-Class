@@ -1,0 +1,36 @@
+
+> ai-learning-class@0.1.0 dev
+> next dev --port 3000
+
+   ▲ Next.js 15.5.14
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.100.174:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 14.7s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 881ms (165 modules)
+ ○ Compiling /api/certificates/[code]/pdf ...
+ ✓ Compiled /api/certificates/[code]/pdf in 4.8s (414 modules)
+[perf.db] Certificate.findUnique took 4525.5ms request=mnmvj2qr-3r0iv6
+[perf.request] api.certificates.pdf total=4990ms db=4525.5ms queries=1 request=mnmvj2qr-3r0iv6
+ GET /api/certificates/ALC-7C2A-MNLBLG6V-3CAC6B/pdf?download=1 500 in 14064ms
+ ✓ Compiled in 173ms
+ ✓ Compiled in 624ms (360 modules)
+ ✓ Compiled in 4.5s (165 modules)
+ ○ Compiling /api/certificates/[code]/pdf ...
+ ✓ Compiled /api/certificates/[code]/pdf in 10.2s (307 modules)
+[perf.db] Certificate.findUnique took 5475.3ms
+[perf.db] Certificate.update took 1070.7ms
+[perf.request] api.certificates.pdf total=10718.2ms db=0ms queries=0 request=mnmw72bx-n1cj29
+ GET /api/certificates/ALC-7C2A-MNLBLG6V-3CAC6B/pdf?download=1 200 in 24198ms
+ ○ Compiling /api/auth/login ...
+ ✓ Compiled /api/auth/login in 2.2s (362 modules)
+ POST /api/auth/login 401 in 4884ms
+ POST /api/auth/login 401 in 326ms
+ POST /api/auth/login 401 in 317ms
+ POST /api/auth/login 401 in 542ms
+ POST /api/auth/login 401 in 316ms
+ POST /api/auth/login 401 in 921ms
+[?25h

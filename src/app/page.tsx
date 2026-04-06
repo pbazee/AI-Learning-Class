@@ -1,70 +1,59 @@
+import dynamic from "next/dynamic";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { HeroCarousel } from "@/components/landing/HeroCarousel";
-import { CategoriesGrid } from "@/components/landing/CategoriesGrid";
 import { CourseSection } from "@/components/landing/CourseSection";
-import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
-import { BlogSection } from "@/components/landing/BlogSection";
-import { PricingSection } from "@/components/landing/PricingSection";
-import { AffiliateSection } from "@/components/landing/AffiliateSection";
 import { TrustedLogosMarquee } from "@/components/landing/TrustedLogosMarquee";
-import { getUserWishlistCourseIds } from "@/lib/learner-records";
+import { StorefrontPersonalizationProvider } from "@/components/storefront/StorefrontPersonalizationProvider";
 import {
-  getBlogPosts,
-  getCategories,
-  getCurrentUserProfile,
-  getCourses,
-  getHeroSlides,
-  getHomepageParagraphContentMap,
-  getSubscriptionPlans,
-  getTestimonials,
-  getTrustedLogos,
-  getUserAffiliateStatus,
-  getUserCourseAccessMap,
+  getPublicHomepageData,
 } from "@/lib/data";
+
+const CategoriesGrid = dynamic(() =>
+  import("@/components/landing/CategoriesGrid").then((module) => ({
+    default: module.CategoriesGrid,
+  }))
+);
+const TestimonialsSection = dynamic(() =>
+  import("@/components/landing/TestimonialsSection").then((module) => ({
+    default: module.TestimonialsSection,
+  }))
+);
+const BlogSection = dynamic(() =>
+  import("@/components/landing/BlogSection").then((module) => ({
+    default: module.BlogSection,
+  }))
+);
+const PricingSection = dynamic(() =>
+  import("@/components/landing/PricingSection").then((module) => ({
+    default: module.PricingSection,
+  }))
+);
+const AffiliateSection = dynamic(() =>
+  import("@/components/landing/AffiliateSection").then((module) => ({
+    default: module.AffiliateSection,
+  }))
+);
 
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
 
+export const revalidate = 300;
+
 export default async function HomePage() {
-  const [
-    courses,
+  const {
+    affiliateCommissionRate,
     categories,
+    courses,
+    homepageParagraphs,
+    plans,
+    posts,
     slides,
     testimonials,
-    posts,
-    plans,
-    viewer,
-    homepageParagraphs,
     trustedLogos,
-  ] = await Promise.all([
-    getCourses(),
-    getCategories(),
-    getHeroSlides(),
-    getTestimonials(4),
-    getBlogPosts(3),
-    getSubscriptionPlans(),
-    getCurrentUserProfile(),
-    getHomepageParagraphContentMap(),
-    getTrustedLogos(),
-  ]);
-  const [courseAccessMap, affiliateStatus] = viewer
-    ? await Promise.all([
-        getUserCourseAccessMap(
-          viewer.id,
-          courses.map((course) => course.id)
-        ),
-        getUserAffiliateStatus(viewer.id),
-      ])
-    : [{}, { hasJoined: false, status: null }];
-  const wishlistCourseIds = viewer
-    ? await getUserWishlistCourseIds(
-        viewer.id,
-        courses.map((course) => course.id)
-      )
-    : [];
+  } = await getPublicHomepageData();
 
   const featured = courses.filter((course) => course.isFeatured);
   const trending = courses.filter((course) => course.isTrending);
@@ -99,67 +88,60 @@ export default async function HomePage() {
       <Navbar />
       <HeroCarousel slides={slides} stats={heroStats} />
       <TrustedLogosMarquee logos={trustedLogos} />
-      <CategoriesGrid
-        categories={categories.slice(0, 4)}
-        sectionDescription={homepageParagraphs.learning_paths_subtitle}
-        showViewMoreButton
-      />
-      <CourseSection
-        title="Featured Courses"
-        subtitle={homepageParagraphs.featured_courses_subtitle}
-        badge="Admin Curated"
-        badgeIcon="star"
-        courses={featured}
-        viewAllHref="/courses?filter=featured"
-        viewAllLabel="View featured"
-        maxItems={8}
-        viewerId={viewer?.id}
-        courseAccessMap={courseAccessMap}
-        wishlistCourseIds={wishlistCourseIds}
-      />
-      <CourseSection
-        title="Trending Now"
-        subtitle={homepageParagraphs.trending_now_subtitle}
-        badge="Trending Worldwide"
-        badgeIcon="flame"
-        courses={trending}
-        viewAllHref="/courses?filter=trending"
-        viewAllLabel="View trending"
-        maxItems={8}
-        viewerId={viewer?.id}
-        courseAccessMap={courseAccessMap}
-        wishlistCourseIds={wishlistCourseIds}
-      />
-      <CourseSection
-        title="Most Popular"
-        subtitle={homepageParagraphs.most_popular_subtitle}
-        badge="All-Time Favorites"
-        badgeIcon="star"
-        courses={popular}
-        viewAllHref="/courses?filter=popular"
-        viewAllLabel="View popular"
-        maxItems={8}
-        viewerId={viewer?.id}
-        courseAccessMap={courseAccessMap}
-        wishlistCourseIds={wishlistCourseIds}
-      />
-      <CourseSection
-        title="New Releases"
-        subtitle={homepageParagraphs.new_releases_subtitle}
-        badge="Just Launched"
-        badgeIcon="clock"
-        courses={newCourses}
-        viewAllHref="/courses?filter=new-releases"
-        viewAllLabel="View new releases"
-        maxItems={8}
-        viewerId={viewer?.id}
-        courseAccessMap={courseAccessMap}
-        wishlistCourseIds={wishlistCourseIds}
-      />
-      <TestimonialsSection testimonials={testimonials} />
-      <BlogSection posts={posts} />
-      <PricingSection plans={plans} />
-      <AffiliateSection hasJoined={affiliateStatus.hasJoined} />
+      <StorefrontPersonalizationProvider
+        courseIds={courses.map((course) => course.id)}
+        includeAffiliateStatus
+      >
+        <CategoriesGrid
+          categories={categories.slice(0, 4)}
+          sectionDescription={homepageParagraphs.learning_paths_subtitle}
+          showViewMoreButton
+        />
+        <CourseSection
+          title="Featured Courses"
+          subtitle={homepageParagraphs.featured_courses_subtitle}
+          badge="Admin Curated"
+          badgeIcon="star"
+          courses={featured}
+          viewAllHref="/courses?filter=featured"
+          viewAllLabel="View featured"
+          maxItems={8}
+        />
+        <CourseSection
+          title="Trending Now"
+          subtitle={homepageParagraphs.trending_now_subtitle}
+          badge="Trending Worldwide"
+          badgeIcon="flame"
+          courses={trending}
+          viewAllHref="/courses?filter=trending"
+          viewAllLabel="View trending"
+          maxItems={8}
+        />
+        <CourseSection
+          title="Most Popular"
+          subtitle={homepageParagraphs.most_popular_subtitle}
+          badge="All-Time Favorites"
+          badgeIcon="star"
+          courses={popular}
+          viewAllHref="/courses?filter=popular"
+          viewAllLabel="View popular"
+          maxItems={8}
+        />
+        <CourseSection
+          title="New Releases"
+          subtitle={homepageParagraphs.new_releases_subtitle}
+          badge="Just Launched"
+          badgeIcon="clock"
+          courses={newCourses}
+          viewAllHref="/courses?filter=new-releases"
+          viewAllLabel="View new releases"
+          maxItems={8}
+        />
+        <TestimonialsSection testimonials={testimonials} />
+        <BlogSection posts={posts} />
+        <PricingSection plans={plans} />
+        <AffiliateSection commissionRate={affiliateCommissionRate} />
+      </StorefrontPersonalizationProvider>
       <Footer />
     </div>
   );

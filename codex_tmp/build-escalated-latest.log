@@ -6,117 +6,126 @@
    - Environments: .env.local, .env
 
    Creating an optimized production build ...
- ✓ Compiled successfully in 56s
+ ✓ Compiled successfully in 41s
    Linting and checking validity of types ...
    Collecting page data ...
-   Generating static pages (0/20) ...
-   Generating static pages (5/20) 
-   Generating static pages (10/20) 
-   Generating static pages (15/20) 
- ✓ Generating static pages (20/20)
+   Generating static pages (0/23) ...
+   Generating static pages (5/23) 
+   Generating static pages (11/23) 
+   Generating static pages (17/23) 
+ ✓ Generating static pages (23/23)
    Finalizing page optimization ...
    Collecting build traces ...
 
 Route (app)                                    Size  First Load JS
-┌ ƒ /                                       9.97 kB         247 kB
-├ ƒ /_not-found                               255 B         102 kB
-├ ƒ /admin                                  18.2 kB         236 kB
-├ ƒ /admin/affiliates                       9.66 kB         155 kB
-├ ƒ /admin/analytics                          255 B         102 kB
+┌ ƒ /                                       9.95 kB         248 kB
+├ ƒ /_not-found                               268 B         103 kB
+├ ƒ /about                                  1.34 kB         235 kB
+├ ƒ /admin                                  18.4 kB         236 kB
+├ ƒ /admin/affiliates                        9.7 kB         155 kB
+├ ƒ /admin/analytics                          268 B         103 kB
 ├ ƒ /admin/announcements                    5.01 kB         154 kB
-├ ƒ /admin/blogs                            4.71 kB         162 kB
-├ ƒ /admin/categories                       4.87 kB         162 kB
+├ ƒ /admin/blogs                            5.14 kB         217 kB
+├ ƒ /admin/categories                       5.29 kB         217 kB
 ├ ƒ /admin/coupons                             5 kB         154 kB
-├ ƒ /admin/courses                          12.8 kB         170 kB
-├ ƒ /admin/hero                               255 B         102 kB
-├ ƒ /admin/hero-slides                      4.46 kB         161 kB
-├ ƒ /admin/messages                         5.75 kB         157 kB
-├ ƒ /admin/orders                           7.57 kB         156 kB
+├ ƒ /admin/courses                          13.2 kB         225 kB
+├ ƒ /admin/hero                               268 B         103 kB
+├ ƒ /admin/hero-slides                         5 kB         217 kB
+├ ƒ /admin/messages                         5.75 kB         158 kB
+├ ƒ /admin/orders                           7.57 kB         157 kB
 ├ ƒ /admin/paragraphs                       4.13 kB         153 kB
-├ ƒ /admin/popups                           4.11 kB         161 kB
-├ ƒ /admin/referrals                        7.69 kB         153 kB
+├ ƒ /admin/popups                           4.54 kB         216 kB
+├ ƒ /admin/referrals                        7.72 kB         153 kB
 ├ ƒ /admin/reviews                          4.93 kB         154 kB
-├ ƒ /admin/settings                         4.83 kB         154 kB
-├ ƒ /admin/subscribers                      5.68 kB         154 kB
+├ ƒ /admin/settings                         5.51 kB         155 kB
+├ ƒ /admin/subscribers                      5.68 kB         155 kB
 ├ ƒ /admin/subscriptions                    5.18 kB         154 kB
-├ ƒ /admin/trusted-logos                    4.16 kB         161 kB
-├ ƒ /admin/user-subscriptions               9.73 kB         155 kB
-├ ƒ /admin/users                            5.73 kB         154 kB
-├ ƒ /affiliate                              3.81 kB         237 kB
-├ ƒ /affiliate/dashboard                      11 kB         350 kB
-├ ƒ /api/admin/affiliate-conversions          255 B         102 kB
-├ ƒ /api/admin/affiliate-payouts              255 B         102 kB
-├ ƒ /api/admin/affiliate-payouts/[id]         255 B         102 kB
-├ ƒ /api/admin/affiliate-program              255 B         102 kB
-├ ƒ /api/admin/affiliates                     255 B         102 kB
-├ ƒ /api/admin/affiliates/[id]/status         255 B         102 kB
-├ ƒ /api/admin/referral-program               255 B         102 kB
-├ ƒ /api/admin/referrals                      255 B         102 kB
-├ ƒ /api/admin/settings                       255 B         102 kB
-├ ƒ /api/admin/upload                         255 B         102 kB
-├ ƒ /api/admin/user-subscriptions/email       255 B         102 kB
-├ ƒ /api/affiliate/apply                      255 B         102 kB
-├ ƒ /api/affiliate/dashboard                  255 B         102 kB
-├ ƒ /api/affiliate/payout-request             255 B         102 kB
-├ ƒ /api/affiliate/track                      255 B         102 kB
-├ ƒ /api/announcements                        255 B         102 kB
-├ ƒ /api/auth/sync-user                       255 B         102 kB
-├ ƒ /api/certificate/generate                 255 B         102 kB
-├ ƒ /api/checkout/quote                       255 B         102 kB
-├ ƒ /api/checkout/session                     255 B         102 kB
-├ ƒ /api/contact/messages                     255 B         102 kB
-├ ƒ /api/copilot                              255 B         102 kB
-├ ƒ /api/courses/[courseId]/enroll            255 B         102 kB
-├ ƒ /api/courses/[courseId]/reviews           255 B         102 kB
-├ ƒ /api/email/send                           255 B         102 kB
-├ ƒ /api/learn/lessons/[lessonId]/notes       255 B         102 kB
-├ ƒ /api/learn/lessons/[lessonId]/progress    255 B         102 kB
-├ ƒ /api/newsletter/subscribe                 255 B         102 kB
-├ ƒ /api/paypal/capture                       255 B         102 kB
-├ ƒ /api/paypal/webhook                       255 B         102 kB
-├ ƒ /api/paystack/verify                      255 B         102 kB
-├ ƒ /api/paystack/webhook                     255 B         102 kB
-├ ƒ /api/referrals/apply                      255 B         102 kB
-├ ƒ /api/referrals/stats                      255 B         102 kB
-├ ƒ /api/search/courses                       255 B         102 kB
-├ ƒ /api/settings                             255 B         102 kB
-├ ƒ /api/stripe/confirm                       255 B         102 kB
-├ ƒ /api/stripe/webhook                       255 B         102 kB
-├ ƒ /api/wishlist/[courseId]                  255 B         102 kB
-├ ƒ /auth/callback                            255 B         102 kB
-├ ƒ /blog                                   1.34 kB         234 kB
-├ ƒ /blog/[slug]                            1.34 kB         234 kB
-├ ƒ /cart                                   3.03 kB         236 kB
-├ ƒ /categories                             3.88 kB         237 kB
-├ ƒ /certificates                            3.4 kB         236 kB
-├ ƒ /certificates/[code]                    1.49 kB         234 kB
-├ ƒ /checkout                               5.04 kB         235 kB
-├ ƒ /checkout/complete                      1.57 kB         232 kB
-├ ƒ /checkout/success                       2.27 kB         232 kB
-├ ƒ /contact                                4.15 kB         237 kB
-├ ƒ /courses                                3.92 kB         241 kB
-├ ƒ /courses/[slug]                         9.37 kB         246 kB
-├ ƒ /dashboard                              2.84 kB         236 kB
-├ ƒ /dashboard/certificates                   255 B         102 kB
-├ ƒ /dashboard/referrals                       6 kB         239 kB
-├ ƒ /dashboard/settings                       255 B         102 kB
-├ ƒ /forgot-password                        4.28 kB         237 kB
-├ ƒ /leaderboard                            1.32 kB         234 kB
-├ ƒ /learn/[slug]/[lessonId]                12.2 kB         164 kB
-├ ƒ /login                                  4.82 kB         201 kB
-├ ƒ /paths                                    255 B         102 kB
-├ ƒ /pricing                                2.83 kB         236 kB
-├ ƒ /reviews                                2.99 kB         236 kB
-├ ƒ /settings                                  4 kB         237 kB
-├ ƒ /sign-in                                  255 B         102 kB
-├ ƒ /sign-up                                  255 B         102 kB
-├ ƒ /signin                                   255 B         102 kB
-├ ƒ /signup                                 7.64 kB         203 kB
-└ ƒ /wishlist                               1.69 kB         238 kB
+├ ƒ /admin/trusted-logos                    4.59 kB         216 kB
+├ ƒ /admin/user-subscriptions               9.76 kB         155 kB
+├ ƒ /admin/users                            5.73 kB         155 kB
+├ ƒ /affiliate                              3.78 kB         238 kB
+├ ƒ /affiliate/dashboard                    11.5 kB         352 kB
+├ ƒ /api/account/profile                      268 B         103 kB
+├ ƒ /api/admin/affiliate-conversions          268 B         103 kB
+├ ƒ /api/admin/affiliate-payouts              268 B         103 kB
+├ ƒ /api/admin/affiliate-payouts/[id]         268 B         103 kB
+├ ƒ /api/admin/affiliate-program              268 B         103 kB
+├ ƒ /api/admin/affiliates                     268 B         103 kB
+├ ƒ /api/admin/affiliates/[id]/status         268 B         103 kB
+├ ƒ /api/admin/referral-program               268 B         103 kB
+├ ƒ /api/admin/referrals                      268 B         103 kB
+├ ƒ /api/admin/settings                       268 B         103 kB
+├ ƒ /api/admin/upload                         268 B         103 kB
+├ ƒ /api/admin/upload/sign                    268 B         103 kB
+├ ƒ /api/admin/user-subscriptions/email       268 B         103 kB
+├ ƒ /api/affiliate/apply                      268 B         103 kB
+├ ƒ /api/affiliate/dashboard                  268 B         103 kB
+├ ƒ /api/affiliate/payout-request             268 B         103 kB
+├ ƒ /api/affiliate/track                      268 B         103 kB
+├ ƒ /api/announcements                        268 B         103 kB
+├ ƒ /api/auth/sync-user                       268 B         103 kB
+├ ƒ /api/certificate/generate                 268 B         103 kB
+├ ƒ /api/certificates/[code]/pdf              268 B         103 kB
+├ ƒ /api/checkout/quote                       268 B         103 kB
+├ ƒ /api/checkout/session                     268 B         103 kB
+├ ƒ /api/contact/messages                     268 B         103 kB
+├ ƒ /api/copilot                              268 B         103 kB
+├ ƒ /api/courses/[courseId]/enroll            268 B         103 kB
+├ ƒ /api/courses/[courseId]/reviews           268 B         103 kB
+├ ƒ /api/email/send                           268 B         103 kB
+├ ƒ /api/learn/lessons/[lessonId]/notes       268 B         103 kB
+├ ƒ /api/learn/lessons/[lessonId]/progress    268 B         103 kB
+├ ƒ /api/newsletter/subscribe                 268 B         103 kB
+├ ƒ /api/paypal/capture                       268 B         103 kB
+├ ƒ /api/paypal/webhook                       268 B         103 kB
+├ ƒ /api/paystack/verify                      268 B         103 kB
+├ ƒ /api/paystack/webhook                     268 B         103 kB
+├ ƒ /api/popups/active                        268 B         103 kB
+├ ƒ /api/referrals/apply                      268 B         103 kB
+├ ƒ /api/referrals/stats                      268 B         103 kB
+├ ƒ /api/search/courses                       268 B         103 kB
+├ ƒ /api/settings                             268 B         103 kB
+├ ƒ /api/stripe/confirm                       268 B         103 kB
+├ ƒ /api/stripe/webhook                       268 B         103 kB
+├ ƒ /api/team/workspace                       268 B         103 kB
+├ ƒ /api/team/workspace/export                268 B         103 kB
+├ ƒ /api/wishlist/[courseId]                  268 B         103 kB
+├ ƒ /auth/callback                            268 B         103 kB
+├ ƒ /blog                                   1.34 kB         235 kB
+├ ƒ /blog/[slug]                            1.34 kB         235 kB
+├ ƒ /cart                                   3.21 kB         237 kB
+├ ƒ /categories                             3.88 kB         238 kB
+├ ƒ /certificates                            3.4 kB         237 kB
+├ ƒ /certificates/[code]                    1.34 kB         235 kB
+├ ƒ /checkout                               6.18 kB         237 kB
+├ ƒ /checkout/complete                      1.57 kB         233 kB
+├ ƒ /checkout/success                       2.27 kB         233 kB
+├ ƒ /contact                                4.15 kB         238 kB
+├ ƒ /courses                                3.91 kB         242 kB
+├ ƒ /courses/[slug]                          139 kB         376 kB
+├ ƒ /dashboard                              2.84 kB         237 kB
+├ ƒ /dashboard/certificates                   268 B         103 kB
+├ ƒ /dashboard/referrals                    6.08 kB         240 kB
+├ ƒ /dashboard/settings                       268 B         103 kB
+├ ƒ /dashboard/teams                        6.55 kB         240 kB
+├ ƒ /forgot-password                        4.28 kB         238 kB
+├ ƒ /leaderboard                            1.32 kB         235 kB
+├ ƒ /learn/[slug]/[lessonId]                  13 kB         165 kB
+├ ƒ /login                                  4.61 kB         201 kB
+├ ƒ /paths                                    268 B         103 kB
+├ ƒ /pricing                                2.79 kB         237 kB
+├ ƒ /reviews                                2.99 kB         237 kB
+├ ƒ /settings                               5.83 kB         240 kB
+├ ƒ /sign-in                                  268 B         103 kB
+├ ƒ /sign-up                                  268 B         103 kB
+├ ƒ /signin                                   268 B         103 kB
+├ ƒ /signup                                 7.63 kB         204 kB
+├ ƒ /team/join/[token]                      3.54 kB         237 kB
+└ ƒ /wishlist                               1.64 kB         240 kB
 + First Load JS shared by all                102 kB
   ├ chunks/1255-f8a8fe852c7e1df2.js         45.7 kB
   ├ chunks/4bd1b696-100b9d70ed4e49c1.js     54.2 kB
-  └ other shared chunks (total)             2.06 kB
+  └ other shared chunks (total)             2.54 kB
 
 
 ƒ Middleware                                82.3 kB

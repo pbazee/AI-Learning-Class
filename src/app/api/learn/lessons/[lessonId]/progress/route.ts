@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getUserCourseAccessMap } from "@/lib/data";
 import { recordUserCourseOwnership } from "@/lib/learner-records";
+import { syncCourseEnrollmentCount } from "@/lib/course-metrics";
 import { prisma } from "@/lib/prisma";
 import { getCourseProgressState } from "@/lib/lesson-player";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
@@ -83,6 +84,7 @@ export async function POST(
       expiresAt: courseAccess.expiresAt ? new Date(courseAccess.expiresAt) : null,
       ownedAt: new Date(),
     });
+    await syncCourseEnrollmentCount(lesson.module.courseId);
 
     if (payload.touchOnly) {
       await prisma.lessonProgress.upsert({

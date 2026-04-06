@@ -1,0 +1,11 @@
+
+> ai-learning-class@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.14
+   - Environments: .env.local, .env
+
+   Creating an optimized production build ...
+
+> Build error occurred
+[Error: spawn EPERM] { errno: -4048, code: 'EPERM', syscall: 'spawn' }

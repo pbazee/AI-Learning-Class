@@ -54,6 +54,13 @@ function slugify(value: string) {
     .slice(0, 80);
 }
 
+export function getCertificatePdfFileName(input: {
+  courseTitle: string;
+  recipientName: string;
+}) {
+  return `ai-learning-class-certificate-${slugify(input.recipientName)}-${slugify(input.courseTitle) || "course"}.pdf`;
+}
+
 export function getCertificateHref(code: string) {
   return `/certificates/${encodeURIComponent(code)}`;
 }
@@ -79,7 +86,10 @@ export async function buildCertificatePresentation(
   const viewPdfHref = getCertificatePdfHref(certificate.code);
   const downloadPdfHref = getCertificatePdfHref(certificate.code, { download: true });
   const completionStatement = `successfully completed ${courseTitle}, demonstrating practical achievement through AI Learning Class coursework.`;
-  const fileName = `ai-learning-class-certificate-${slugify(recipientName)}-${slugify(courseTitle) || "course"}.pdf`;
+  const fileName = getCertificatePdfFileName({
+    courseTitle,
+    recipientName,
+  });
   const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
     errorCorrectionLevel: "H",
     margin: 1,

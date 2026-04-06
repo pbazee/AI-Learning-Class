@@ -4,7 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Check, Loader2, Lock, Shield } from "lucide-react";
+import { Check, Loader2, Lock, Shield, Tag, X } from "lucide-react";
 import { CountryCombobox } from "@/components/checkout/CountryCombobox";
 import { Navbar } from "@/components/layout/Navbar";
 import { cn, formatPrice } from "@/lib/utils";
@@ -117,11 +117,14 @@ export default function CheckoutPage() {
   const searchParams = useSearchParams();
   const { items } = useCartStore();
   const planSlug = searchParams.get("plan");
+  const couponParam = searchParams.get("coupon")?.trim().toUpperCase() || "";
   const [method, setMethod] = useState<PaymentMethod>("stripe");
   const [processing, setProcessing] = useState(false);
   const [quote, setQuote] = useState<CheckoutQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(true);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [couponInput, setCouponInput] = useState(couponParam);
+  const [couponCode, setCouponCode] = useState(couponParam);
   const [formData, setFormData] = useState({ name: "", email: "", country: "US" });
 
   const cartSavings = useMemo(
@@ -144,6 +147,12 @@ export default function CheckoutPage() {
   );
   const isPlanCheckout = Boolean(planSlug);
   const availablePaymentOptions = paymentOptions;
+  const normalizedCouponInput = couponInput.trim().toUpperCase();
+
+  useEffect(() => {
+    setCouponInput(couponParam);
+    setCouponCode(couponParam);
+  }, [couponParam]);
 
   useEffect(() => {
     const inferredCountry = inferCheckoutCountry();
@@ -215,6 +224,7 @@ export default function CheckoutPage() {
             items: requestItems,
             method,
             country: formData.country,
+            couponCode,
           }),
         });
         const payload = await response.json().catch(() => null);
@@ -233,7 +243,6 @@ export default function CheckoutPage() {
               ? error.message
               : "Unable to load your checkout summary."
           );
-          setQuote(null);
         }
       } finally {
         if (!cancelled) {
@@ -247,7 +256,7 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [formData.country, method, planSlug, requestItems]);
+  }, [couponCode, formData.country, method, planSlug, requestItems]);
 
   async function handleCheckout(event: React.FormEvent) {
     event.preventDefault();
@@ -271,6 +280,7 @@ export default function CheckoutPage() {
           customerName: formData.name,
           customerEmail: formData.email,
           country: formData.country,
+          couponCode,
         }),
       });
       const payload = await response.json().catch(() => null);
@@ -294,6 +304,17 @@ export default function CheckoutPage() {
 
   const isFreePlan = quote?.planSlug === "free" || (quote?.total ?? 0) <= 0;
   const hasCheckoutContent = Boolean(planSlug) || items.length > 0;
+
+  function handleApplyCoupon() {
+    setQuoteError(null);
+    setCouponCode(normalizedCouponInput);
+  }
+
+  function handleRemoveCoupon() {
+    setQuoteError(null);
+    setCouponInput("");
+    setCouponCode("");
+  }
 
   return (
     <div className="site-shell overflow-x-hidden">
@@ -420,7 +441,43 @@ export default function CheckoutPage() {
                             ? "You will be redirected to Stripe Checkout to complete payment securely."
                             : method === "paypal"
                               ? "You will be redirected to PayPal to approve and complete payment."
-                              : `You will be redirected to Paystack Checkout in ${quote?.currency ?? "your selected"} currency so eligible regional methods like mobile money can appear when your account and country support them.`}
+                            : `You will be redirected to Paystack Checkout in ${quote?.currency ?? "your selected"} currency so eligible regional methods like mobile money can appear when your account and country support them.`}
+                      </div>
+
+                      <div className="mt-5 rounded-2xl border border-border bg-background px-4 py-4">
+                        <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          <Tag className="h-4 w-4" />
+                          Coupon or referral code
+                        </label>
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                          <input
+                            type="text"
+                            value={couponInput}
+                            onChange={(event) => setCouponInput(event.target.value.toUpperCase())}
+                            placeholder="LAUNCH50"
+                            className="input-surface flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleApplyCoupon}
+                            className="action-secondary justify-center px-5 py-3"
+                          >
+                            Apply code
+                          </button>
+                          {couponCode ? (
+                            <button
+                              type="button"
+                              onClick={handleRemoveCoupon}
+                              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border px-4 py-3 text-sm font-semibold text-muted-foreground transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 dark:hover:border-rose-900/40 dark:hover:bg-rose-950/30"
+                            >
+                              <X className="h-4 w-4" />
+                              Remove
+                            </button>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Enter a manual coupon code or referral reward and apply it before checkout.
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -526,14 +583,14 @@ export default function CheckoutPage() {
                       {quote.appliedCouponCode ? (
                         <div className="mb-5 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-4 py-3">
                           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
-                            Referral discount applied
+                            Discount applied
                           </p>
                           <p className="mt-1 text-sm font-semibold text-foreground">
                             {quote.appliedCouponCode}
                           </p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {quote.appliedCouponDescription ||
-                              "Your active referral reward was applied automatically."}
+                              "Your coupon or referral reward has been applied to this order."}
                           </p>
                         </div>
                       ) : null}
@@ -555,7 +612,7 @@ export default function CheckoutPage() {
                         ) : null}
                         {quote.discountAmount > 0 ? (
                           <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Referral discount</span>
+                            <span className="text-muted-foreground">Discount</span>
                             <span className="text-emerald-600">
                               -{formatPrice(quote.discountAmount, quote.currency)}
                             </span>
@@ -586,7 +643,7 @@ export default function CheckoutPage() {
                     {[
                       "Premium classroom access on desktop and mobile",
                       "Instant checkout with Stripe, PayPal, or Paystack",
-                      "Referral discounts applied automatically when available",
+                      "Coupon and referral discounts supported during checkout",
                       "Certificates included on eligible plans and courses",
                     ].map((feature) => (
                       <div key={feature} className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { useCartStore } from "@/store/cart";
@@ -9,7 +10,16 @@ import { X, ShoppingCart, ArrowRight, Shield, Tag } from "lucide-react";
 
 export default function CartPage() {
   const { items, removeItem, total } = useCartStore();
+  const [couponCode, setCouponCode] = useState("");
   const cartTotal = total();
+  const normalizedCouponCode = couponCode.trim().toUpperCase();
+  const checkoutHref = useMemo(
+    () =>
+      normalizedCouponCode
+        ? `/checkout?coupon=${encodeURIComponent(normalizedCouponCode)}`
+        : "/checkout",
+    [normalizedCouponCode]
+  );
 
   return (
     <div className="site-shell">
@@ -103,12 +113,29 @@ export default function CartPage() {
                   <div className="mt-6 flex gap-2">
                     <div className="relative flex-1">
                       <Tag className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <input type="text" placeholder="Coupon code" className="input-surface w-full pl-9" />
+                      <input
+                        type="text"
+                        value={couponCode}
+                        onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                        placeholder="Coupon code"
+                        className="input-surface w-full pl-9"
+                      />
                     </div>
-                    <button className="action-secondary px-4 py-3">Apply</button>
+                    <button
+                      type="button"
+                      onClick={() => setCouponCode(normalizedCouponCode)}
+                      className="action-secondary px-4 py-3"
+                    >
+                      Apply
+                    </button>
                   </div>
+                  {normalizedCouponCode ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Coupon <span className="font-semibold text-foreground">{normalizedCouponCode}</span> will be verified during checkout.
+                    </p>
+                  ) : null}
 
-                  <Link href="/checkout" className="action-primary mt-6 flex w-full">
+                  <Link href={checkoutHref} className="action-primary mt-6 flex w-full">
                     Proceed to checkout
                   </Link>
 

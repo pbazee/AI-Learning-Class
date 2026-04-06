@@ -1,0 +1,136 @@
+
+> ai-learning-class@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.14
+   - Environments: .env.local, .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 57s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/72) ...
+   Generating static pages (18/72) 
+   Generating static pages (36/72) 
+   Generating static pages (54/72) 
+ ✓ Generating static pages (72/72)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                    Size  First Load JS  Revalidate  Expire
+┌ ○ /                                       11.2 kB         249 kB          5m      1y
+├ ○ /_not-found                               270 B         103 kB
+├ ○ /about                                  1.34 kB         235 kB          5m      1y
+├ ƒ /admin                                  18.4 kB         236 kB
+├ ƒ /admin/affiliates                        9.7 kB         155 kB
+├ ƒ /admin/analytics                          270 B         103 kB
+├ ○ /admin/announcements                    5.01 kB         154 kB
+├ ○ /admin/blogs                            5.14 kB         217 kB
+├ ○ /admin/categories                       5.29 kB         217 kB
+├ ○ /admin/coupons                             5 kB         154 kB
+├ ○ /admin/courses                          13.2 kB         225 kB
+├ ○ /admin/hero                               270 B         103 kB
+├ ○ /admin/hero-slides                         5 kB         217 kB
+├ ○ /admin/messages                         5.75 kB         158 kB
+├ ○ /admin/orders                           7.57 kB         157 kB
+├ ○ /admin/paragraphs                       4.13 kB         153 kB
+├ ○ /admin/popups                           4.54 kB         216 kB
+├ ○ /admin/referrals                        7.72 kB         153 kB
+├ ○ /admin/reviews                          4.93 kB         154 kB
+├ ○ /admin/settings                         5.51 kB         155 kB
+├ ○ /admin/subscribers                      5.68 kB         155 kB
+├ ○ /admin/subscriptions                    5.18 kB         154 kB
+├ ○ /admin/trusted-logos                    4.59 kB         216 kB
+├ ○ /admin/user-subscriptions               9.76 kB         155 kB
+├ ○ /admin/users                            5.73 kB         155 kB
+├ ƒ /affiliate                              3.78 kB         238 kB
+├ ƒ /affiliate/dashboard                    11.5 kB         352 kB
+├ ƒ /api/account/profile                      270 B         103 kB
+├ ƒ /api/admin/affiliate-conversions          270 B         103 kB
+├ ƒ /api/admin/affiliate-payouts              270 B         103 kB
+├ ƒ /api/admin/affiliate-payouts/[id]         270 B         103 kB
+├ ƒ /api/admin/affiliate-program              270 B         103 kB
+├ ƒ /api/admin/affiliates                     270 B         103 kB
+├ ƒ /api/admin/affiliates/[id]/status         270 B         103 kB
+├ ƒ /api/admin/referral-program               270 B         103 kB
+├ ƒ /api/admin/referrals                      270 B         103 kB
+├ ƒ /api/admin/settings                       270 B         103 kB
+├ ƒ /api/admin/upload                         270 B         103 kB
+├ ƒ /api/admin/upload/sign                    270 B         103 kB
+├ ƒ /api/admin/user-subscriptions/email       270 B         103 kB
+├ ƒ /api/affiliate/apply                      270 B         103 kB
+├ ƒ /api/affiliate/dashboard                  270 B         103 kB
+├ ƒ /api/affiliate/payout-request             270 B         103 kB
+├ ƒ /api/affiliate/track                      270 B         103 kB
+├ ƒ /api/announcements                        270 B         103 kB
+├ ƒ /api/auth/sync-user                       270 B         103 kB
+├ ƒ /api/certificate/generate                 270 B         103 kB
+├ ƒ /api/certificates/[code]/pdf              270 B         103 kB
+├ ƒ /api/checkout/quote                       270 B         103 kB
+├ ƒ /api/checkout/session                     270 B         103 kB
+├ ƒ /api/contact/messages                     270 B         103 kB
+├ ƒ /api/copilot                              270 B         103 kB
+├ ƒ /api/courses/[courseId]/enroll            270 B         103 kB
+├ ƒ /api/courses/[courseId]/reviews           270 B         103 kB
+├ ƒ /api/email/send                           270 B         103 kB
+├ ƒ /api/learn/lessons/[lessonId]/notes       270 B         103 kB
+├ ƒ /api/learn/lessons/[lessonId]/progress    270 B         103 kB
+├ ƒ /api/newsletter/subscribe                 270 B         103 kB
+├ ƒ /api/paypal/capture                       270 B         103 kB
+├ ƒ /api/paypal/webhook                       270 B         103 kB
+├ ƒ /api/paystack/verify                      270 B         103 kB
+├ ƒ /api/paystack/webhook                     270 B         103 kB
+├ ƒ /api/popups/active                        270 B         103 kB
+├ ƒ /api/referrals/apply                      270 B         103 kB
+├ ƒ /api/referrals/stats                      270 B         103 kB
+├ ƒ /api/search/courses                       270 B         103 kB
+├ ƒ /api/settings                             270 B         103 kB
+├ ƒ /api/storefront/personalization           270 B         103 kB
+├ ƒ /api/stripe/confirm                       270 B         103 kB
+├ ƒ /api/stripe/webhook                       270 B         103 kB
+├ ƒ /api/team/workspace                       270 B         103 kB
+├ ƒ /api/team/workspace/export                270 B         103 kB
+├ ƒ /api/wishlist/[courseId]                  270 B         103 kB
+├ ƒ /auth/callback                            270 B         103 kB
+├ ○ /blog                                   1.34 kB         235 kB
+├ ƒ /blog/[slug]                            1.34 kB         235 kB
+├ ○ /cart                                   3.21 kB         237 kB
+├ ○ /categories                             3.89 kB         238 kB
+├ ƒ /certificates                            3.4 kB         237 kB
+├ ƒ /certificates/[code]                    1.34 kB         235 kB
+├ ○ /checkout                               6.18 kB         237 kB
+├ ○ /checkout/complete                      1.57 kB         233 kB
+├ ○ /checkout/success                       2.27 kB         233 kB
+├ ƒ /contact                                4.15 kB         238 kB
+├ ○ /courses                                4.69 kB         243 kB          5m      1y
+├ ƒ /courses/[slug]                          139 kB         376 kB
+├ ƒ /dashboard                              2.84 kB         237 kB
+├ ○ /dashboard/certificates                   270 B         103 kB
+├ ƒ /dashboard/referrals                    6.08 kB         240 kB
+├ ○ /dashboard/settings                       270 B         103 kB
+├ ƒ /dashboard/teams                        6.55 kB         240 kB
+├ ○ /forgot-password                        4.28 kB         238 kB
+├ ○ /leaderboard                            1.32 kB         235 kB
+├ ƒ /learn/[slug]/[lessonId]                  13 kB         165 kB
+├ ○ /login                                  4.61 kB         201 kB
+├ ○ /paths                                    270 B         103 kB
+├ ○ /pricing                                2.79 kB         237 kB
+├ ○ /reviews                                2.99 kB         237 kB
+├ ƒ /settings                               5.83 kB         240 kB
+├ ○ /sign-in                                  270 B         103 kB
+├ ƒ /sign-up                                  270 B         103 kB
+├ ○ /signin                                   270 B         103 kB
+├ ○ /signup                                 7.63 kB         204 kB
+├ ƒ /team/join/[token]                      3.54 kB         237 kB
+└ ƒ /wishlist                               1.64 kB         240 kB
++ First Load JS shared by all                102 kB
+  ├ chunks/1255-f8a8fe852c7e1df2.js         45.7 kB
+  ├ chunks/4bd1b696-100b9d70ed4e49c1.js     54.2 kB
+  └ other shared chunks (total)             2.54 kB
+
+
+ƒ Middleware                                82.3 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

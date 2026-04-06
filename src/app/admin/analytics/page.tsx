@@ -2,6 +2,8 @@ import { Activity, DollarSign, Globe, TrendingUp, Users } from "lucide-react";
 import { getAdminStats } from "@/lib/data";
 import { formatPrice, formatNumber } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminAnalyticsPage() {
   const stats = await getAdminStats();
   const maxRevenue = Math.max(...stats.revenueByMonth.map((entry) => entry.revenue), 1);

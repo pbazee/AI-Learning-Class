@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import {
   buildCheckoutQuote,
+  CheckoutQuoteError,
   type CheckoutGateway,
   type CheckoutItemInput,
 } from "@/lib/checkout";
@@ -16,6 +17,7 @@ import {
   markCheckoutOrderFailed,
 } from "@/lib/payments";
 import { createPaypalAccessToken } from "@/lib/paypal";
+import { withRequestTiming } from "@/lib/server-performance";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import { prisma } from "@/lib/prisma";
@@ -25,7 +27,8 @@ function getAppOrigin(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
+  return withRequestTiming("api.checkout.session", async () => {
+    try {
     const body = await request.json().catch(() => ({}));
     const method = body.method as CheckoutGateway;
     const items = Array.isArray(body.items)
@@ -37,6 +40,8 @@ export async function POST(request: NextRequest) {
     const customerName =
       typeof body.customerName === "string" ? body.customerName.trim() : "";
     const country = typeof body.country === "string" ? body.country : "US";
+    const couponCode =
+      typeof body.couponCode === "string" ? body.couponCode : null;
 
     if (!["stripe", "paypal", "paystack"].includes(method)) {
       return NextResponse.json(
@@ -64,6 +69,7 @@ export async function POST(request: NextRequest) {
       planSlug,
       gateway: method,
       country,
+      couponCode,
       preferredCurrency: dbUser.preferredCurrency,
       user: { earnedDiscountCode: dbUser.earnedDiscountCode },
       userId: dbUser.id,
@@ -343,11 +349,17 @@ export async function POST(request: NextRequest) {
       await markCheckoutOrderFailed(pendingOrder.id);
       throw error;
     }
-  } catch (error) {
-    console.error("[checkout.session] Unable to create checkout session.", error);
-    return NextResponse.json(
-      { error: "Unable to start checkout right now." },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error("[checkout.session] Unable to create checkout session.", error);
+      const message =
+        error instanceof CheckoutQuoteError
+          ? error.message
+          : "Unable to start checkout right now.";
+      const status = error instanceof CheckoutQuoteError ? 400 : 500;
+      return NextResponse.json(
+        { error: message },
+        { status }
+      );
+    }
+  });
 }

@@ -6,6 +6,7 @@ import {
   upsertManagedSubscriptionEntitlement,
 } from "@/lib/access-control";
 import type { CheckoutGateway, CheckoutQuote } from "@/lib/checkout";
+import { syncCourseEnrollmentCounts } from "@/lib/course-metrics";
 import { EntitlementSource } from "@/lib/domain-constants";
 import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
 import { evaluateAffiliateFraud } from "@/lib/growth-utils";
@@ -712,6 +713,7 @@ export async function finalizeCheckoutOrder({
         },
         transaction
       );
+      await syncCourseEnrollmentCounts(purchasedCourseIds, transaction);
     }
 
     const subscriptionId = normalizedPlanSlug

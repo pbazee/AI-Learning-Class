@@ -153,11 +153,84 @@ export async function ensureOwnerTeamWorkspace(
   return workspace;
 }
 
+async function getActiveTeamsPlanWindow(
+  userId: string,
+  db: DbClient = prisma
+): Promise<Date | null> {
+  const now = new Date();
+  const subscriptionEntitlement = await db.userEntitlement.findFirst({
+    where: {
+      userId,
+      planSlug: "teams",
+      source: EntitlementSource.SUBSCRIPTION,
+      status: EntitlementStatus.ACTIVE,
+      OR: [{ endsAt: null }, { endsAt: { gte: now } }],
+    },
+    orderBy: [{ endsAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      endsAt: true,
+    },
+  });
+
+  if (subscriptionEntitlement) {
+    return subscriptionEntitlement.endsAt ?? null;
+  }
+
+  const subscription = await db.userSubscription.findFirst({
+    where: {
+      userId,
+      status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] },
+      currentPeriodEnd: { gte: now },
+      plan: {
+        slug: "teams",
+      },
+    },
+    orderBy: [{ currentPeriodEnd: "desc" }, { createdAt: "desc" }],
+    select: {
+      currentPeriodEnd: true,
+    },
+  });
+
+  return subscription?.currentPeriodEnd ?? null;
+}
+
+async function getOwnedTeamWorkspaceAdminContext(
+  userId: string,
+  db: DbClient = prisma
+): Promise<TeamAdminContext | null> {
+  const planEndsAt = await getActiveTeamsPlanWindow(userId, db);
+
+  if (!planEndsAt) {
+    return null;
+  }
+
+  const workspace = await ensureOwnerTeamWorkspace(
+    db,
+    userId,
+    "AI Learning Class Team"
+  );
+
+  return {
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+    inviteCode: workspace.inviteCode,
+    seatLimit: workspace.seatLimit,
+    role: TeamWorkspaceRole.OWNER,
+    ownerUserId: userId,
+    planEndsAt,
+  };
+}
+
 export async function getTeamWorkspaceAdminContext(
   userId: string,
   db: DbClient = prisma
 ): Promise<TeamAdminContext | null> {
-  const now = new Date();
+  const ownedWorkspaceContext = await getOwnedTeamWorkspaceAdminContext(userId, db);
+
+  if (ownedWorkspaceContext) {
+    return ownedWorkspaceContext;
+  }
+
   const membership = await db.teamWorkspaceMember.findFirst({
     where: {
       userId,
@@ -183,20 +256,12 @@ export async function getTeamWorkspaceAdminContext(
     return null;
   }
 
-  const ownerEntitlement = await db.userEntitlement.findFirst({
-    where: {
-      userId: membership.workspace.ownerUserId,
-      planSlug: "teams",
-      status: EntitlementStatus.ACTIVE,
-      OR: [{ endsAt: null }, { endsAt: { gte: now } }],
-    },
-    orderBy: [{ endsAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      endsAt: true,
-    },
-  });
+  const ownerPlanEndsAt = await getActiveTeamsPlanWindow(
+    membership.workspace.ownerUserId,
+    db
+  );
 
-  if (!ownerEntitlement) {
+  if (!ownerPlanEndsAt) {
     return null;
   }
 
@@ -207,7 +272,7 @@ export async function getTeamWorkspaceAdminContext(
     seatLimit: membership.workspace.seatLimit,
     role: parseTeamWorkspaceRole(membership.role),
     ownerUserId: membership.workspace.ownerUserId,
-    planEndsAt: ownerEntitlement.endsAt ?? null,
+    planEndsAt: ownerPlanEndsAt,
   };
 }
 
@@ -339,7 +404,7 @@ export async function createTeamWorkspaceInvite(
 export async function acceptTeamWorkspaceInvite(userId: string, token: string) {
   const normalizedToken = token.trim();
   const now = new Date();
-  const [invite, user] = await Promise.all([
+  const [invite, user, existingMembership] = await Promise.all([
     prisma.teamWorkspaceInvite.findUnique({
       where: { token: normalizedToken },
       include: {
@@ -355,6 +420,21 @@ export async function acceptTeamWorkspaceInvite(userId: string, token: string) {
     prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, email: true, name: true },
+    }),
+    prisma.teamWorkspaceMember.findFirst({
+      where: {
+        workspace: {
+          invites: {
+            some: {
+              token: normalizedToken,
+            },
+          },
+        },
+        userId,
+      },
+      select: {
+        role: true,
+      },
     }),
   ]);
 
@@ -383,24 +463,21 @@ export async function acceptTeamWorkspaceInvite(userId: string, token: string) {
     throw new Error("This invite was issued for a different email address.");
   }
 
-  const ownerEntitlement = await prisma.userEntitlement.findFirst({
-    where: {
-      userId: invite.workspace.ownerUserId,
-      planSlug: "teams",
-      status: EntitlementStatus.ACTIVE,
-      OR: [{ endsAt: null }, { endsAt: { gte: now } }],
-    },
-    orderBy: [{ endsAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      endsAt: true,
-    },
-  });
+  const entitlementEndsAt = await getActiveTeamsPlanWindow(
+    invite.workspace.ownerUserId
+  );
 
-  if (!ownerEntitlement?.endsAt) {
+  if (!entitlementEndsAt) {
     throw new Error("This Teams workspace no longer has active billing.");
   }
-
-  const entitlementEndsAt = ownerEntitlement.endsAt;
+  const nextRole =
+    userId === invite.workspace.ownerUserId
+      ? TeamWorkspaceRole.OWNER
+      : existingMembership?.role === TeamWorkspaceRole.ADMIN
+        ? TeamWorkspaceRole.ADMIN
+        : existingMembership?.role === TeamWorkspaceRole.OWNER
+          ? TeamWorkspaceRole.OWNER
+          : TeamWorkspaceRole.MEMBER;
 
   await prisma.$transaction(async (transaction) => {
     await transaction.teamWorkspaceMember.upsert({
@@ -411,7 +488,7 @@ export async function acceptTeamWorkspaceInvite(userId: string, token: string) {
         },
       },
       update: {
-        role: TeamWorkspaceRole.MEMBER,
+        role: nextRole,
         status: TeamWorkspaceMemberStatus.ACTIVE,
         revokedAt: null,
         invitedById: invite.invitedById,
@@ -419,7 +496,7 @@ export async function acceptTeamWorkspaceInvite(userId: string, token: string) {
       create: {
         workspaceId: invite.workspaceId,
         userId,
-        role: TeamWorkspaceRole.MEMBER,
+        role: nextRole,
         status: TeamWorkspaceMemberStatus.ACTIVE,
         invitedById: invite.invitedById,
       },

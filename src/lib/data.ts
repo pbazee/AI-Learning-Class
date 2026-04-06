@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import type { BlogPost as PrismaBlogPost, Prisma } from "@prisma/client";
 import type {
   Announcement,
@@ -28,6 +29,21 @@ import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "./pri
 import { ensureSubscriptionPlansTable, mapSubscriptionPlan } from "@/lib/subscription-plans";
 import { createServerSupabaseClient } from "./supabase-server";
 import { syncAuthenticatedUser } from "./auth-user-sync";
+import {
+  BASE_CHECKOUT_CURRENCY,
+  convertCheckoutAmount,
+} from "@/lib/checkout-currency";
+import { getCourseEnrollmentCounts } from "@/lib/course-metrics";
+import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
+import {
+  getAboutContentFromSocialLinks,
+  normalizeSiteSettingsSocialLinks,
+  type AboutContent,
+} from "@/lib/site-settings";
+import {
+  PUBLIC_CACHE_TAGS,
+  PUBLIC_PAGE_REVALIDATE_SECONDS,
+} from "@/lib/cache-config";
 
 type CourseWithCategory = Prisma.CourseGetPayload<{
   include: { category: true };
@@ -53,6 +69,19 @@ type CourseWithDetails = Prisma.CourseGetPayload<{
     };
   };
 }>;
+
+type CategoryRecord = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  imageUrl: string | null;
+  imagePath: string | null;
+  icon: string | null;
+  color: string | null;
+  isActive: boolean;
+  parentId: string | null;
+};
 
 export type BlogPostRecord = BlogPost & { content: string };
 
@@ -199,6 +228,31 @@ export type LeaderboardStats = {
   avgStreak: string;
 };
 
+export type PublicHomepageData = {
+  affiliateCommissionRate: number;
+  categories: Category[];
+  courses: Course[];
+  homepageParagraphs: HomepageParagraphContentMap;
+  plans: SubscriptionPlan[];
+  posts: BlogPostRecord[];
+  slides: HeroSlide[];
+  testimonials: Testimonial[];
+  trustedLogos: TrustedLogo[];
+};
+
+export type PublicCourseCatalogData = {
+  categories: Category[];
+  courses: Course[];
+};
+
+export type PublicAboutPageData = {
+  siteName: string;
+  supportEmail: string;
+  supportPhone: string;
+  supportAddress: string;
+  about: AboutContent;
+};
+
 const fullDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "long",
   day: "numeric",
@@ -313,6 +367,31 @@ const EMPTY_LEADERBOARD = {
     coursesCompleted: "0",
     avgStreak: "0 days",
   } satisfies LeaderboardStats,
+};
+
+const EMPTY_PUBLIC_HOMEPAGE_DATA: PublicHomepageData = {
+  affiliateCommissionRate: DEFAULT_AFFILIATE_PROGRAM.commissionRate,
+  categories: [],
+  courses: [],
+  homepageParagraphs: { ...HOMEPAGE_PARAGRAPH_DEFAULTS },
+  plans: [],
+  posts: [],
+  slides: [],
+  testimonials: [],
+  trustedLogos: [],
+};
+
+const EMPTY_PUBLIC_COURSE_CATALOG_DATA: PublicCourseCatalogData = {
+  categories: [],
+  courses: [],
+};
+
+const EMPTY_PUBLIC_ABOUT_PAGE_DATA: PublicAboutPageData = {
+  siteName: "AI Learning Class",
+  supportEmail: "",
+  supportPhone: "",
+  supportAddress: "",
+  about: getAboutContentFromSocialLinks({}),
 };
 
 function resolveFallback<T>(fallback: T | (() => T)) {
@@ -464,6 +543,347 @@ function mapCourse(
   }
 
   return mappedCourse;
+}
+
+function mapCategoryRecord(category: CategoryRecord): Category {
+  return {
+    id: category.id,
+    name: category.name,
+    slug: category.slug,
+    description: category.description ?? undefined,
+    imageUrl: category.imageUrl ?? undefined,
+    imagePath: category.imagePath ?? undefined,
+    icon: category.icon ?? undefined,
+    color: category.color ?? undefined,
+    isActive: category.isActive,
+    parentId: category.parentId ?? undefined,
+  };
+}
+
+function mapHeroSlideRecord(slide: {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  description: string | null;
+  imageUrl: string;
+  ctaText: string | null;
+  ctaLink: string | null;
+  isActive: boolean;
+  order: number;
+  autoSlideInterval: number | null;
+}): HeroSlide {
+  return {
+    id: slide.id,
+    title: slide.title,
+    subtitle: slide.subtitle ?? undefined,
+    description: slide.description ?? undefined,
+    imageUrl: slide.imageUrl,
+    ctaText: slide.ctaText ?? undefined,
+    ctaLink: slide.ctaLink ?? undefined,
+    isActive: slide.isActive,
+    order: slide.order,
+    autoSlideInterval: slide.autoSlideInterval ?? undefined,
+  };
+}
+
+function mapTrustedLogoRecord(logo: {
+  id: string;
+  name: string;
+  imageUrl: string;
+  imagePath: string | null;
+  websiteUrl: string | null;
+  order: number;
+  isActive: boolean;
+}): TrustedLogo {
+  return {
+    id: logo.id,
+    name: logo.name,
+    imageUrl: logo.imageUrl,
+    imagePath: logo.imagePath ?? undefined,
+    websiteUrl: logo.websiteUrl ?? undefined,
+    order: logo.order,
+    isActive: logo.isActive,
+  };
+}
+
+function mapTestimonialRecord(review: {
+  id: string;
+  rating: number;
+  body: string;
+  user: {
+    name: string | null;
+    avatarUrl: string | null;
+    country: string | null;
+    role: string | null;
+  };
+  course: {
+    title: string;
+  };
+}): Testimonial {
+  return {
+    id: review.id,
+    name: review.user.name || "AI Learning Class student",
+    role: formatRole(review.user.role),
+    avatar: review.user.avatarUrl ?? undefined,
+    rating: review.rating,
+    text: review.body,
+    courseCompleted: review.course.title,
+    country: review.user.country ?? undefined,
+  };
+}
+
+function buildHomepageParagraphContentMapFromRows(
+  paragraphs: Array<{ sectionKey: string; content: string }>
+): HomepageParagraphContentMap {
+  const paragraphMap = new Map(
+    paragraphs.map((paragraph) => [
+      paragraph.sectionKey as HomepageParagraphSectionKey,
+      paragraph.content,
+    ])
+  );
+
+  return HOMEPAGE_PARAGRAPH_SECTIONS.reduce(
+    (accumulator, section) => {
+      accumulator[section.sectionKey] =
+        paragraphMap.get(section.sectionKey) ?? section.defaultContent;
+      return accumulator;
+    },
+    { ...HOMEPAGE_PARAGRAPH_DEFAULTS }
+  );
+}
+
+type PublicHomepageContentSnapshot = Omit<
+  PublicHomepageData,
+  "categories" | "courses"
+>;
+
+async function getPublicCourseCatalogSnapshotUncached(): Promise<PublicCourseCatalogData> {
+  return safeDatabaseRead(
+    "getPublicCourseCatalogData",
+    EMPTY_PUBLIC_COURSE_CATALOG_DATA,
+    async () => {
+      const [courseRows, categoryRows] = await prisma.$transaction([
+        prisma.course.findMany({
+          where: { isPublished: true },
+          include: { category: true },
+          orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+        }),
+        prisma.category.findMany({
+          where: { isActive: true },
+          orderBy: { name: "asc" },
+        }),
+      ]);
+
+      const [instructorMap, enrollmentCounts] = await Promise.all([
+        getInstructorMap(courseRows),
+        getCourseEnrollmentCounts(courseRows.map((course) => course.id)),
+      ]);
+
+      return {
+        categories: categoryRows.map(mapCategoryRecord),
+        courses: applyCourseEnrollmentCounts(
+          courseRows.map((course) => mapCourse(course, instructorMap)),
+          enrollmentCounts
+        ),
+      };
+    }
+  );
+}
+
+const getCachedPublicCourseCatalogSnapshot = unstable_cache(
+  async (): Promise<PublicCourseCatalogData> => getPublicCourseCatalogSnapshotUncached(),
+  ["public-course-catalog-snapshot"],
+  {
+    revalidate: PUBLIC_PAGE_REVALIDATE_SECONDS,
+    tags: [
+      PUBLIC_CACHE_TAGS.courseCatalog,
+      PUBLIC_CACHE_TAGS.courses,
+      PUBLIC_CACHE_TAGS.categories,
+    ],
+  }
+);
+
+async function getPublicHomepageContentSnapshotUncached(): Promise<PublicHomepageContentSnapshot> {
+  return safeDatabaseRead(
+    "getPublicHomepageContentData",
+    {
+      affiliateCommissionRate: DEFAULT_AFFILIATE_PROGRAM.commissionRate,
+      homepageParagraphs: { ...HOMEPAGE_PARAGRAPH_DEFAULTS },
+      plans: [],
+      posts: [],
+      slides: [],
+      testimonials: [],
+      trustedLogos: [],
+    } satisfies PublicHomepageContentSnapshot,
+    async () => {
+      await ensureSubscriptionPlansTable();
+
+      const [
+        slideRows,
+        reviewRows,
+        postRows,
+        paragraphRows,
+        planRows,
+        logoRows,
+        affiliateProgram,
+      ] = await prisma.$transaction([
+        prisma.heroSlide.findMany({
+          where: { isActive: true },
+          orderBy: [{ order: "asc" }, { createdAt: "desc" }],
+        }),
+        prisma.review.findMany({
+          where: { isApproved: true },
+          include: {
+            user: {
+              select: {
+                name: true,
+                avatarUrl: true,
+                country: true,
+                role: true,
+              },
+            },
+            course: {
+              select: {
+                title: true,
+              },
+            },
+          },
+          orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+          take: 4,
+        }),
+        prisma.blogPost.findMany({
+          where: {
+            OR: [{ status: "PUBLISHED" }, { isPublished: true }],
+          },
+          include: {
+            category: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+          take: 3,
+        }),
+        prisma.homepageParagraph.findMany({
+          orderBy: { updatedAt: "desc" },
+        }),
+        prisma.subscriptionPlan.findMany({
+          where: { isActive: true },
+          orderBy: [{ price: "asc" }, { createdAt: "asc" }],
+        }),
+        prisma.trustedLogo.findMany({
+          where: { isActive: true },
+          orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        }),
+        prisma.affiliateProgram.findFirst({
+          select: {
+            commissionRate: true,
+          },
+        }),
+      ]);
+
+      const authorMap = await getBlogAuthorMap(postRows.map((post) => post.authorId));
+
+      return {
+        affiliateCommissionRate:
+          affiliateProgram?.commissionRate ?? DEFAULT_AFFILIATE_PROGRAM.commissionRate,
+        homepageParagraphs: buildHomepageParagraphContentMapFromRows(paragraphRows),
+        plans: planRows.map(mapSubscriptionPlan),
+        posts: postRows.map((post) => mapBlogPost(post, authorMap)),
+        slides: slideRows.map(mapHeroSlideRecord),
+        testimonials: reviewRows.map(mapTestimonialRecord),
+        trustedLogos: logoRows.map(mapTrustedLogoRecord),
+      };
+    }
+  );
+}
+
+const getCachedPublicHomepageContentSnapshot = unstable_cache(
+  async (): Promise<PublicHomepageContentSnapshot> =>
+    getPublicHomepageContentSnapshotUncached(),
+  ["public-homepage-content-snapshot"],
+  {
+    revalidate: PUBLIC_PAGE_REVALIDATE_SECONDS,
+    tags: [
+      PUBLIC_CACHE_TAGS.homepage,
+      PUBLIC_CACHE_TAGS.heroSlides,
+      PUBLIC_CACHE_TAGS.testimonials,
+      PUBLIC_CACHE_TAGS.blogPosts,
+      PUBLIC_CACHE_TAGS.pricing,
+      PUBLIC_CACHE_TAGS.homepageParagraphs,
+      PUBLIC_CACHE_TAGS.trustedLogos,
+      PUBLIC_CACHE_TAGS.affiliateProgram,
+    ],
+  }
+);
+
+const getCachedPublicHomepageData = unstable_cache(
+  async (): Promise<PublicHomepageData> => {
+    const [catalogSnapshot, contentSnapshot] = await Promise.all([
+      getCachedPublicCourseCatalogSnapshot(),
+      getCachedPublicHomepageContentSnapshot(),
+    ]);
+
+    return {
+      ...contentSnapshot,
+      categories: catalogSnapshot.categories,
+      courses: catalogSnapshot.courses,
+    };
+  },
+  ["public-homepage-data"],
+  {
+    revalidate: PUBLIC_PAGE_REVALIDATE_SECONDS,
+    tags: [
+      PUBLIC_CACHE_TAGS.homepage,
+      PUBLIC_CACHE_TAGS.courseCatalog,
+      PUBLIC_CACHE_TAGS.courses,
+      PUBLIC_CACHE_TAGS.categories,
+    ],
+  }
+);
+
+const getCachedPublicAboutPageData = unstable_cache(
+  async (): Promise<PublicAboutPageData> =>
+    safeDatabaseRead("getPublicAboutPageData", EMPTY_PUBLIC_ABOUT_PAGE_DATA, async () => {
+      const settings = await prisma.siteSettings.findUnique({
+        where: { id: "singleton" },
+        select: {
+          siteName: true,
+          supportEmail: true,
+          supportPhone: true,
+          supportAddress: true,
+          socialLinks: true,
+        },
+      });
+
+      const socialLinks = normalizeSiteSettingsSocialLinks(settings?.socialLinks);
+
+      return {
+        siteName: settings?.siteName || "AI Learning Class",
+        supportEmail: settings?.supportEmail || "",
+        supportPhone: settings?.supportPhone || "",
+        supportAddress: settings?.supportAddress || "",
+        about: getAboutContentFromSocialLinks(socialLinks),
+      };
+    }),
+  ["public-about-page-data"],
+  {
+    revalidate: PUBLIC_PAGE_REVALIDATE_SECONDS,
+    tags: [PUBLIC_CACHE_TAGS.aboutPage, PUBLIC_CACHE_TAGS.siteSettings],
+  }
+);
+
+export async function getPublicHomepageData(): Promise<PublicHomepageData> {
+  return getCachedPublicHomepageData();
+}
+
+export async function getPublicCourseCatalogData(): Promise<PublicCourseCatalogData> {
+  return getCachedPublicCourseCatalogSnapshot();
+}
+
+export async function getPublicAboutPageData(): Promise<PublicAboutPageData> {
+  return getCachedPublicAboutPageData();
 }
 
 export const getCurrentUserProfile = cache(async () => {
@@ -680,6 +1100,34 @@ export async function getUserAffiliateStatus(userId: string) {
   );
 }
 
+function normalizeAdminRevenueAmount(amount: number, currency?: string | null) {
+  return convertCheckoutAmount(
+    amount,
+    currency ?? BASE_CHECKOUT_CURRENCY,
+    BASE_CHECKOUT_CURRENCY
+  );
+}
+
+async function hydrateMappedCourseStudentCounts<T extends { id: string; totalStudents: number }>(
+  courses: T[]
+) {
+  const enrollmentCounts = await getCourseEnrollmentCounts(
+    courses.map((course) => course.id)
+  );
+
+  return applyCourseEnrollmentCounts(courses, enrollmentCounts);
+}
+
+function applyCourseEnrollmentCounts<T extends { id: string; totalStudents: number }>(
+  courses: T[],
+  enrollmentCounts: Map<string, number>
+) {
+  return courses.map((course) => ({
+    ...course,
+    totalStudents: enrollmentCounts.get(course.id) ?? 0,
+  }));
+}
+
 export async function getCourses(filters?: {
   categorySlug?: string;
   level?: string;
@@ -759,7 +1207,9 @@ export async function getCourses(filters?: {
     });
 
     const instructorMap = await getInstructorMap(courses);
-    let mappedCourses = courses.map((course) => mapCourse(course, instructorMap));
+    let mappedCourses = await hydrateMappedCourseStudentCounts(
+      courses.map((course) => mapCourse(course, instructorMap))
+    );
 
     if (filters?.search) {
       const query = filters.search.toLowerCase();
@@ -769,6 +1219,16 @@ export async function getCourses(filters?: {
           course.description.toLowerCase().includes(query) ||
           course.tags.some((tag) => tag.toLowerCase().includes(query))
       );
+    }
+
+    if (filters?.sort === "popular") {
+      mappedCourses = [...mappedCourses].sort((left, right) => {
+        if (right.totalStudents !== left.totalStudents) {
+          return right.totalStudents - left.totalStudents;
+        }
+
+        return right.rating - left.rating;
+      });
     }
 
     return mappedCourses;
@@ -917,7 +1377,11 @@ export async function getCourseBySlug(slug: string): Promise<Course | null> {
     }
 
     const instructorMap = await getInstructorMap([course]);
-    return mapCourse(course, instructorMap);
+    const [mappedCourse] = await hydrateMappedCourseStudentCounts([
+      mapCourse(course, instructorMap),
+    ]);
+
+    return mappedCourse ?? null;
   });
 }
 
@@ -1207,6 +1671,7 @@ export async function getAdminStats(): Promise<AdminStats> {
         where: { status: "COMPLETED" },
         select: {
           totalAmount: true,
+          currency: true,
           createdAt: true,
         },
       }),
@@ -1307,6 +1772,16 @@ export async function getAdminStats(): Promise<AdminStats> {
       }),
     ]);
 
+    const courseEnrollmentCounts = await getCourseEnrollmentCounts(
+      Array.from(
+        new Set(
+          orderItems
+            .map((item) => item.course?.id)
+            .filter((courseId): courseId is string => Boolean(courseId))
+        )
+      )
+    );
+
     const timeline = Array.from({ length: 6 }, (_, index) => {
       const monthStart = subtractMonths(thisMonthStart, 5 - index);
       const nextMonthStart = index === 5 ? now : subtractMonths(thisMonthStart, 4 - index);
@@ -1314,7 +1789,11 @@ export async function getAdminStats(): Promise<AdminStats> {
 
       const monthlyRevenueValue = revenueOrders
         .filter((order) => getMonthKey(order.createdAt) === monthKey)
-        .reduce((sum, order) => sum + order.totalAmount, 0);
+        .reduce(
+          (sum, order) =>
+            sum + normalizeAdminRevenueAmount(order.totalAmount, order.currency),
+          0
+        );
 
       const monthlyNewStudents = studentRows.filter(
         (student) => getMonthKey(student.createdAt) === monthKey
@@ -1368,7 +1847,11 @@ export async function getAdminStats(): Promise<AdminStats> {
       };
     });
 
-    const totalRevenueValue = revenueOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+    const totalRevenueValue = revenueOrders.reduce(
+      (sum, order) =>
+        sum + normalizeAdminRevenueAmount(order.totalAmount, order.currency),
+      0
+    );
     const monthlyRevenueValue = timeline.at(-1)?.revenue ?? 0;
     const previousMonthlyRevenue = timeline.at(-2)?.revenue ?? 0;
     const totalStudents = studentRows.length;
@@ -1478,7 +1961,7 @@ export async function getAdminStats(): Promise<AdminStats> {
           .map((item) => item.course.title)
           .filter(Boolean)
           .join(", ") || "No course items",
-      amount: order.totalAmount,
+      amount: normalizeAdminRevenueAmount(order.totalAmount, order.currency),
       date: formatShortDate(order.createdAt),
       status: order.status,
     }));
@@ -1490,12 +1973,12 @@ export async function getAdminStats(): Promise<AdminStats> {
           name: item.course.title,
           thumbnailUrl: item.course.thumbnailUrl,
           categoryName: item.course.category.name,
-          students: item.course.totalStudents,
+          students: courseEnrollmentCounts.get(item.course.id) ?? 0,
           revenue: 0,
           rating: item.course.rating,
         };
 
-        existing.revenue += item.price;
+        existing.revenue += normalizeAdminRevenueAmount(item.price, item.currency);
         accumulator.set(item.course.id, existing);
         return accumulator;
       },
@@ -1581,7 +2064,11 @@ export async function getAdminStats(): Promise<AdminStats> {
           totalRevenueValue,
           revenueOrders
             .filter((order) => order.createdAt < thisMonthStart)
-            .reduce((sum, order) => sum + order.totalAmount, 0)
+            .reduce(
+              (sum, order) =>
+                sum + normalizeAdminRevenueAmount(order.totalAmount, order.currency),
+              0
+            )
         ),
         monthlyRevenue: calculateGrowthMetric(monthlyRevenueValue, previousMonthlyRevenue),
         totalStudents: calculateGrowthMetric(totalStudents, previousTotalStudents),

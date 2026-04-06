@@ -11,6 +11,7 @@ import {
   buildFreeCourseLoginPath,
   enrollInFreeCourse,
 } from "@/lib/course-enrollment";
+import { createClient } from "@/lib/supabase";
 import { useCartStore } from "@/store/cart";
 import { useToast } from "@/components/ui/ToastProvider";
 import { cn, formatNumber, formatPrice, levelLabel } from "@/lib/utils";
@@ -69,12 +70,31 @@ export function CourseCard({
     setWishlisted(isWishlisted);
   }, [isWishlisted]);
 
+  async function resolveActiveViewerId() {
+    if (viewerId) {
+      return viewerId;
+    }
+
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      return user?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async function handlePrimaryAction(event: React.MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
 
     if (isFreeCourse) {
-      if (!viewerId) {
+      const activeViewerId = await resolveActiveViewerId();
+
+      if (!activeViewerId) {
         router.push(buildFreeCourseLoginPath(course.slug));
         return;
       }
@@ -117,7 +137,9 @@ export function CourseCard({
     event.preventDefault();
     event.stopPropagation();
 
-    if (!viewerId) {
+    const activeViewerId = await resolveActiveViewerId();
+
+    if (!activeViewerId) {
       toast("Please sign in to save courses to your wishlist.", "error");
       return;
     }

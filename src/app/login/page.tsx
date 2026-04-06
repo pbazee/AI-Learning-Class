@@ -7,22 +7,9 @@ import { Brain, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-
 import {
   buildAuthCallbackUrl,
   DEFAULT_AFTER_AUTH,
-  resolvePostAuthDestination,
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase";
-
-async function syncSignedInUser() {
-  const response = await fetch("/api/auth/sync-user", {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    throw new Error("Unable to sync the signed-in user.");
-  }
-
-  return response.json() as Promise<{ user: { role: string } }>;
-}
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -108,18 +95,29 @@ function LoginPageInner() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const supabase = createClient();
 
     if (mode === "magic") {
       console.log("[login] Sending magic link to:", email);
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: buildAuthCallbackUrl(redirectPath) },
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "magic",
+          email,
+          redirect: redirectPath,
+        }),
       });
+      const payload = await response.json().catch(() => null);
 
-      if (error) {
-        console.error("[login] Magic link error:", error.message);
-        setError(error.message);
+      if (!response.ok) {
+        const message =
+          typeof payload?.error === "string"
+            ? payload.error
+            : "Unable to send your magic link right now.";
+        console.error("[login] Magic link error:", message);
+        setError(message);
       } else {
         void syncNewsletterPreference(email);
         console.log("[login] Magic link sent successfully to:", email);
@@ -127,23 +125,33 @@ function LoginPageInner() {
       }
     } else {
       console.log("[login] Signing in with password for:", email);
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "password",
+          email,
+          password,
+          redirect: redirectPath,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
 
-      if (error) {
-        console.error("[login] Password sign-in error:", error.message);
-        setError(error.message);
+      if (!response.ok) {
+        const message =
+          typeof payload?.error === "string"
+            ? payload.error
+            : "Unable to sign you in right now.";
+        console.error("[login] Password sign-in error:", message);
+        setError(message);
       } else {
         void syncNewsletterPreference(email);
-        console.log("[login] Signed in successfully, user:", data.user?.id);
-        let nextPath = redirectPath;
+        const nextPath =
+          typeof payload?.nextPath === "string" ? payload.nextPath : redirectPath;
 
-        try {
-          const synced = await syncSignedInUser();
-          nextPath = resolvePostAuthDestination(redirectPath, synced.user.role);
-        } catch (syncError) {
-          console.warn("[login] User sync after password sign-in failed:", syncError);
-        }
-
+        console.log("[login] Signed in successfully, redirecting to:", nextPath);
         router.push(nextPath);
         router.refresh();
       }

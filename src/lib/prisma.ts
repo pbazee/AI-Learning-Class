@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { recordDatabaseQueryTiming } from "@/lib/server-performance";
 
 const TRANSIENT_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2028", "P2034"]);
 const DEFAULT_MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.PRISMA_MAX_ATTEMPTS ?? "3", 10));
@@ -236,10 +237,14 @@ function createPrismaClient() {
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
-          return withPrismaRetry(
+          const label = model ? `${model}.${operation}` : operation;
+          const startedAt = performance.now();
+          const result = await withPrismaRetry(
             () => query(args),
-            model ? `${model}.${operation}` : operation
+            label
           );
+          recordDatabaseQueryTiming(label, performance.now() - startedAt);
+          return result;
         },
       },
     },

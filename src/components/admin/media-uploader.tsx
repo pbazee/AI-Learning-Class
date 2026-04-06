@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { FileAudio, FileImage, FileText, FileVideo, Trash2, UploadCloud } from "lucide-react";
 import { AdminButton, AdminCard } from "@/components/admin/ui";
+import { createClient } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
 
 export type UploadedAsset = {
@@ -22,6 +23,20 @@ function getFileIcon(mimeType?: string) {
   return FileText;
 }
 
+async function parseJsonResponse(response: Response) {
+  const text = await response.text();
+
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { error: text };
+  }
+}
+
 async function deleteUploadedFile(path?: string) {
   if (!path) return;
 
@@ -30,10 +45,14 @@ async function deleteUploadedFile(path?: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path }),
   });
+  const payload = await parseJsonResponse(response);
 
   if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error || "Unable to remove the uploaded file.");
+    throw new Error(
+      typeof payload?.error === "string"
+        ? payload.error
+        : "Unable to remove the uploaded file."
+    );
   }
 }
 
@@ -62,20 +81,51 @@ export function MediaUploader({
     setBusy(true);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", folder);
-      const response = await fetch("/api/admin/upload", {
+      const signResponse = await fetch("/api/admin/upload/sign", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          folder,
+          fileName: file.name,
+          mimeType: file.type,
+        }),
       });
-      const payload = await response.json();
+      const signPayload = await parseJsonResponse(signResponse);
 
-      if (!response.ok) {
-        throw new Error(payload.error || "Upload failed.");
+      if (
+        !signResponse.ok ||
+        typeof signPayload?.bucket !== "string" ||
+        typeof signPayload?.path !== "string" ||
+        typeof signPayload?.token !== "string" ||
+        typeof signPayload?.url !== "string"
+      ) {
+        throw new Error(
+          typeof signPayload?.error === "string"
+            ? signPayload.error
+            : "Upload failed."
+        );
       }
 
-      onUploaded(payload as UploadedAsset);
+      const supabase = createClient();
+      const { error: uploadError } = await supabase.storage
+        .from(signPayload.bucket)
+        .uploadToSignedUrl(signPayload.path, signPayload.token, file, {
+          cacheControl: "31536000",
+          contentType: file.type || "application/octet-stream",
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      onUploaded({
+        bucket: signPayload.bucket,
+        path: signPayload.path,
+        url: signPayload.url,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+      });
       toast("File uploaded successfully.", "success");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Upload failed. Please try again.", "error");

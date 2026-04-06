@@ -1,12 +1,21 @@
 // src/app/layout.tsx
 import type { Metadata } from "next";
+import dynamic from "next/dynamic";
 import { Inter } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { AnnouncementBarWrapper } from "@/components/landing/AnnouncementBarWrapper";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { RouteScrollReset } from "@/components/layout/RouteScrollReset";
+
+const PopupCampaigns = dynamic(
+  () =>
+    import("@/components/popups/PopupCampaigns").then((module) => ({
+      default: module.PopupCampaigns,
+    }))
+);
 
 const inter = Inter({
   subsets: ["latin"],
@@ -33,8 +42,6 @@ export const metadata: Metadata = {
   },
 };
 
-export const dynamic = "force-dynamic";
-
 export default function RootLayout({
   children,
 }: {
@@ -50,8 +57,15 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ToastProvider>
-            <AnnouncementBarWrapper />
-            <RouteScrollReset />
+            <Suspense fallback={null}>
+              <AnnouncementBarWrapper />
+            </Suspense>
+            <Suspense fallback={null}>
+              <RouteScrollReset />
+            </Suspense>
+            <Suspense fallback={null}>
+              <PopupCampaigns />
+            </Suspense>
             {children}
             <MobileBottomNav />
           </ToastProvider>

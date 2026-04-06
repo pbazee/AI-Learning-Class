@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { recordUserCourseOwnership } from "@/lib/learner-records";
+import { syncCourseEnrollmentCount } from "@/lib/course-metrics";
 import { prisma } from "@/lib/prisma";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
@@ -78,6 +79,7 @@ export async function POST(
       lifetimeAccess: true,
       ownedAt: new Date(),
     });
+    await syncCourseEnrollmentCount(course.id);
 
     const firstLessonId = course.modules.flatMap((module) => module.lessons.map((lesson) => lesson.id))[0];
 

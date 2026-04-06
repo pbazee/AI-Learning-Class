@@ -38,6 +38,13 @@ export type CheckoutQuote = {
   planSlug: string | null;
 };
 
+export class CheckoutQuoteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CheckoutQuoteError";
+  }
+}
+
 const REFERRAL_COOKIE_KEYS = [
   "earned_discount_code",
   "discount_code",
@@ -112,6 +119,28 @@ async function resolveActiveReferralCoupon(request: NextRequest, user?: Pick<Use
   });
 
   return coupons.find(isCouponRedeemable) ?? null;
+}
+
+async function resolveManualCoupon(couponCode?: string | null) {
+  const normalizedCouponCode = couponCode?.trim().toUpperCase();
+
+  if (!normalizedCouponCode) {
+    return null;
+  }
+
+  const coupon = await prisma.coupon.findUnique({
+    where: { code: normalizedCouponCode },
+  });
+
+  if (!coupon) {
+    throw new CheckoutQuoteError("That coupon code was not found.");
+  }
+
+  if (!isCouponRedeemable(coupon)) {
+    throw new CheckoutQuoteError("That coupon code is inactive, expired, or fully redeemed.");
+  }
+
+  return coupon;
 }
 
 async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | null> {
@@ -215,6 +244,7 @@ export async function buildCheckoutQuote({
   planSlug,
   gateway,
   country,
+  couponCode,
   preferredCurrency,
   user,
   userId,
@@ -224,6 +254,7 @@ export async function buildCheckoutQuote({
   planSlug?: string | null;
   gateway?: CheckoutGateway | null;
   country?: string | null;
+  couponCode?: string | null;
   preferredCurrency?: string | null;
   user?: Pick<User, "earnedDiscountCode"> | null;
   userId?: string | null;
@@ -243,7 +274,9 @@ export async function buildCheckoutQuote({
     price: convertCheckoutAmount(item.price, item.currency, quoteCurrency),
   }));
   const subtotal = roundCurrencyAmount(lineItems.reduce((sum, item) => sum + item.price, 0));
-  const coupon = await resolveActiveReferralCoupon(request, user);
+  const coupon =
+    (await resolveManualCoupon(couponCode)) ??
+    (await resolveActiveReferralCoupon(request, user));
   const discountAmount = applyCouponDiscount(subtotal, coupon, quoteCurrency);
   const total = roundCurrencyAmount(subtotal - discountAmount);
 

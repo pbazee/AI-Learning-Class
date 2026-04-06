@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Download, ExternalLink, Linkedin, Mail, ShieldCheck } from "lucide-react";
+import { Download, Linkedin, Mail, ShieldCheck } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
 import { buildCertificatePresentation, getCertificatePdfHref } from "@/lib/certificate-presenter";
@@ -53,15 +53,6 @@ export default async function CertificateDetailPage({
 
             <div className="relative p-5 sm:p-8 lg:p-12">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                <Link
-                  href={presentation.viewPdfHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  View Certificate
-                </Link>
                 <Link
                   href={presentation.downloadPdfHref}
                   target="_blank"

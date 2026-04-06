@@ -9,6 +9,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const MAX_UPLOAD_SIZE_BYTES = 250 * 1024 * 1024;
+
 function sanitizeFileName(fileName: string) {
   return fileName
     .toLowerCase()
@@ -26,6 +28,16 @@ export async function POST(request: Request) {
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "No file was provided." }, { status: 400 });
+    }
+
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      return NextResponse.json(
+        {
+          error:
+            "This file is too large for the buffered upload route. Use the signed direct upload flow for longer videos and large assets.",
+        },
+        { status: 413 }
+      );
     }
 
     const supabase = getSupabaseAdminClient();

@@ -10,6 +10,7 @@ import {
   AdminModal,
   AdminPageIntro,
   AdminSwitch,
+  AdminTextarea,
   CreateButton,
   FieldLabel,
   StatusPill,
@@ -34,7 +35,7 @@ type FaqRow = {
   isActive: boolean;
 };
 
-const tabs = ["general", "contact", "social", "footer-support", "faq"] as const;
+const tabs = ["general", "contact", "social", "about", "footer-support", "faq"] as const;
 
 export function SettingsManager({
   initialSettings,
@@ -172,7 +173,7 @@ export function SettingsManager({
     <div className="space-y-6">
       <AdminPageIntro
         title="Settings"
-        description="Manage your platform identity, support channels, social links, and frequently asked questions."
+        description="Manage your platform identity, About page content, support channels, social links, and frequently asked questions."
         actions={
           tab === "faq" ? (
             <CreateButton onClick={() => openFaq()}>New FAQ</CreateButton>
@@ -280,6 +281,116 @@ export function SettingsManager({
               />
             </div>
           ))}
+        </AdminCard>
+      ) : null}
+
+      {tab === "about" ? (
+        <AdminCard className="grid gap-5 p-6">
+          <div>
+            <FieldLabel>About Eyebrow</FieldLabel>
+            <AdminInput
+              value={readSocial("aboutEyebrow")}
+              onChange={(event) => updateSocial("aboutEyebrow", event.target.value)}
+              placeholder="About AI Learning Class"
+            />
+          </div>
+          <div>
+            <FieldLabel>About Headline</FieldLabel>
+            <AdminTextarea
+              rows={3}
+              value={readSocial("aboutTitle")}
+              onChange={(event) => updateSocial("aboutTitle", event.target.value)}
+              placeholder="Practical AI education for people building real careers."
+            />
+          </div>
+          <div>
+            <FieldLabel>About Subtitle</FieldLabel>
+            <AdminTextarea
+              rows={4}
+              value={readSocial("aboutSubtitle")}
+              onChange={(event) => updateSocial("aboutSubtitle", event.target.value)}
+              placeholder="Brief summary shown in the hero section."
+            />
+          </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            <div>
+              <FieldLabel>Stat One Value</FieldLabel>
+              <AdminInput value={readSocial("aboutStatOneValue")} onChange={(event) => updateSocial("aboutStatOneValue", event.target.value)} placeholder="24/7" />
+            </div>
+            <div>
+              <FieldLabel>Stat One Label</FieldLabel>
+              <AdminInput value={readSocial("aboutStatOneLabel")} onChange={(event) => updateSocial("aboutStatOneLabel", event.target.value)} placeholder="Access on desktop and mobile" />
+            </div>
+            <div>
+              <FieldLabel>Stat Two Value</FieldLabel>
+              <AdminInput value={readSocial("aboutStatTwoValue")} onChange={(event) => updateSocial("aboutStatTwoValue", event.target.value)} placeholder="Hands-on" />
+            </div>
+            <div>
+              <FieldLabel>Stat Two Label</FieldLabel>
+              <AdminInput value={readSocial("aboutStatTwoLabel")} onChange={(event) => updateSocial("aboutStatTwoLabel", event.target.value)} placeholder="Coursework built for real application" />
+            </div>
+            <div>
+              <FieldLabel>Stat Three Value</FieldLabel>
+              <AdminInput value={readSocial("aboutStatThreeValue")} onChange={(event) => updateSocial("aboutStatThreeValue", event.target.value)} placeholder="Global" />
+            </div>
+            <div>
+              <FieldLabel>Stat Three Label</FieldLabel>
+              <AdminInput value={readSocial("aboutStatThreeLabel")} onChange={(event) => updateSocial("aboutStatThreeLabel", event.target.value)} placeholder="Built for learners everywhere" />
+            </div>
+          </div>
+          <div>
+            <FieldLabel>Mission</FieldLabel>
+            <AdminTextarea
+              rows={4}
+              value={readSocial("aboutMission")}
+              onChange={(event) => updateSocial("aboutMission", event.target.value)}
+              placeholder="Describe the mission of the platform."
+            />
+          </div>
+          <div>
+            <FieldLabel>Story</FieldLabel>
+            <AdminTextarea
+              rows={4}
+              value={readSocial("aboutStory")}
+              onChange={(event) => updateSocial("aboutStory", event.target.value)}
+              placeholder="Describe the story or operating philosophy behind the platform."
+            />
+          </div>
+          <div>
+            <FieldLabel>Promise</FieldLabel>
+            <AdminTextarea
+              rows={4}
+              value={readSocial("aboutPromise")}
+              onChange={(event) => updateSocial("aboutPromise", event.target.value)}
+              placeholder="Describe what learners can expect from the experience."
+            />
+          </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            <div>
+              <FieldLabel>Value Card One Title</FieldLabel>
+              <AdminInput value={readSocial("aboutValueOneTitle")} onChange={(event) => updateSocial("aboutValueOneTitle", event.target.value)} placeholder="Practical first" />
+            </div>
+            <div className="md:col-span-2">
+              <FieldLabel>Value Card One Body</FieldLabel>
+              <AdminTextarea rows={3} value={readSocial("aboutValueOneBody")} onChange={(event) => updateSocial("aboutValueOneBody", event.target.value)} placeholder="Explain the first value statement." />
+            </div>
+            <div>
+              <FieldLabel>Value Card Two Title</FieldLabel>
+              <AdminInput value={readSocial("aboutValueTwoTitle")} onChange={(event) => updateSocial("aboutValueTwoTitle", event.target.value)} placeholder="Structured progress" />
+            </div>
+            <div className="md:col-span-2">
+              <FieldLabel>Value Card Two Body</FieldLabel>
+              <AdminTextarea rows={3} value={readSocial("aboutValueTwoBody")} onChange={(event) => updateSocial("aboutValueTwoBody", event.target.value)} placeholder="Explain the second value statement." />
+            </div>
+            <div>
+              <FieldLabel>Value Card Three Title</FieldLabel>
+              <AdminInput value={readSocial("aboutValueThreeTitle")} onChange={(event) => updateSocial("aboutValueThreeTitle", event.target.value)} placeholder="Career-minded quality" />
+            </div>
+            <div className="md:col-span-2">
+              <FieldLabel>Value Card Three Body</FieldLabel>
+              <AdminTextarea rows={3} value={readSocial("aboutValueThreeBody")} onChange={(event) => updateSocial("aboutValueThreeBody", event.target.value)} placeholder="Explain the third value statement." />
+            </div>
+          </div>
         </AdminCard>
       ) : null}
 

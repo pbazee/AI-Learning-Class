@@ -89,6 +89,7 @@ export default async function DashboardPage() {
         plan: {
           select: {
             name: true,
+            slug: true,
           },
         },
       },
@@ -110,6 +111,7 @@ export default async function DashboardPage() {
         )
       : 0;
   const purchasedCourseCount = new Set(purchasedItems.map((item) => item.courseId)).size;
+  const hasTeamsSubscription = activeSubscription?.plan.slug === "teams";
   const subscriptionSummary = activeSubscription
     ? `${activeSubscription.status.toLowerCase().replace("_", " ")} • ${activeSubscription.billingCycle}`
     : "Upgrade anytime from pricing";
@@ -327,20 +329,22 @@ export default async function DashboardPage() {
             <div className="space-y-6">
               <ReferEarnCard />
 
-              {teamWorkspace ? (
+              {hasTeamsSubscription ? (
                 <div className="rounded-2xl border border-primary-blue/20 bg-primary-blue/10 p-5 shadow-sm">
                   <div className="mb-3 flex items-center gap-2">
                     <BadgeCheck className="h-4 w-4 text-primary-blue" />
                     <h2 className="text-sm font-bold text-foreground">Teams workspace</h2>
                   </div>
                   <p className="mb-4 text-xs leading-5 text-muted-foreground">
-                    {teamWorkspace.workspaceName} is active on your account. Manage invites, member progress, bulk course assignments, and exports from the Teams dashboard.
+                    {teamWorkspace
+                      ? `${teamWorkspace.workspaceName} is active on your account. Manage invites, member progress, bulk course assignments, and exports from the Teams dashboard.`
+                      : "Your Teams subscription is active. Open the Teams dashboard to activate your workspace, invite friends, and manage member access."}
                   </p>
                   <Link
                     href="/dashboard/teams"
                     className="inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
                   >
-                    Open Teams Dashboard <ArrowRight className="h-4 w-4" />
+                    {teamWorkspace ? "Open Teams Dashboard" : "Activate Teams Dashboard"} <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
               ) : null}

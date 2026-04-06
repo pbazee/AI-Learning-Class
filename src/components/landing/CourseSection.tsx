@@ -13,6 +13,7 @@ import {
   Star,
 } from "lucide-react";
 import { CourseCard } from "@/components/courses/CourseCard";
+import { useStorefrontPersonalization } from "@/components/storefront/StorefrontPersonalizationProvider";
 import { cn } from "@/lib/utils";
 import type { Course, CourseAccessState } from "@/types";
 
@@ -57,9 +58,14 @@ export function CourseSection({
   courseAccessMap,
   wishlistCourseIds,
 }: CourseSectionProps) {
+  const personalization = useStorefrontPersonalization();
   const Icon = badgeIcons[badgeIcon];
   const colorClass = badgeColors[badgeIcon];
   const displayed = courses.slice(0, maxItems);
+  const effectiveViewerId = viewerId ?? personalization.viewerId;
+  const effectiveCourseAccessMap = courseAccessMap ?? personalization.courseAccessMap;
+  const effectiveWishlistCourseIds =
+    wishlistCourseIds ?? personalization.wishlistCourseIds;
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(displayed.length > 1);
@@ -187,9 +193,9 @@ export function CourseSection({
               <CourseCard
                 course={course}
                 index={index}
-                viewerId={viewerId}
-                courseAccess={courseAccessMap?.[course.id]}
-                isWishlisted={wishlistCourseIds?.includes(course.id)}
+                viewerId={effectiveViewerId}
+                courseAccess={effectiveCourseAccessMap?.[course.id]}
+                isWishlisted={effectiveWishlistCourseIds?.includes(course.id)}
               />
             </div>
           ))}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { CourseCard } from "@/components/courses/CourseCard";
+import { useStorefrontPersonalization } from "@/components/storefront/StorefrontPersonalizationProvider";
 import { Search, X } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -44,26 +45,23 @@ function normalizeSpecialFilter(value?: string): SpecialFilter {
 export function CoursesCatalog({
   courses,
   categories,
-  initialCategory = "all",
-  initialFilter,
-  initialSearch = "",
-  initialPriceFilter,
   viewerId,
   courseAccessMap,
   wishlistCourseIds,
 }: {
   courses: Course[];
   categories: Category[];
-  initialCategory?: string;
-  initialFilter?: string;
-  initialSearch?: string;
-  initialPriceFilter?: string;
   viewerId?: string | null;
   courseAccessMap?: Record<string, CourseAccessState>;
   wishlistCourseIds?: string[];
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const personalization = useStorefrontPersonalization();
+  const initialSearch = searchParams.get("q") ?? "";
+  const initialCategory = searchParams.get("category") ?? "all";
+  const initialPriceFilter = searchParams.get("price");
+  const initialFilter = searchParams.get("filter") ?? undefined;
   const [search, setSearch] = useState(initialSearch);
   const [category, setCategory] = useState(initialCategory);
   const [level, setLevel] = useState<Level | "ALL">("ALL");
@@ -72,6 +70,11 @@ export function CoursesCatalog({
   );
   const [specialFilter, setSpecialFilter] = useState<SpecialFilter>(normalizeSpecialFilter(initialFilter));
   const [sort, setSort] = useState(initialFilter === "popular" ? "popular" : "popular");
+  const effectiveViewerId = viewerId ?? personalization.viewerId;
+  const effectiveCourseAccessMap =
+    courseAccessMap ?? personalization.courseAccessMap;
+  const effectiveWishlistCourseIds =
+    wishlistCourseIds ?? personalization.wishlistCourseIds;
   const routeSignature = `${pathname}?${searchParams.toString()}`;
 
   useEffect(() => {
@@ -86,14 +89,15 @@ export function CoursesCatalog({
   }, [routeSignature]);
 
   useEffect(() => {
-    setSearch(initialSearch);
-  }, [initialSearch]);
-
-  useEffect(() => {
+    setSearch(searchParams.get("q") ?? "");
+    setCategory(searchParams.get("category") ?? "all");
     setPriceFilter(
-      initialPriceFilter === "free" || initialPriceFilter === "paid" ? initialPriceFilter : "all"
+      searchParams.get("price") === "free" || searchParams.get("price") === "paid"
+        ? (searchParams.get("price") as "free" | "paid")
+        : "all"
     );
-  }, [initialPriceFilter]);
+    setSpecialFilter(normalizeSpecialFilter(searchParams.get("filter") ?? undefined));
+  }, [routeSignature, searchParams]);
 
   const filtered = useMemo(() => {
     let filteredCourses = [...courses];
@@ -299,9 +303,9 @@ export function CoursesCatalog({
                   key={course.id}
                   course={course}
                   index={index}
-                  viewerId={viewerId}
-                  courseAccess={courseAccessMap?.[course.id]}
-                  isWishlisted={wishlistCourseIds?.includes(course.id)}
+                  viewerId={effectiveViewerId}
+                  courseAccess={effectiveCourseAccessMap?.[course.id]}
+                  isWishlisted={effectiveWishlistCourseIds?.includes(course.id)}
                 />
               ))}
             </div>

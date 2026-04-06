@@ -11,13 +11,14 @@ import {
   type PopupShowOn,
   type Role,
 } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { normalizeEmail } from "@/lib/admin-email";
 import { notifyContactReply } from "@/lib/contact-notifications";
 import { syncCourseReviewMetrics } from "@/lib/course-reviews";
 import { HOMEPAGE_PARAGRAPH_SECTION_KEYS } from "@/lib/homepage-paragraphs";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
+import { PUBLIC_CACHE_TAGS } from "@/lib/cache-config";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 import { deleteAdminStorageObjects } from "@/lib/supabase-admin";
@@ -394,6 +395,48 @@ function getErrorMessage(error: unknown) {
 
 function revalidateMany(paths: string[]) {
   Array.from(new Set(paths)).forEach((path) => revalidatePath(path));
+
+  const uniquePaths = Array.from(new Set(paths));
+
+  if (uniquePaths.some((path) => path === "/" || path.startsWith("/courses"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.homepage);
+    revalidateTag(PUBLIC_CACHE_TAGS.courseCatalog);
+    revalidateTag(PUBLIC_CACHE_TAGS.courses);
+    revalidateTag(PUBLIC_CACHE_TAGS.categories);
+  }
+
+  if (uniquePaths.some((path) => path === "/" || path.startsWith("/pricing"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.pricing);
+  }
+
+  if (uniquePaths.some((path) => path === "/" || path.startsWith("/blog"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.blogPosts);
+  }
+
+  if (uniquePaths.some((path) => path === "/" || path.startsWith("/admin/hero"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.heroSlides);
+  }
+
+  if (uniquePaths.some((path) => path === "/" || path.startsWith("/admin/paragraphs"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.homepageParagraphs);
+  }
+
+  if (uniquePaths.some((path) => path === "/" || path.startsWith("/admin/trusted-logos"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.trustedLogos);
+  }
+
+  if (uniquePaths.some((path) => path === "/" || path.startsWith("/admin/announcements"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.announcements);
+  }
+
+  if (uniquePaths.some((path) => path === "/" || path.startsWith("/admin/popups"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.popups);
+  }
+
+  if (uniquePaths.some((path) => path === "/about" || path.startsWith("/admin/settings"))) {
+    revalidateTag(PUBLIC_CACHE_TAGS.aboutPage);
+    revalidateTag(PUBLIC_CACHE_TAGS.siteSettings);
+  }
 }
 
 async function runAdminAction<T>(
@@ -1825,7 +1868,7 @@ export async function saveSiteSettingsAction(input: z.input<typeof settingsSchem
     settingsSchema,
     input,
     "saveSiteSettings",
-    ["/admin/settings", "/", "/pricing"],
+    ["/admin/settings", "/", "/pricing", "/about"],
     async (values) =>
       prisma.siteSettings.upsert({
         where: { id: "singleton" },

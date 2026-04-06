@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createAuditLog } from "@/lib/audit-log";
 import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
+import { PUBLIC_CACHE_TAGS } from "@/lib/cache-config";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +64,10 @@ export async function PUT(req: NextRequest) {
     summary: "Affiliate program settings were updated.",
     metadata: data,
   });
+
+  revalidatePath("/");
+  revalidateTag(PUBLIC_CACHE_TAGS.affiliateProgram);
+  revalidateTag(PUBLIC_CACHE_TAGS.homepage);
 
   return NextResponse.json({ success: true, program });
 }
