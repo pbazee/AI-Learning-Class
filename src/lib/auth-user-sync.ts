@@ -1,6 +1,8 @@
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import type { Role } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getPrimaryAdminEmail, normalizeEmail } from "./admin-email";
+import { getSupabaseAuthRole, syncSupabaseAuthRole } from "./supabase-auth-admin";
 
 function generateReferralCode() {
   return Math.random().toString(36).slice(2, 10).toUpperCase();
@@ -54,12 +56,22 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
         select: { id: true, role: true },
       });
 
-  const role = email === adminEmail ? "ADMIN" : existingById?.role || existingByEmail?.role || "STUDENT";
+  const role = (email === adminEmail ? "ADMIN" : existingById?.role || existingByEmail?.role || "STUDENT") as Role;
   const name =
     (user.user_metadata?.full_name as string | undefined) ||
     (user.user_metadata?.name as string | undefined) ||
     null;
   const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) || null;
+
+  if (getSupabaseAuthRole(user) !== role) {
+    await syncSupabaseAuthRole({
+      authUserId: user.id,
+      email,
+      role,
+    }).catch((error) => {
+      console.warn("[auth.sync] Unable to update Supabase auth metadata for the current user.", error);
+    });
+  }
 
   if (existingById) {
     const referralCode = (await prisma.user.findUnique({

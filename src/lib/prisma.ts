@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { recordDatabaseQueryTiming } from "@/lib/server-performance";
 
 const TRANSIENT_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2028", "P2034"]);
+const SCHEMA_MISMATCH_PRISMA_CODES = new Set(["P2021", "P2022"]);
 const DEFAULT_MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.PRISMA_MAX_ATTEMPTS ?? "3", 10));
 const DEFAULT_RETRY_DELAY_MS = Math.max(150, Number.parseInt(process.env.PRISMA_RETRY_DELAY_MS ?? "350", 10));
 const DEFAULT_LOG_COOLDOWN_MS = Math.max(1_000, Number.parseInt(process.env.PRISMA_LOG_COOLDOWN_MS ?? "60000", 10));
@@ -193,6 +194,13 @@ export async function withPrismaRetry<T>(operation: () => Promise<T>, label = "P
 
 export function isPrismaConnectionError(error: unknown) {
   return isRetryablePrismaError(error);
+}
+
+export function isPrismaSchemaMismatchError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    SCHEMA_MISMATCH_PRISMA_CODES.has(error.code)
+  );
 }
 
 const databaseUrl = normalizePoolerUrl(process.env.DATABASE_URL);

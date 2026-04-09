@@ -52,6 +52,7 @@ export default async function HomePage() {
     posts,
     slides,
     testimonials,
+    totalLoggedInUsers,
     trustedLogos,
   } = await getPublicHomepageData();
 
@@ -61,10 +62,6 @@ export default async function HomePage() {
   const popular = [...courses]
     .sort((left, right) => right.totalStudents - left.totalStudents)
     .slice(0, 8);
-  const totalLearners = courses.reduce(
-    (sum, course) => sum + course.totalStudents,
-    0
-  );
   const totalRatings = courses.reduce(
     (sum, course) => sum + course.totalRatings,
     0
@@ -78,7 +75,7 @@ export default async function HomePage() {
       : 0;
 
   const heroStats = [
-    { value: compactNumberFormatter.format(totalLearners), label: "Learners" },
+    { value: compactNumberFormatter.format(totalLoggedInUsers), label: "Learners" },
     { value: weightedRating > 0 ? weightedRating.toFixed(1) : "New", label: "Rating" },
     { value: compactNumberFormatter.format(courses.length), label: "Courses" },
   ];

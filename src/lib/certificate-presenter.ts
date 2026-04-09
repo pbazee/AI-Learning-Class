@@ -1,6 +1,7 @@
 import "server-only";
 
 import QRCode from "qrcode";
+import { resolveAppOrigin, type HeadersLike } from "@/lib/app-origin";
 
 const issuedDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "long",
@@ -42,9 +43,11 @@ export type CertificatePresentation = {
   };
 };
 
-function getAppOrigin() {
-  return (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
-}
+type CertificatePresentationOptions = {
+  appOrigin?: string | null;
+  headers?: HeadersLike | null;
+  requestUrl?: string | URL | null;
+};
 
 function slugify(value: string) {
   return value
@@ -70,18 +73,22 @@ export function getCertificatePdfHref(code: string, options?: { download?: boole
   return options?.download ? `${href}?download=1` : href;
 }
 
-export function getCertificateVerifyUrl(code: string) {
-  return `${getAppOrigin()}${getCertificateHref(code)}`;
+export function getCertificateVerifyUrl(
+  code: string,
+  options?: CertificatePresentationOptions
+) {
+  return `${resolveAppOrigin(options)}${getCertificateHref(code)}`;
 }
 
 export async function buildCertificatePresentation(
-  certificate: CertificatePresentationSource
+  certificate: CertificatePresentationSource,
+  options?: CertificatePresentationOptions
 ): Promise<CertificatePresentation> {
   const recipientName = certificate.user.name || certificate.user.email || "AI Learning Class Learner";
   const courseTitle = certificate.course.title;
   const issuedLabel = issuedDateFormatter.format(new Date(certificate.issuedAt));
   const certificateHref = getCertificateHref(certificate.code);
-  const verifyUrl = getCertificateVerifyUrl(certificate.code);
+  const verifyUrl = getCertificateVerifyUrl(certificate.code, options);
   const verifyDisplayUrl = verifyUrl.replace(/^https?:\/\//, "");
   const viewPdfHref = getCertificatePdfHref(certificate.code);
   const downloadPdfHref = getCertificatePdfHref(certificate.code, { download: true });

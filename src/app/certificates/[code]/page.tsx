@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { Download, Linkedin, Mail, ShieldCheck } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
@@ -35,7 +36,10 @@ export default async function CertificateDetailPage({
     notFound();
   }
 
-  const presentation = await buildCertificatePresentation(certificate);
+  const requestHeaders = await headers();
+  const presentation = await buildCertificatePresentation(certificate, {
+    headers: requestHeaders,
+  });
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fc_0%,#edf2ff_34%,#eef2f9_100%)] dark:bg-[linear-gradient(180deg,#030712_0%,#07101d_36%,#020617_100%)]">

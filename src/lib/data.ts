@@ -25,7 +25,12 @@ import {
 import { getCompletedCourseCertificateRecords } from "@/lib/learner-records";
 import { getAccessibleCourseAccessByCourseId } from "@/lib/access-control";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
-import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "./prisma";
+import {
+  isPrismaConnectionError,
+  isPrismaSchemaMismatchError,
+  logPrismaConnectionEvent,
+  prisma,
+} from "./prisma";
 import { ensureSubscriptionPlansTable, mapSubscriptionPlan } from "@/lib/subscription-plans";
 import { createServerSupabaseClient } from "./supabase-server";
 import { syncAuthenticatedUser } from "./auth-user-sync";
@@ -237,6 +242,7 @@ export type PublicHomepageData = {
   posts: BlogPostRecord[];
   slides: HeroSlide[];
   testimonials: Testimonial[];
+  totalLoggedInUsers: number;
   trustedLogos: TrustedLogo[];
 };
 
@@ -378,6 +384,7 @@ const EMPTY_PUBLIC_HOMEPAGE_DATA: PublicHomepageData = {
   posts: [],
   slides: [],
   testimonials: [],
+  totalLoggedInUsers: 0,
   trustedLogos: [],
 };
 
@@ -406,10 +413,10 @@ async function safeDatabaseRead<T>(
   try {
     return await query();
   } catch (error) {
-    if (isPrismaConnectionError(error)) {
+    if (isPrismaConnectionError(error) || isPrismaSchemaMismatchError(error)) {
       logPrismaConnectionEvent(
         `safeDatabaseRead:${label}`,
-        `[database] ${label} failed. Returning a safe fallback.`,
+        `[database] ${label} failed. Returning a safe fallback while the database catches up.`,
         error,
         "warn"
       );
@@ -654,7 +661,7 @@ function buildHomepageParagraphContentMapFromRows(
 
 type PublicHomepageContentSnapshot = Omit<
   PublicHomepageData,
-  "categories" | "courses"
+  "categories" | "courses" | "totalLoggedInUsers"
 >;
 
 async function getPublicCourseCatalogSnapshotUncached(): Promise<PublicCourseCatalogData> {
@@ -820,15 +827,17 @@ const getCachedPublicHomepageContentSnapshot = unstable_cache(
 
 const getCachedPublicHomepageData = unstable_cache(
   async (): Promise<PublicHomepageData> => {
-    const [catalogSnapshot, contentSnapshot] = await Promise.all([
+    const [catalogSnapshot, contentSnapshot, totalLoggedInUsers] = await Promise.all([
       getCachedPublicCourseCatalogSnapshot(),
       getCachedPublicHomepageContentSnapshot(),
+      safeDatabaseRead("getPublicHomepageUserCount", 0, async () => prisma.user.count()),
     ]);
 
     return {
       ...contentSnapshot,
       categories: catalogSnapshot.categories,
       courses: catalogSnapshot.courses,
+      totalLoggedInUsers,
     };
   },
   ["public-homepage-data"],

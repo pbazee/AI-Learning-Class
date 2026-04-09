@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   Brain,
@@ -68,6 +68,15 @@ function formatLevel(level: CourseSearchSuggestion["level"]) {
 
 function mobileCtaText(label: string) {
   return /explore/i.test(label) && /course/i.test(label) ? "Explore Courses" : label.length > 18 ? "Explore Courses" : label;
+}
+
+function getSupabaseSessionRole(user: User | null) {
+  if (!user) return null;
+  return typeof user.app_metadata?.role === "string"
+    ? user.app_metadata.role
+    : typeof user.user_metadata?.role === "string"
+      ? user.user_metadata.role
+      : null;
 }
 
 function SearchPanel({
@@ -186,19 +195,56 @@ export function Navbar() {
     const syncRole = async (nextUser: User | null) => {
       setUser(nextUser);
       if (!nextUser) return void setUserRole(null);
+      const sessionRole = getSupabaseSessionRole(nextUser);
       try {
-        const response = await fetch("/api/auth/sync-user", { method: "POST" });
+        const response = await fetch("/api/auth/sync-user", { method: "POST", cache: "no-store" });
         const payload = await response.json();
         if (!response.ok) throw new Error("Unable to sync");
-        setUserRole(payload.user?.role ?? null);
+        const nextRole = payload.user?.role ?? null;
+        setUserRole(nextRole);
+
+        if (nextRole && nextRole !== sessionRole) {
+          await supabase.auth.refreshSession().catch(() => undefined);
+          const {
+            data: { user: refreshedUser },
+          } = await supabase.auth.getUser();
+
+          if (refreshedUser) {
+            setUser(refreshedUser);
+          }
+
+          router.refresh();
+        }
       } catch {
-        setUserRole(typeof nextUser.user_metadata?.role === "string" ? nextUser.user_metadata.role : typeof nextUser.app_metadata?.role === "string" ? nextUser.app_metadata.role : null);
+        setUserRole(sessionRole);
       }
     };
+    const resyncCurrentUser = async () => {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+
+      await syncRole(currentUser);
+    };
+
     supabase.auth.getUser().then(({ data }) => void syncRole(data.user));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => void syncRole(session?.user ?? null));
-    return () => subscription.unsubscribe();
-  }, []);
+    const handleWindowFocus = () => void resyncCurrentUser();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void resyncCurrentUser();
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [router]);
 
   useEffect(() => {
     const updateNavbarHeight = () => document.documentElement.style.setProperty("--navbar-height", `${navRef.current?.offsetHeight ?? 0}px`);
@@ -259,6 +305,17 @@ export function Navbar() {
     router.push(`/courses?q=${encodeURIComponent(nextQuery)}`);
   }
 
+  function handleProfileNavigation(event: ReactMouseEvent<HTMLAnchorElement>, href: string) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    setProfileOpen(false);
+    setMenuOpen(false);
+    router.push(href);
+  }
+
   const displayName = getDisplayName(user);
   const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
   const showSearchSuggestions = searchFocused;
@@ -313,7 +370,7 @@ export function Navbar() {
                       </div>
                       <div className="p-3">
                         {profileLinks.map(({ href, icon: Icon, label }) => (
-                          <Link key={href} href={href} onClick={() => setProfileOpen(false)} className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900">
+                          <Link key={href} href={href} onClick={(event) => handleProfileNavigation(event, href)} className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900">
                             <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue dark:bg-slate-900"><Icon className="h-[18px] w-[18px]" /></span>
                             {label}
                           </Link>
@@ -394,7 +451,7 @@ export function Navbar() {
                       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
                       <div className="mt-4 space-y-2">
                         {profileLinks.map(({ href, label, icon: Icon }) => (
-                          <Link key={href} href={href} onClick={() => setMenuOpen(false)} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-100 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-800">
+                          <Link key={href} href={href} onClick={(event) => handleProfileNavigation(event, href)} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-100 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-800">
                             <Icon className="h-4 w-4 text-primary-blue" />
                             {label}
                           </Link>

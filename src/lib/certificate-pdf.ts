@@ -371,10 +371,21 @@ function buildCertificatePdfBuffer(
 }
 
 export async function ensureCertificatePdfAsset(
-  certificate: NonNullable<CertificateSource>
+  certificate: NonNullable<CertificateSource>,
+  options?: Parameters<typeof buildCertificatePresentation>[1] & {
+    persist?: boolean;
+  }
 ) {
-  const presentation = await buildCertificatePresentation(certificate);
+  const presentation = await buildCertificatePresentation(certificate, options);
   const pdfBuffer = await buildCertificatePdfBuffer(presentation);
+
+  if (options?.persist === false) {
+    return {
+      fileName: presentation.fileName,
+      pdfBuffer,
+      pdfUrl: null,
+    };
+  }
 
   try {
     const bucket = await ensureAdminStorageBucket();

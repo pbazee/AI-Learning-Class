@@ -25,30 +25,13 @@ export async function GET(
           : "inline";
       const fileName = getCertificateDownloadFileName(certificate);
 
-      if (certificate.pdfUrl) {
-        if (dispositionType === "inline") {
-          return NextResponse.redirect(certificate.pdfUrl);
-        }
-
-        const storedPdfResponse = await fetch(certificate.pdfUrl, {
-          cache: "force-cache",
-        }).catch(() => null);
-
-        if (storedPdfResponse?.ok) {
-          const pdfBytes = new Uint8Array(await storedPdfResponse.arrayBuffer());
-
-          return new NextResponse(pdfBytes, {
-            headers: {
-              "Content-Type": "application/pdf",
-              "Content-Length": String(pdfBytes.byteLength),
-              "Content-Disposition": `${dispositionType}; filename="${fileName}"`,
-              "Cache-Control": `public, max-age=${CERTIFICATE_PDF_CACHE_REVALIDATE_SECONDS}, stale-while-revalidate=${CERTIFICATE_PDF_CACHE_REVALIDATE_SECONDS}`,
-            },
-          });
-        }
-      }
-
-      const generated = await ensureCertificatePdfAsset(certificate);
+      // Rebuild from the current request origin so saved localhost URLs never leak
+      // into downloaded or inline certificate PDFs.
+      const generated = await ensureCertificatePdfAsset(certificate, {
+        headers: request.headers,
+        requestUrl: request.url,
+        persist: false,
+      });
       const pdfBytes = new Uint8Array(generated.pdfBuffer);
 
       return new NextResponse(pdfBytes, {

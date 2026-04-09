@@ -2,6 +2,40 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { getPrimaryAdminEmail, normalizeEmail } from "@/lib/admin-email";
 
+function getMetadataRole(metadata: unknown) {
+  if (metadata && typeof metadata === "object" && "role" in metadata) {
+    const role = (metadata as { role?: unknown }).role;
+
+    if (typeof role === "string") {
+      return role;
+    }
+  }
+
+  return null;
+}
+
+function getAuthRole(
+  user:
+    | {
+        app_metadata?: unknown;
+        user_metadata?: unknown;
+      }
+    | null
+    | undefined
+) {
+  const appRole = getMetadataRole(user?.app_metadata);
+
+  if (appRole) {
+    return appRole;
+  }
+
+  return getMetadataRole(user?.user_metadata);
+}
+
+function isAdminRole(role: string | null | undefined) {
+  return role === "ADMIN" || role === "SUPER_ADMIN";
+}
+
 const protectedPaths = ["/dashboard", "/admin", "/checkout", "/affiliate/dashboard", "/settings"];
 const authPaths = ["/login", "/signup", "/sign-in", "/sign-up"];
 type RateLimitRule = {
@@ -242,7 +276,12 @@ export async function middleware(request: NextRequest) {
 
   const isAuthPage = authPaths.some((p) => pathname.startsWith(p));
   if (isAuthPage && user) {
-    response = NextResponse.redirect(new URL("/dashboard", request.url));
+    const userEmail = normalizeEmail(user.email);
+    const destination =
+      userEmail === getPrimaryAdminEmail() || isAdminRole(getAuthRole(user))
+        ? "/admin"
+        : "/dashboard";
+    response = NextResponse.redirect(new URL(destination, request.url));
     if (rateLimitResult) {
       applyRateLimitHeaders(response, rateLimitResult);
     }
@@ -252,22 +291,14 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/admin") && user) {
     const userEmail = normalizeEmail(user.email);
     const primaryAdminEmail = getPrimaryAdminEmail();
+    const authRole = getAuthRole(user);
 
-    if (userEmail !== primaryAdminEmail) {
-      const { data: profile } = await supabase
-        .from("User")
-        .select("role")
-        .or(`id.eq.${user.id},email.eq.${userEmail}`)
-        .limit(1)
-        .maybeSingle();
-
-      if (!profile || !["ADMIN", "SUPER_ADMIN"].includes(profile.role)) {
-        response = NextResponse.redirect(new URL("/dashboard", request.url));
-        if (rateLimitResult) {
-          applyRateLimitHeaders(response, rateLimitResult);
-        }
-        return response;
+    if (userEmail !== primaryAdminEmail && !isAdminRole(authRole)) {
+      response = NextResponse.redirect(new URL("/dashboard", request.url));
+      if (rateLimitResult) {
+        applyRateLimitHeaders(response, rateLimitResult);
       }
+      return response;
     }
   }
 

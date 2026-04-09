@@ -22,6 +22,7 @@ import { PUBLIC_CACHE_TAGS } from "@/lib/cache-config";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 import { deleteAdminStorageObjects } from "@/lib/supabase-admin";
+import { syncSupabaseAuthRole } from "@/lib/supabase-auth-admin";
 
 type ActionResult<T = void> = {
   success: boolean;
@@ -1094,13 +1095,54 @@ export async function updateUserRoleAction(input: z.input<typeof userRoleUpdateS
     input,
     "updateUserRole",
     ["/admin/users", "/admin/user-subscriptions"],
-    async (values) =>
-      prisma.user.update({
+    async (values) => {
+      const existingUser = await prisma.user.findUnique({
+        where: { id: values.userId },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+        },
+      });
+
+      if (!existingUser) {
+        throw new Error("User not found.");
+      }
+
+      const nextRole = values.role as Role;
+
+      if (existingUser.role === nextRole) {
+        return existingUser;
+      }
+
+      const updatedUser = await prisma.user.update({
         where: { id: values.userId },
         data: {
-          role: values.role as Role,
+          role: nextRole,
         },
-      }),
+      });
+
+      try {
+        await syncSupabaseAuthRole({
+          authUserId: existingUser.id,
+          email: existingUser.email,
+          role: nextRole,
+        });
+      } catch (error) {
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            role: existingUser.role,
+          },
+        });
+
+        throw new Error(
+          "Unable to propagate the new role to the user's auth session, so the role change was rolled back."
+        );
+      }
+
+      return updatedUser;
+    },
     "User role updated successfully."
   );
 }
