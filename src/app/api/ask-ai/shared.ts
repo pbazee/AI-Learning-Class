@@ -5,6 +5,7 @@ import { getAskAiSettings } from "@/lib/ask-ai-settings";
 import { getUserAskAiQuota, incrementUserAskAiUsage } from "@/lib/ask-ai-usage";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
+import { env } from "@/lib/config";
 
 function buildSystemPrompt(courseTitle: string, systemPrompt?: string) {
   const basePrompt = `You are the Ask AI learning assistant for the course: "${courseTitle}".
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!env.OPENAI_API_KEY) {
       return NextResponse.json(
         {
           content: "Ask AI is temporarily unavailable. Please configure OPENAI_API_KEY on the server.",
@@ -123,11 +124,11 @@ export async function POST(req: NextRequest) {
     }
 
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: env.OPENAI_API_KEY,
     });
 
     const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_ASK_AI_MODEL || process.env.OPENAI_COPILOT_MODEL || "gpt-4o",
+      model: env.OPENAI_ASK_AI_MODEL || env.OPENAI_COPILOT_MODEL || "gpt-4o",
       temperature: 0.6,
       max_tokens: 900,
       messages: toChatMessages(messages, courseTitle, askAiSettings.systemPrompt),

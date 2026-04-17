@@ -1,8 +1,8 @@
 import "server-only";
+import { env } from "@/lib/config";
 
 function getPaypalBaseUrl() {
-  const isLive =
-    (process.env.PAYPAL_MODE || "sandbox").trim().toLowerCase() === "live";
+  const isLive = (env.PAYPAL_MODE || "sandbox").trim().toLowerCase() === "live";
 
   return isLive
     ? "https://api-m.paypal.com"
@@ -10,8 +10,8 @@ function getPaypalBaseUrl() {
 }
 
 function getPaypalCredentials() {
-  const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID?.trim();
-  const clientSecret = process.env.PAYPAL_CLIENT_SECRET?.trim();
+  const clientId = env.NEXT_PUBLIC_PAYPAL_CLIENT_ID?.trim();
+  const clientSecret = env.PAYPAL_CLIENT_SECRET?.trim();
 
   if (!clientId || !clientSecret) {
     throw new Error("PayPal is not configured.");
@@ -102,7 +102,7 @@ export async function getPaypalOrder(orderId: string) {
 }
 
 export async function verifyPaypalWebhook(rawBody: string, headers: Headers) {
-  const webhookId = process.env.PAYPAL_WEBHOOK_ID?.trim();
+  const webhookId = env.PAYPAL_WEBHOOK_ID?.trim();
 
   if (!webhookId) {
     throw new Error("PAYPAL_WEBHOOK_ID is not configured.");

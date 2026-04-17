@@ -1,6 +1,8 @@
 import "server-only";
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { env } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 type RequestPerformanceContext = {
   requestId: string;
@@ -13,12 +15,10 @@ type RequestPerformanceContext = {
 const requestPerformanceStorage =
   new AsyncLocalStorage<RequestPerformanceContext>();
 
-const PERF_LOGGING_ENABLED =
-  process.env.NODE_ENV !== "production" ||
-  process.env.ENABLE_PERF_LOGS === "1";
+const PERF_LOGGING_ENABLED = env.NODE_ENV !== "production" || env.ENABLE_PERF_LOGS === "1";
 const SLOW_QUERY_THRESHOLD_MS = Math.max(
   10,
-  Number.parseInt(process.env.SLOW_QUERY_THRESHOLD_MS ?? "250", 10)
+  Number.parseInt(env.SLOW_QUERY_THRESHOLD_MS ?? "250", 10)
 );
 
 function nowMs() {
@@ -42,9 +42,7 @@ export function recordDatabaseQueryTiming(label: string, durationMs: number) {
   }
 
   if (PERF_LOGGING_ENABLED && durationMs >= SLOW_QUERY_THRESHOLD_MS) {
-    console.info(
-      `[perf.db] ${label} took ${formatDuration(durationMs)}ms${context ? ` request=${context.requestId}` : ""}`
-    );
+    logger.info(`[perf.db] ${label} took ${formatDuration(durationMs)}ms${context ? ` request=${context.requestId}` : ""}`);
   }
 }
 
@@ -81,9 +79,7 @@ export async function withRequestTiming<T>(
     } finally {
       if (PERF_LOGGING_ENABLED) {
         const totalDuration = nowMs() - context.startedAt;
-        console.info(
-          `[perf.request] ${context.label} total=${formatDuration(totalDuration)}ms db=${formatDuration(context.databaseTimeMs)}ms queries=${context.databaseQueryCount} request=${context.requestId}`
-        );
+        logger.info(`[perf.request] ${context.label} total=${formatDuration(totalDuration)}ms db=${formatDuration(context.databaseTimeMs)}ms queries=${context.databaseQueryCount} request=${context.requestId}`);
       }
     }
   });

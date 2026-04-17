@@ -14,6 +14,7 @@ import {
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { normalizeEmail } from "@/lib/admin-email";
+import { env } from "@/lib/config";
 import { notifyContactReply } from "@/lib/contact-notifications";
 import { syncCourseReviewMetrics } from "@/lib/course-reviews";
 import { HOMEPAGE_PARAGRAPH_SECTION_KEYS } from "@/lib/homepage-paragraphs";
@@ -2176,7 +2177,7 @@ export async function sendNewsletterAction(input: z.input<typeof newsletterSchem
     "sendNewsletter",
     ["/admin/subscribers"],
     async (values) => {
-      if (!process.env.RESEND_API_KEY) {
+      if (!env.RESEND_API_KEY) {
         throw new Error("RESEND_API_KEY is not configured, so the newsletter cannot be sent yet.");
       }
 
@@ -2194,10 +2195,10 @@ export async function sendNewsletterAction(input: z.input<typeof newsletterSchem
       }
 
       const { Resend } = await import("resend");
-      const resend = new Resend(process.env.RESEND_API_KEY);
+      const resend = new Resend(env.RESEND_API_KEY);
       const siteSettings = await prisma.siteSettings.findUnique({ where: { id: "singleton" } });
       const fromAddress =
-        process.env.RESEND_FROM_EMAIL ||
+        env.RESEND_FROM_EMAIL ||
         siteSettings?.supportEmail ||
         "noreply@aigeniuslab.com";
 

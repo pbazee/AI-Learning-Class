@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth-redirect";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { createClient } from "@/lib/supabase";
+import { logger } from "@/lib/logger";
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -112,7 +113,7 @@ function LoginPageInner() {
     setLoading(true);
     const supabase = createClient();
     await syncNewsletterPreference(email);
-    console.log("[login] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
+    logger.debug("[login] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -133,7 +134,7 @@ function LoginPageInner() {
     setLoading(true);
 
     if (mode === "magic") {
-      console.log("[login] Sending magic link to:", email);
+      logger.info("[login] Sending magic link to:", email);
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
@@ -156,11 +157,11 @@ function LoginPageInner() {
         setError(message);
       } else {
         void syncNewsletterPreference(email);
-        console.log("[login] Magic link sent successfully to:", email);
+        logger.info("[login] Magic link sent successfully to:", email);
         setMagicSent(true);
       }
     } else {
-      console.log("[login] Signing in with password for:", email);
+      logger.info("[login] Signing in with password for:", email);
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
@@ -187,7 +188,7 @@ function LoginPageInner() {
         const nextPath =
           typeof payload?.nextPath === "string" ? payload.nextPath : redirectPath;
 
-        console.log("[login] Signed in successfully, redirecting to:", nextPath);
+        logger.info("[login] Signed in successfully, redirecting to:", nextPath);
         router.push(nextPath);
         router.refresh();
       }

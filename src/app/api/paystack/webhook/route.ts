@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
+import { env } from "@/lib/config";
 import {
   finalizeCheckoutOrder,
   markCheckoutOrderFailedByProviderReference,
@@ -24,7 +26,7 @@ type PaystackWebhookPayload = {
 };
 
 function isValidPaystackSignature(rawBody: string, signature?: string | null) {
-  const secretKey = process.env.PAYSTACK_SECRET_KEY?.trim();
+  const secretKey = env.PAYSTACK_SECRET_KEY?.trim();
 
   if (!secretKey || !signature) {
     return false;
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-paystack-signature");
 
-  if (!process.env.PAYSTACK_SECRET_KEY) {
+  if (!env.PAYSTACK_SECRET_KEY) {
     return NextResponse.json(
       { error: "Paystack webhook is not configured." },
       { status: 400 }
@@ -88,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("[paystack.webhook] Unable to process Paystack webhook.", error);
+    logger.error("[paystack.webhook] Unable to process Paystack webhook.", error);
     return NextResponse.json(
       { error: "Unable to process Paystack webhook." },
       { status: 400 }

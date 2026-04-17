@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { getPrimaryAdminEmail, normalizeEmail } from "@/lib/admin-email";
+import { env } from "@/lib/config";
 
 function getMetadataRole(metadata: unknown) {
   if (metadata && typeof metadata === "object" && "role" in metadata) {
@@ -232,7 +233,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     const response = NextResponse.next();
     if (rateLimitResult) {
       applyRateLimitHeaders(response, rateLimitResult);
@@ -243,8 +244,8 @@ export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {

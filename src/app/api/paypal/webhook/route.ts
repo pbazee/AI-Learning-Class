@@ -9,6 +9,8 @@ import {
   getPaypalOrder,
   verifyPaypalWebhook,
 } from "@/lib/paypal";
+import { logger } from "@/lib/logger";
+import { env } from "@/lib/config";
 
 type PaypalWebhookEvent = {
   event_type?: string;
@@ -55,9 +57,9 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
 
   if (
-    !process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ||
-    !process.env.PAYPAL_CLIENT_SECRET ||
-    !process.env.PAYPAL_WEBHOOK_ID
+    !env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ||
+    !env.PAYPAL_CLIENT_SECRET ||
+    !env.PAYPAL_WEBHOOK_ID
   ) {
     return NextResponse.json(
       { error: "PayPal webhook is not configured." },
@@ -109,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("[paypal.webhook] Unable to process PayPal webhook.", error);
+    logger.error("[paypal.webhook] Unable to process PayPal webhook.", error);
     return NextResponse.json(
       { error: "Unable to process PayPal webhook." },
       { status: 400 }

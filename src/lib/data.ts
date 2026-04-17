@@ -50,6 +50,7 @@ import {
   PUBLIC_CACHE_TAGS,
   PUBLIC_PAGE_REVALIDATE_SECONDS,
 } from "@/lib/cache-config";
+import { env } from "@/lib/config";
 
 type CourseWithCategory = Prisma.CourseGetPayload<{
   include: { category: true };
@@ -898,7 +899,7 @@ export async function getPublicAboutPageData(): Promise<PublicAboutPageData> {
 
 export const getCurrentUserProfile = cache(async () => {
   return safeDatabaseRead("getCurrentUserProfile", null, async () => {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       return null;
     }
 

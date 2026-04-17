@@ -41,6 +41,8 @@ function isLocalHostname(hostname: string) {
   );
 }
 
+import { env } from "@/lib/config";
+
 function normalizeOriginCandidate(candidate?: string | URL | null) {
   if (!candidate) {
     return null;
@@ -87,9 +89,9 @@ export function resolveAppOrigin(options: ResolveAppOriginOptions = {}) {
     : null;
 
   const envCandidates = [
-    normalizeOriginCandidate(options.appOrigin ?? process.env.NEXT_PUBLIC_APP_URL),
-    normalizeOriginCandidate(process.env.VERCEL_PROJECT_PRODUCTION_URL),
-    normalizeOriginCandidate(process.env.VERCEL_URL),
+    normalizeOriginCandidate(options.appOrigin ?? env.NEXT_PUBLIC_APP_URL),
+    normalizeOriginCandidate(env.VERCEL_PROJECT_PRODUCTION_URL),
+    normalizeOriginCandidate(env.VERCEL_URL),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   const requestCandidates = [forwardedOrigin, requestOrigin].filter(
