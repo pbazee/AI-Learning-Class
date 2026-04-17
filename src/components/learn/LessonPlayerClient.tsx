@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { AnimatePresence } from "framer-motion";
+import ReactPlayer from "react-player";
 import { AskAI } from "@/components/courses/AskAI";
 import {
+  AlertCircle,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -17,7 +19,10 @@ import {
   NotebookText,
   Clock3,
   Lock,
+  PlayCircle,
+  Volume2,
 } from "lucide-react";
+import { resolveMediaUrl } from "@/lib/media";
 import { DEFAULT_ASK_AI_NAME, clampPercentage } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import type { Course } from "@/types";
@@ -56,10 +61,141 @@ type LessonProgressState = {
 
 type LessonProgressMap = Record<string, LessonProgressState>;
 
+type LessonRendererKind = "pdf" | "video" | "audio";
+
+type ResolvedLessonRenderer = {
+  assetTypeLabel: string;
+  fallbackMessage: string;
+  fallbackTitle: string;
+  kind: LessonRendererKind | null;
+  primaryAssetUrl: string | null;
+};
+
 const NOTES_PANEL_OPEN_KEY = "ai-genius-lab:lesson-notes-panel-open";
 const DESKTOP_BREAKPOINT = 1024;
 const PROGRESS_SYNC_DEBOUNCE_MS = 1200;
 const LESSON_COMPLETE_THRESHOLD = 99;
+
+function inferLessonRendererFromUrl(url?: string | null): LessonRendererKind | null {
+  const normalizedUrl = url?.trim();
+
+  if (!normalizedUrl) {
+    return null;
+  }
+
+  if (/\.pdf(?:[?#].*)?$/i.test(normalizedUrl)) {
+    return "pdf";
+  }
+
+  if (/\.(?:mp3|wav|m4a|aac|ogg|flac|opus)(?:[?#].*)?$/i.test(normalizedUrl)) {
+    return "audio";
+  }
+
+  if (/\.(?:mp4|m4v|mov|webm|m3u8|mpd|avi|mkv)(?:[?#].*)?$/i.test(normalizedUrl)) {
+    return "video";
+  }
+
+  return null;
+}
+
+function normalizeLessonAssetType(lesson: CourseLesson) {
+  const runtimeLesson = lesson as CourseLesson & { assetType?: string | null };
+  const rawAssetType = runtimeLesson.assetType ?? lesson.type;
+  const normalizedAssetType = rawAssetType?.trim().toUpperCase() || "UNKNOWN";
+
+  return normalizedAssetType === "LIVE" ? "VIDEO" : normalizedAssetType;
+}
+
+function resolveLessonRenderer(lesson: CourseLesson): ResolvedLessonRenderer {
+  const primaryAssetUrl =
+    resolveMediaUrl({
+      url: lesson.assetUrl || lesson.videoUrl,
+      path: lesson.assetPath,
+      fallback: "",
+    }) || null;
+  const assetTypeLabel = normalizeLessonAssetType(lesson);
+  const inferredRenderer = inferLessonRendererFromUrl(primaryAssetUrl);
+
+  const missingAssetRenderer = {
+    assetTypeLabel,
+    fallbackMessage: `This ${assetTypeLabel.toLowerCase()} lesson is missing its media source. Add an asset URL or storage path to make it playable again.`,
+    fallbackTitle: "Lesson asset unavailable",
+    kind: null,
+    primaryAssetUrl,
+  } satisfies ResolvedLessonRenderer;
+
+  switch (assetTypeLabel) {
+    case "PDF":
+      return primaryAssetUrl
+        ? {
+            assetTypeLabel,
+            fallbackMessage: "",
+            fallbackTitle: "",
+            kind: "pdf",
+            primaryAssetUrl,
+          }
+        : missingAssetRenderer;
+    case "VIDEO":
+      return primaryAssetUrl
+        ? {
+            assetTypeLabel,
+            fallbackMessage: "",
+            fallbackTitle: "",
+            kind: "video",
+            primaryAssetUrl,
+          }
+        : missingAssetRenderer;
+    case "AUDIO":
+      return primaryAssetUrl
+        ? {
+            assetTypeLabel,
+            fallbackMessage: "",
+            fallbackTitle: "",
+            kind: "audio",
+            primaryAssetUrl,
+          }
+        : missingAssetRenderer;
+    default:
+      if (primaryAssetUrl && inferredRenderer) {
+        return {
+          assetTypeLabel,
+          fallbackMessage: "",
+          fallbackTitle: "",
+          kind: inferredRenderer,
+          primaryAssetUrl,
+        };
+      }
+
+      return {
+        assetTypeLabel,
+        fallbackMessage:
+          "This lesson does not have a supported PDF, video, or audio renderer configured yet. Please update the lesson asset type or upload a compatible file.",
+        fallbackTitle: "Renderer unavailable",
+        kind: null,
+        primaryAssetUrl,
+      };
+  }
+}
+
+function LessonAssetFallback({
+  message,
+  title,
+}: {
+  message: string;
+  title: string;
+}) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center text-slate-300">
+      <div className="rounded-full bg-rose-500/10 p-4">
+        <AlertCircle className="h-8 w-8 text-rose-400" />
+      </div>
+      <div className="max-w-lg space-y-2">
+        <p className="text-base font-semibold text-white">{title}</p>
+        <p className="text-sm leading-6 text-slate-400">{message}</p>
+      </div>
+    </div>
+  );
+}
 
 function normalizeLessonProgressEntry(
   value?: Partial<LessonProgressState> | null
@@ -163,13 +299,23 @@ export function LessonPlayerClient({
     currentIndex >= 0
       ? allLessons.slice(currentIndex + 1).find((lesson) => isLessonUnlocked(lesson))
       : undefined;
-  
-  const primaryAssetUrl = currentLesson.assetUrl || currentLesson.videoUrl;
+  const resolvedLessonRenderer = useMemo(
+    () => resolveLessonRenderer(currentLesson),
+    [currentLesson]
+  );
+  const primaryAssetUrl = resolvedLessonRenderer.primaryAssetUrl;
   const isPreviewOnlyLesson = currentLesson.isPreview && !hasFullCourseAccess;
   const previewPagesLimit =
-    isPreviewOnlyLesson && currentLesson.type === "PDF"
+    isPreviewOnlyLesson && resolvedLessonRenderer.kind === "pdf"
       ? currentLesson.previewPages ?? undefined
       : undefined;
+  const previewMinutesLimitSeconds =
+    isPreviewOnlyLesson &&
+    (resolvedLessonRenderer.kind === "video" || resolvedLessonRenderer.kind === "audio") &&
+    currentLesson.previewMinutes &&
+    currentLesson.previewMinutes > 0
+      ? currentLesson.previewMinutes * 60
+      : 0;
 
   // --- Preferences & Layout States (Initialized with Defaults) ---
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -183,13 +329,22 @@ export function LessonPlayerClient({
   // --- PDF & Media States ---
   const [previewPdfPage, setPreviewPdfPage] = useState(initialProgress.lastPdfPage ?? 1);
   const [pdfViewportWidth, setPdfViewportWidth] = useState(0);
+  const [mediaPlaybackSeconds, setMediaPlaybackSeconds] = useState(initialProgress.watchedSeconds);
+  const [mediaRendererError, setMediaRendererError] = useState<string | null>(null);
+  const [timedMediaPreviewLocked, setTimedMediaPreviewLocked] = useState(false);
   const currentLessonProgress = normalizeLessonProgressEntry(lessonProgressMap[currentLesson.id]);
 
   // --- Refs ---
   const pdfViewportRef = useRef<HTMLDivElement | null>(null);
+  const mediaElementRef = useRef<HTMLVideoElement | null>(null);
   const progressSyncTimeoutRef = useRef<number | null>(null);
   const queuedProgressRef = useRef<LessonProgressState | null>(null);
   const lastSyncedProgressRef = useRef<LessonProgressState>(initialProgress);
+  const initialMediaSeekAppliedRef = useRef(false);
+  const lastReportedMediaSecondRef = useRef(initialProgress.watchedSeconds);
+
+  void initialNotes;
+  void initialNoteContent;
 
   // --- Hydration & Preference Loading ---
   useEffect(() => {
@@ -215,12 +370,18 @@ export function LessonPlayerClient({
   useEffect(() => {
     const nextPreviewPage = currentLessonProgress.lastPdfPage ?? 1;
     setPreviewPdfPage(nextPreviewPage);
+    setMediaPlaybackSeconds(currentLessonProgress.watchedSeconds);
+    setMediaRendererError(null);
+    setTimedMediaPreviewLocked(false);
     queuedProgressRef.current = null;
     lastSyncedProgressRef.current = currentLessonProgress;
+    mediaElementRef.current = null;
+    initialMediaSeekAppliedRef.current = false;
+    lastReportedMediaSecondRef.current = currentLessonProgress.watchedSeconds;
   }, [currentLesson.id]);
 
   useEffect(() => {
-    if (!isMounted || currentLesson.type !== "PDF" || !pdfViewportRef.current) {
+    if (!isMounted || resolvedLessonRenderer.kind !== "pdf" || !pdfViewportRef.current) {
       return;
     }
 
@@ -241,7 +402,7 @@ export function LessonPlayerClient({
     observer.observe(viewportElement);
 
     return () => observer.disconnect();
-  }, [currentLesson.id, currentLesson.type, isMounted]);
+  }, [currentLesson.id, isMounted, resolvedLessonRenderer.kind]);
 
   // Initial Data Fetch / Touch
   useEffect(() => {
@@ -351,20 +512,173 @@ export function LessonPlayerClient({
     }, PROGRESS_SYNC_DEBOUNCE_MS);
   }, [currentLesson.id, hasFullCourseAccess, viewerId]);
 
+  const updateCurrentLessonProgress = useCallback(
+    (updates: Partial<LessonProgressState>) => {
+      if (!hasFullCourseAccess || !viewerId) {
+        return;
+      }
+
+      const normalized = normalizeLessonProgressEntry({
+        ...lessonProgressMap[currentLesson.id],
+        ...updates,
+      });
+
+      setLessonProgressMap((current) => ({ ...current, [currentLesson.id]: normalized }));
+      queueLessonProgressSync(normalized);
+    },
+    [currentLesson.id, hasFullCourseAccess, lessonProgressMap, queueLessonProgressSync, viewerId]
+  );
+
   const handlePdfProgressUpdate = useCallback((percent: number, page: number) => {
     setPreviewPdfPage(page);
-    if (!hasFullCourseAccess || !viewerId) return;
-
-    const normalized = normalizeLessonProgressEntry({
-      ...lessonProgressMap[currentLesson.id],
+    updateCurrentLessonProgress({
       progressPercent: percent >= LESSON_COMPLETE_THRESHOLD ? 100 : percent,
       lastPdfPage: page,
       isCompleted: percent >= LESSON_COMPLETE_THRESHOLD,
     });
+  }, [updateCurrentLessonProgress]);
 
-    setLessonProgressMap((current) => ({ ...current, [currentLesson.id]: normalized }));
-    queueLessonProgressSync(normalized);
-  }, [currentLesson.id, hasFullCourseAccess, lessonProgressMap, queueLessonProgressSync, viewerId]);
+  const clampMediaPreview = useCallback(
+    (nextTime: number) => {
+      if (!previewMinutesLimitSeconds || hasFullCourseAccess) {
+        setMediaPlaybackSeconds(nextTime);
+        return nextTime;
+      }
+
+      const clampedTime = Math.min(nextTime, previewMinutesLimitSeconds);
+      setMediaPlaybackSeconds(clampedTime);
+
+      if (nextTime >= previewMinutesLimitSeconds && mediaElementRef.current) {
+        mediaElementRef.current.currentTime = previewMinutesLimitSeconds;
+        mediaElementRef.current.pause();
+        setTimedMediaPreviewLocked(true);
+      }
+
+      return clampedTime;
+    },
+    [hasFullCourseAccess, previewMinutesLimitSeconds]
+  );
+
+  const syncMediaResumePosition = useCallback(() => {
+    const mediaElement = mediaElementRef.current;
+
+    if (!mediaElement || initialMediaSeekAppliedRef.current) {
+      return;
+    }
+
+    const storedWatchedSeconds = currentLessonProgress.watchedSeconds;
+
+    if (storedWatchedSeconds <= 0) {
+      initialMediaSeekAppliedRef.current = true;
+      return;
+    }
+
+    const candidateCaps = [
+      Number.isFinite(mediaElement.duration) && mediaElement.duration > 0 ? mediaElement.duration : null,
+      previewMinutesLimitSeconds > 0 ? previewMinutesLimitSeconds : null,
+    ].filter((value): value is number => typeof value === "number" && value > 0);
+
+    const resumeAtSeconds =
+      candidateCaps.length > 0
+        ? Math.min(storedWatchedSeconds, ...candidateCaps)
+        : storedWatchedSeconds;
+
+    mediaElement.currentTime = resumeAtSeconds;
+    setMediaPlaybackSeconds(resumeAtSeconds);
+    initialMediaSeekAppliedRef.current = true;
+  }, [currentLessonProgress.watchedSeconds, previewMinutesLimitSeconds]);
+
+  const handleMediaProgressUpdate = useCallback(
+    (watchedSeconds: number, durationSeconds: number, forceComplete = false) => {
+      const nextWatchedSeconds = Math.max(
+        lessonProgressMap[currentLesson.id]?.watchedSeconds ?? 0,
+        Math.max(0, Math.round(watchedSeconds))
+      );
+      const safeDurationSeconds =
+        Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+      const rawProgressPercent = forceComplete
+        ? 100
+        : safeDurationSeconds > 0
+          ? (nextWatchedSeconds / safeDurationSeconds) * 100
+          : lessonProgressMap[currentLesson.id]?.progressPercent ?? 0;
+      const progressPercent = rawProgressPercent >= LESSON_COMPLETE_THRESHOLD ? 100 : rawProgressPercent;
+
+      updateCurrentLessonProgress({
+        watchedSeconds: nextWatchedSeconds,
+        progressPercent,
+        isCompleted: forceComplete || rawProgressPercent >= LESSON_COMPLETE_THRESHOLD,
+      });
+    },
+    [currentLesson.id, lessonProgressMap, updateCurrentLessonProgress]
+  );
+
+  const handleMediaTimeUpdate = useCallback(
+    (event: SyntheticEvent<HTMLVideoElement>) => {
+      mediaElementRef.current = event.currentTarget;
+
+      if (!initialMediaSeekAppliedRef.current) {
+        syncMediaResumePosition();
+        return;
+      }
+
+      const durationSeconds =
+        Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration > 0
+          ? event.currentTarget.duration
+          : 0;
+      const clampedTime = clampMediaPreview(event.currentTarget.currentTime);
+      const roundedSeconds = Math.max(0, Math.floor(clampedTime));
+
+      if (roundedSeconds === lastReportedMediaSecondRef.current) {
+        return;
+      }
+
+      lastReportedMediaSecondRef.current = roundedSeconds;
+      handleMediaProgressUpdate(roundedSeconds, durationSeconds);
+    },
+    [clampMediaPreview, handleMediaProgressUpdate, syncMediaResumePosition]
+  );
+
+  const handleMediaSeeking = useCallback(
+    (event: SyntheticEvent<HTMLVideoElement>) => {
+      mediaElementRef.current = event.currentTarget;
+
+      if (!previewMinutesLimitSeconds || hasFullCourseAccess) {
+        return;
+      }
+
+      if (event.currentTarget.currentTime > previewMinutesLimitSeconds) {
+        event.currentTarget.currentTime = Math.min(
+          mediaPlaybackSeconds,
+          previewMinutesLimitSeconds
+        );
+      }
+    },
+    [hasFullCourseAccess, mediaPlaybackSeconds, previewMinutesLimitSeconds]
+  );
+
+  const handleMediaEnded = useCallback(() => {
+    const fallbackDurationSeconds = mediaElementRef.current?.duration ?? mediaPlaybackSeconds;
+    const completedSeconds =
+      Number.isFinite(fallbackDurationSeconds) && fallbackDurationSeconds > 0
+        ? Math.round(fallbackDurationSeconds)
+        : Math.round(mediaPlaybackSeconds);
+    const hasReachedPreviewLimit =
+      previewMinutesLimitSeconds > 0 && completedSeconds >= previewMinutesLimitSeconds;
+
+    if (!hasFullCourseAccess && hasReachedPreviewLimit) {
+      setTimedMediaPreviewLocked(true);
+      return;
+    }
+
+    lastReportedMediaSecondRef.current = completedSeconds;
+    setMediaPlaybackSeconds(completedSeconds);
+    handleMediaProgressUpdate(completedSeconds, completedSeconds || 1, true);
+  }, [
+    handleMediaProgressUpdate,
+    hasFullCourseAccess,
+    mediaPlaybackSeconds,
+    previewMinutesLimitSeconds,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -399,6 +713,17 @@ export function LessonPlayerClient({
 
   const hasPdfPreviewLimit = Boolean(previewPagesLimit && previewPagesLimit > 0);
   const pdfPreviewMaxed = Boolean(hasPdfPreviewLimit && previewPagesLimit && previewPdfPage >= previewPagesLimit);
+  const mediaPreviewMaxed = Boolean(
+    !hasFullCourseAccess &&
+      previewMinutesLimitSeconds > 0 &&
+      (timedMediaPreviewLocked || mediaPlaybackSeconds >= previewMinutesLimitSeconds)
+  );
+  const assetShellClassName = cn(
+    "relative mb-12 overflow-hidden rounded-3xl border border-white/5 bg-black/40 shadow-2xl",
+    resolvedLessonRenderer.kind === "audio"
+      ? "min-h-[320px]"
+      : "aspect-video min-h-[360px] sm:min-h-[500px]"
+  );
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#04070d] text-slate-100">
@@ -450,8 +775,8 @@ export function LessonPlayerClient({
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8">
               {/* Asset Viewer */}
-              <div ref={pdfViewportRef} className="relative mb-12 aspect-video min-h-[500px] overflow-hidden rounded-3xl border border-white/5 bg-black/40 shadow-2xl">
-                {currentLesson.type === "PDF" && primaryAssetUrl ? (
+              <div ref={pdfViewportRef} className={assetShellClassName}>
+                {resolvedLessonRenderer.kind === "pdf" && primaryAssetUrl ? (
                   <LessonPdfViewer
                     key={currentLesson.id}
                     file={primaryAssetUrl}
@@ -461,20 +786,111 @@ export function LessonPlayerClient({
                     onProgress={handlePdfProgressUpdate}
                     maxPages={hasPdfPreviewLimit ? previewPagesLimit : undefined}
                   />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-slate-500">
-                    <FileText className="mr-2 h-10 w-10 opacity-20" />
-                    <p>Asset renderer not available</p>
+                ) : resolvedLessonRenderer.kind === "video" && primaryAssetUrl ? (
+                  <div className="relative h-full w-full bg-black">
+                    <ReactPlayer
+                      key={currentLesson.id}
+                      ref={mediaElementRef}
+                      src={primaryAssetUrl}
+                      controls
+                      width="100%"
+                      height="100%"
+                      playsInline
+                      onReady={syncMediaResumePosition}
+                      onLoadedMetadata={(event) => {
+                        mediaElementRef.current = event.currentTarget;
+                        syncMediaResumePosition();
+                      }}
+                      onTimeUpdate={handleMediaTimeUpdate}
+                      onSeeking={handleMediaSeeking}
+                      onEnded={handleMediaEnded}
+                      onError={() =>
+                        setMediaRendererError(
+                          "We couldn't start this video lesson. Please verify the uploaded asset URL or storage file and try again."
+                        )
+                      }
+                      style={{ backgroundColor: "#000" }}
+                    />
+
+                    <div className="pointer-events-none absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/82 backdrop-blur-md">
+                      <PlayCircle className="h-3.5 w-3.5 text-primary-blue" />
+                      Video Lesson
+                    </div>
                   </div>
+                ) : resolvedLessonRenderer.kind === "audio" && primaryAssetUrl ? (
+                  <div className="flex h-full flex-col justify-center bg-[radial-gradient(circle_at_top,#10325d_0%,#05070b_48%,#02040a_100%)] px-5 py-8 sm:px-10">
+                    <div className="mb-8 max-w-2xl">
+                      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/82">
+                        <Volume2 className="h-3.5 w-3.5 text-primary-blue" />
+                        Audio Lesson
+                      </div>
+                      <h3 className="text-2xl font-bold text-white sm:text-3xl">{currentLesson.title}</h3>
+                      <p className="mt-3 text-sm leading-6 text-slate-300">
+                        Listen to this lesson directly in the player and keep your learning progress in sync.
+                      </p>
+                    </div>
+
+                    <div className="rounded-[28px] border border-white/10 bg-black/30 p-4 shadow-[0_28px_80px_-48px_rgba(2,6,23,0.95)] backdrop-blur-sm sm:p-6">
+                      <ReactPlayer
+                        key={currentLesson.id}
+                        ref={mediaElementRef}
+                        src={primaryAssetUrl}
+                        controls
+                        width="100%"
+                        height="56px"
+                        playsInline
+                        onReady={syncMediaResumePosition}
+                        onLoadedMetadata={(event) => {
+                          mediaElementRef.current = event.currentTarget;
+                          syncMediaResumePosition();
+                        }}
+                        onTimeUpdate={handleMediaTimeUpdate}
+                        onSeeking={handleMediaSeeking}
+                        onEnded={handleMediaEnded}
+                        onError={() =>
+                          setMediaRendererError(
+                            "We couldn't start this audio lesson. Please verify the uploaded asset URL or storage file and try again."
+                          )
+                        }
+                        style={{ backgroundColor: "transparent" }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <LessonAssetFallback
+                    title={resolvedLessonRenderer.fallbackTitle}
+                    message={resolvedLessonRenderer.fallbackMessage}
+                  />
                 )}
-                
+
+                {mediaRendererError ? (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/82 px-6 backdrop-blur-sm">
+                    <LessonAssetFallback title="Playback failed" message={mediaRendererError} />
+                  </div>
+                ) : null}
+
                 {pdfPreviewMaxed && (
                   <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 p-8 text-center backdrop-blur-sm">
                     <Lock className="mb-4 h-12 w-12 text-primary-blue" />
                     <h3 className="mb-2 text-xl font-bold">Preview Limit Reached</h3>
                     <p className="mb-6 max-w-md text-sm text-slate-400">
-                      You've read the first {previewPagesLimit} pages of this lesson. 
+                      You've read the first {previewPagesLimit} pages of this lesson.
                       Unlock the full course to continue reading.
+                    </p>
+                    <Link href={`/courses/${course.slug}`} className="rounded-xl bg-primary-blue px-6 py-3 font-bold text-white hover:bg-primary-blue/90">
+                      Unlock Full Access
+                    </Link>
+                  </div>
+                )}
+
+                {mediaPreviewMaxed && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/82 p-8 text-center backdrop-blur-sm">
+                    <Lock className="mb-4 h-12 w-12 text-primary-blue" />
+                    <h3 className="mb-2 text-xl font-bold">Preview Limit Reached</h3>
+                    <p className="mb-6 max-w-md text-sm text-slate-400">
+                      You've reached the first {currentLesson.previewMinutes} minute
+                      {currentLesson.previewMinutes === 1 ? "" : "s"} of this lesson preview.
+                      Unlock the full course to keep listening or watching.
                     </p>
                     <Link href={`/courses/${course.slug}`} className="rounded-xl bg-primary-blue px-6 py-3 font-bold text-white hover:bg-primary-blue/90">
                       Unlock Full Access
@@ -504,7 +920,7 @@ export function LessonPlayerClient({
                   </div>
                   <div className="flex items-center gap-2 text-slate-400">
                     <FileText className="h-4 w-4" />
-                    <span className="text-xs font-medium">{currentLesson.type} Content</span>
+                    <span className="text-xs font-medium">{resolvedLessonRenderer.assetTypeLabel} Content</span>
                   </div>
                 </div>
               </div>
