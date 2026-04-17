@@ -189,9 +189,9 @@ export function LazyPdfViewer({
   // Show loading state while PDF library initializes
   if (!pdfReady) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-[#02040a]">
+      <div className="flex h-full w-full flex-col items-center justify-center bg-white dark:bg-slate-950">
         <Loader2 className="h-8 w-8 animate-spin text-primary-blue" />
-        <p className="mt-4 text-sm font-medium text-slate-400">Loading PDF viewer...</p>
+        <p className="mt-4 text-sm font-medium text-slate-600 dark:text-slate-400">Loading PDF viewer...</p>
       </div>
     );
   }
@@ -199,10 +199,10 @@ export function LazyPdfViewer({
   // Show error state
   if (error) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-[#02040a] p-6">
+      <div className="flex h-full w-full flex-col items-center justify-center bg-white p-6 dark:bg-slate-950">
         <div className="flex max-w-md flex-col items-center text-center">
           <AlertCircle className="h-12 w-12 text-red-500" />
-          <h3 className="mt-4 text-lg font-semibold text-white">Unable to load PDF</h3>
+          <h3 className="mt-4 text-lg font-semibold text-slate-900 dark:text-white">Unable to load PDF</h3>
           <p className="mt-2 text-sm text-slate-400">{error}</p>
           <button
             onClick={handleRetry}
@@ -243,7 +243,7 @@ export function LazyPdfViewer({
                   else pageRefs.current.delete(pageNumber);
                 }}
                 data-page-id={pageNumber}
-                className="overflow-hidden rounded-2xl border border-white/5 bg-white shadow-2xl"
+                className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800"
               >
                 {Page && (
                   <Page
@@ -253,7 +253,7 @@ export function LazyPdfViewer({
                     renderAnnotationLayer={false}
                     loading={
                       <div
-                        className="flex items-center justify-center bg-white"
+                        className="flex items-center justify-center bg-white dark:bg-slate-800"
                         style={{ minHeight: 640, width: pageWidth }}
                       >
                         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary-blue/30 border-t-primary-blue" />
@@ -271,8 +271,8 @@ export function LazyPdfViewer({
 
       {/* Page counter */}
       {numPages && (
-        <div className="absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 shadow-xl backdrop-blur-md">
-          <p className="select-none text-[10px] font-bold uppercase tracking-widest text-white">
+        <div className="absolute bottom-6 right-6 z-20 rounded-full border border-slate-300 bg-white/80 px-3 py-1.5 shadow-xl backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/80">
+          <p className="select-none text-[10px] font-bold uppercase tracking-widest text-slate-900 dark:text-white">
             Page {activePage} / {numPages}
           </p>
         </div>
