@@ -121,7 +121,7 @@ function LoginPageInner() {
     });
 
     if (error) {
-      console.error("[login] Google OAuth error:", error.message);
+      console.warn("[login] Google OAuth error:", error.message);
       setError(error.message);
       setLoading(false);
     }
@@ -153,7 +153,7 @@ function LoginPageInner() {
           typeof payload?.error === "string"
             ? payload.error
             : "Unable to send your magic link right now.";
-        console.error("[login] Magic link error:", message);
+        console.warn("[login] Magic link error:", message);
         setError(message);
       } else {
         void syncNewsletterPreference(email);
@@ -181,7 +181,7 @@ function LoginPageInner() {
           typeof payload?.error === "string"
             ? payload.error
             : "Unable to sign you in right now.";
-        console.error("[login] Password sign-in error:", message);
+        console.warn("[login] Password sign-in error:", message);
         setError(message);
       } else {
         void syncNewsletterPreference(email);
