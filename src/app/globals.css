@@ -117,12 +117,28 @@ select {
     transform 160ms ease;
 }
 
+.admin-select,
+.admin-select option,
+.admin-select optgroup {
+  background-color: #050811;
+  color: #f8fafc;
+  opacity: 1;
+}
+
+.admin-select option {
+  padding: 0.75rem 1rem;
+}
+
 .section-shell {
   @apply py-16 md:py-20;
 }
 
 .section-frame {
   @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
+}
+
+.header-frame {
+  @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
 }
 
 /* A subtle card style for most components */
@@ -193,6 +209,30 @@ select {
   100% {
     background-position: 200% 0;
   }
+}
+
+@keyframes loading-ripple {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+
+  15% {
+    opacity: 0.95;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3.2);
+  }
+}
+
+.loading-ripple-ring {
+  box-shadow:
+    0 0 24px rgb(34 211 238 / 0.35),
+    inset 0 0 16px rgb(59 130 246 / 0.16);
+  animation: loading-ripple 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  will-change: transform, opacity;
 }
 
 .trusted-marquee-shell {

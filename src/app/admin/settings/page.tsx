@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { SettingsManager } from "@/components/admin/settings-manager";
+import { DEFAULT_SITE_NAME, normalizeSiteName } from "@/lib/site";
 
 export default async function AdminSettingsPage() {
   const [settings, faqs] = await Promise.all([
@@ -8,7 +9,7 @@ export default async function AdminSettingsPage() {
       update: {},
       create: {
         id: "singleton",
-        siteName: "AI Learning Class",
+        siteName: DEFAULT_SITE_NAME,
       },
     }),
     prisma.fAQ.findMany({
@@ -19,7 +20,17 @@ export default async function AdminSettingsPage() {
   return (
     <SettingsManager
       initialSettings={{
-        siteName: settings.siteName,
+        siteName: normalizeSiteName(settings.siteName),
+        logoUrl: settings.logoUrl || "",
+        logoPath:
+          settings.socialLinks && typeof settings.socialLinks === "object" && !Array.isArray(settings.socialLinks)
+            ? String((settings.socialLinks as Record<string, unknown>).brandLogoPath ?? "")
+            : "",
+        faviconUrl: settings.faviconUrl || "",
+        faviconPath:
+          settings.socialLinks && typeof settings.socialLinks === "object" && !Array.isArray(settings.socialLinks)
+            ? String((settings.socialLinks as Record<string, unknown>).brandFaviconPath ?? "")
+            : "",
         supportEmail: settings.supportEmail || "",
         supportPhone: settings.supportPhone || "",
         adminEmail: settings.adminEmail || "",

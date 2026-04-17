@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import { resolveYearlyPrice } from "@/lib/site";
 import type { SubscriptionPlan } from "@/types";
 import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "@/lib/prisma";
 
@@ -19,6 +20,7 @@ export function mapSubscriptionPlan(plan: {
   description: string | null;
   price: number;
   yearlyPrice: number | null;
+  askAiLimit: number;
   currency: string;
   features: string[];
   isPopular: boolean;
@@ -30,7 +32,8 @@ export function mapSubscriptionPlan(plan: {
     slug: plan.slug,
     description: plan.description ?? undefined,
     price: plan.price,
-    yearlyPrice: plan.yearlyPrice ?? undefined,
+    yearlyPrice: resolveYearlyPrice(plan.price, plan.yearlyPrice) ?? undefined,
+    askAiLimit: plan.askAiLimit,
     currency: plan.currency,
     features: plan.features,
     isPopular: plan.isPopular,
@@ -60,6 +63,7 @@ export async function ensureSubscriptionPlansTable() {
             description TEXT,
             price DOUBLE PRECISION NOT NULL DEFAULT 0,
             "yearlyPrice" DOUBLE PRECISION,
+            "askAiLimit" INTEGER NOT NULL DEFAULT 20,
             currency TEXT NOT NULL DEFAULT 'USD',
             features TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
             "coursesIncluded" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -72,6 +76,11 @@ export async function ensureSubscriptionPlansTable() {
           )
         `);
 
+        await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "SubscriptionPlan"
+          ADD COLUMN IF NOT EXISTS "askAiLimit" INTEGER NOT NULL DEFAULT 20
+        `);
+
         if (!presence?.prisma_table && presence?.snake_table) {
           await prisma.$executeRaw(Prisma.sql`
             INSERT INTO "SubscriptionPlan" (
@@ -81,6 +90,7 @@ export async function ensureSubscriptionPlansTable() {
               description,
               price,
               "yearlyPrice",
+              "askAiLimit",
               currency,
               features,
               "coursesIncluded",
@@ -98,6 +108,7 @@ export async function ensureSubscriptionPlansTable() {
               description,
               price,
               yearly_price,
+              20,
               currency,
               features,
               courses_included,

@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Check, Loader2, Lock, Shield, Tag, X } from "lucide-react";
 import { CountryCombobox } from "@/components/checkout/CountryCombobox";
-import { Navbar } from "@/components/layout/Navbar";
+import { NavbarClient } from "@/components/layout/NavbarClient";
+import { type BillingCycle, getBillingCycleLabel } from "@/lib/site";
 import { cn, formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
 
@@ -29,6 +30,7 @@ type CheckoutQuote = {
   appliedCouponCode: string | null;
   appliedCouponDescription: string | null;
   planSlug: string | null;
+  billingCycle: BillingCycle | null;
 };
 
 type AccountProfileResponse = {
@@ -117,6 +119,7 @@ export default function CheckoutPage() {
   const searchParams = useSearchParams();
   const { items } = useCartStore();
   const planSlug = searchParams.get("plan");
+  const billingParam = searchParams.get("billing");
   const couponParam = searchParams.get("coupon")?.trim().toUpperCase() || "";
   const [method, setMethod] = useState<PaymentMethod>("stripe");
   const [processing, setProcessing] = useState(false);
@@ -125,6 +128,9 @@ export default function CheckoutPage() {
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [couponInput, setCouponInput] = useState(couponParam);
   const [couponCode, setCouponCode] = useState(couponParam);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>(
+    billingParam === "yearly" ? "yearly" : "monthly"
+  );
   const [formData, setFormData] = useState({ name: "", email: "", country: "US" });
 
   const cartSavings = useMemo(
@@ -153,6 +159,10 @@ export default function CheckoutPage() {
     setCouponInput(couponParam);
     setCouponCode(couponParam);
   }, [couponParam]);
+
+  useEffect(() => {
+    setBillingCycle(billingParam === "yearly" ? "yearly" : "monthly");
+  }, [billingParam]);
 
   useEffect(() => {
     const inferredCountry = inferCheckoutCountry();
@@ -221,6 +231,7 @@ export default function CheckoutPage() {
           },
           body: JSON.stringify({
             planSlug,
+            billingCycle,
             items: requestItems,
             method,
             country: formData.country,
@@ -256,7 +267,7 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [couponCode, formData.country, method, planSlug, requestItems]);
+  }, [billingCycle, couponCode, formData.country, method, planSlug, requestItems]);
 
   async function handleCheckout(event: React.FormEvent) {
     event.preventDefault();
@@ -276,6 +287,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           method,
           planSlug,
+          billingCycle,
           items: requestItems,
           customerName: formData.name,
           customerEmail: formData.email,
@@ -318,7 +330,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="site-shell overflow-x-hidden">
-      <Navbar />
+      <NavbarClient />
       <div className="pb-16 pt-6 sm:pt-8">
         <div className="section-frame">
           <div className="mb-8">
@@ -397,6 +409,36 @@ export default function CheckoutPage() {
 
                   {!isFreePlan ? (
                     <div className="surface-card p-5 sm:p-6">
+                      {isPlanCheckout ? (
+                        <div className="mb-5">
+                          <h2 className="mb-3 text-base font-bold text-foreground">Billing cycle</h2>
+                          <div className="grid grid-cols-2 gap-3">
+                            {(["monthly", "yearly"] as BillingCycle[]).map((cycle) => (
+                              <button
+                                key={cycle}
+                                type="button"
+                                onClick={() => setBillingCycle(cycle)}
+                                className={cn(
+                                  "rounded-2xl border px-4 py-4 text-left transition-all",
+                                  billingCycle === cycle
+                                    ? "border-primary-blue bg-primary-blue/8 shadow-sm"
+                                    : "border-border bg-background hover:border-primary-blue/30"
+                                )}
+                              >
+                                <p className="text-sm font-semibold text-foreground">
+                                  {getBillingCycleLabel(cycle)}
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                  {cycle === "yearly"
+                                    ? "Lower monthly effective cost when yearly pricing is configured."
+                                    : "Flexible monthly access and renewal cadence."}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
                       <h2 className="mb-5 text-base font-bold text-foreground">Payment method</h2>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         {availablePaymentOptions.map((option) => (
@@ -435,8 +477,8 @@ export default function CheckoutPage() {
                       <div className="mt-5 rounded-2xl border border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
                         {isPlanCheckout
                           ? method === "stripe"
-                            ? "Stripe keeps Pro and Teams renewals in sync automatically with your active billing period."
-                            : "PayPal and Paystack activate the current billing period for your selected plan and return here for access confirmation after payment."
+                            ? `Stripe keeps ${billingCycle} renewals in sync automatically with your active billing period.`
+                            : `PayPal and Paystack activate your current ${billingCycle} access period and return here for access confirmation after payment.`
                           : method === "stripe"
                             ? "You will be redirected to Stripe Checkout to complete payment securely."
                             : method === "paypal"
@@ -520,7 +562,7 @@ export default function CheckoutPage() {
                         <>
                           <Lock className="h-5 w-5" />
                           {isPlanCheckout
-                            ? `${method === "stripe" ? "Start" : "Activate"} ${quote?.planSlug === "teams" ? "Teams" : "Pro"} ${method === "stripe" ? "Subscription" : "Plan"}`
+                            ? `${method === "stripe" ? "Start" : "Activate"} ${getBillingCycleLabel(quote?.billingCycle ?? billingCycle)} ${quote?.planSlug === "teams" ? "Teams" : "Pro"} ${method === "stripe" ? "Subscription" : "Plan"}`
                             : `Pay ${quote ? formatPrice(quote.total, quote.currency) : ""}`}
                         </>
                       )}
@@ -557,6 +599,8 @@ export default function CheckoutPage() {
                                   src={item.thumbnailUrl}
                                   alt={item.title}
                                   fill
+                                  quality={75}
+                                  sizes="80px"
                                   className="object-cover"
                                 />
                               </div>
@@ -570,7 +614,9 @@ export default function CheckoutPage() {
                                 {item.title}
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                {item.kind === "plan" ? "Subscription plan" : "Course access"}
+                                {item.kind === "plan"
+                                  ? `${getBillingCycleLabel(quote.billingCycle ?? billingCycle)} subscription`
+                                  : "Course access"}
                               </p>
                             </div>
                             <span className="text-sm font-semibold text-foreground">

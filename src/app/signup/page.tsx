@@ -1,14 +1,16 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Brain, Mail, Lock, Eye, EyeOff, User, ArrowRight, Check, Sparkles, AlertCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Check, Sparkles, AlertCircle } from "lucide-react";
+import { SiteLogo } from "@/components/layout/SiteLogo";
 import {
   buildAuthCallbackUrl,
   DEFAULT_AFTER_AUTH,
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
+import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { createClient } from "@/lib/supabase";
 
 const quizQuestions = [
@@ -82,6 +84,40 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [emailConfirmSent, setEmailConfirmSent] = useState(false);
   const [newsletterOptIn, setNewsletterOptIn] = useState(true);
+  const [branding, setBranding] = useState({
+    siteName: DEFAULT_SITE_NAME,
+    logoUrl: "",
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadBranding() {
+      try {
+        const response = await fetch("/api/settings?keys=siteName,logoUrl", {
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!mounted || !response.ok || !payload) {
+          return;
+        }
+
+        setBranding({
+          siteName: payload.siteName?.trim() || DEFAULT_SITE_NAME,
+          logoUrl: payload.logoUrl || "",
+        });
+      } catch {
+        // The default logo fallback is good enough if settings fail to load.
+      }
+    }
+
+    void loadBranding();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   async function syncNewsletterPreference(nextEmail: string, nextName?: string) {
     if (!newsletterOptIn || !nextEmail.trim()) {
@@ -198,13 +234,13 @@ export default function SignupPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-sm">
-              <Brain className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-xl text-foreground">
-              AI Learning <span className="text-blue-600">Class</span>
-            </span>
+          <Link href="/" className="inline-flex items-center justify-center">
+            <SiteLogo
+              siteName={branding.siteName}
+              logoUrl={branding.logoUrl || undefined}
+              compact
+              textClassName="text-foreground"
+            />
           </Link>
         </div>
 

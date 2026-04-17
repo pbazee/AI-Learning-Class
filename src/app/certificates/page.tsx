@@ -84,7 +84,7 @@ export default async function CertificatesPage() {
           <div className="mt-8 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 p-5">
             <h4 className="mb-1 text-sm font-semibold text-foreground">About your certificates</h4>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              All AI Learning Class certificates are lifetime credentials. Share the certificate code with employers or on LinkedIn to verify authenticity.
+              All AI GENIUS LAB certificates are lifetime credentials. Share the certificate code with employers or on LinkedIn to verify authenticity.
             </p>
           </div>
         </div>
@@ -94,3 +94,4 @@ export default async function CertificatesPage() {
     </div>
   );
 }
+

@@ -108,6 +108,7 @@ type CourseFormState = {
   shortDescription: string;
   categoryId: string;
   instructorId: string;
+  instructorName: string;
   level: CourseRow["level"];
   price: number;
   status: "DRAFT" | "PUBLISHED";
@@ -157,8 +158,7 @@ function getClientErrorMessage(error: unknown) {
 }
 
 function buildEmptyForm(
-  categoryOptions: Array<{ label: string; value: string }>,
-  instructorOptions: Array<{ label: string; value: string }>
+  categoryOptions: Array<{ label: string; value: string }>
 ): CourseFormState {
   return {
     id: "",
@@ -167,7 +167,8 @@ function buildEmptyForm(
     description: "",
     shortDescription: "",
     categoryId: categoryOptions[0]?.value || "",
-    instructorId: instructorOptions[0]?.value || "",
+    instructorId: "",
+    instructorName: "",
     level: "BEGINNER",
     price: 0,
     status: "DRAFT",
@@ -197,6 +198,7 @@ function mapCourseToForm(course: CourseRow): CourseFormState {
     shortDescription: course.shortDescription || "",
     categoryId: course.categoryId,
     instructorId: course.instructorId,
+    instructorName: course.instructorName,
     level: course.level,
     price: course.price,
     status: course.isPublished ? "PUBLISHED" : "DRAFT",
@@ -247,6 +249,21 @@ function mapCourseToForm(course: CourseRow): CourseFormState {
   };
 }
 
+function findInstructorOptionByLabel(
+  instructorOptions: Array<{ label: string; value: string }>,
+  input: string
+) {
+  const normalizedInput = input.trim().toLowerCase();
+
+  if (!normalizedInput) {
+    return undefined;
+  }
+
+  return instructorOptions.find(
+    (option) => option.label.trim().toLowerCase() === normalizedInput
+  );
+}
+
 export function CoursesManager({
   courses,
   categoryOptions,
@@ -266,7 +283,7 @@ export function CoursesManager({
   const [search, setSearch] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
-  const [form, setForm] = useState<CourseFormState>(() => buildEmptyForm(categoryOptions, instructorOptions));
+  const [form, setForm] = useState<CourseFormState>(() => buildEmptyForm(categoryOptions));
   const [assetDraft, setAssetDraft] = useState({
     title: "",
     type: "VIDEO" as "AUDIO" | "VIDEO" | "PDF",
@@ -275,7 +292,7 @@ export function CoursesManager({
   const { toast } = useToast();
 
   function openCreate() {
-    setForm(buildEmptyForm(categoryOptions, instructorOptions));
+    setForm(buildEmptyForm(categoryOptions));
     setAssetDraft({ title: "", type: "VIDEO" });
     setActiveTab("details");
     setEditorOpen(true);
@@ -289,6 +306,11 @@ export function CoursesManager({
   }
 
   function handleSave() {
+    if (!form.instructorName.trim()) {
+      toast("Type an instructor name before saving the course.", "error");
+      return;
+    }
+
     setBusy(true);
     startTransition(async () => {
       try {
@@ -300,6 +322,7 @@ export function CoursesManager({
           shortDescription: form.shortDescription,
           categoryId: form.categoryId,
           instructorId: form.instructorId,
+          instructorName: form.instructorName.trim(),
           level: form.level,
           language: form.language,
           price: Number(form.price),
@@ -495,7 +518,7 @@ export function CoursesManager({
         <AdminStatCard label="Recommended" value={courseStats.recommended} accent="from-pink-500 to-rose-400" />
       </AdminStatGrid>
 
-      <AdminCard className="p-5">
+      <AdminCard className="overflow-visible p-5">
         <div className="grid gap-4 xl:grid-cols-[1.5fr_repeat(4,minmax(0,1fr))]">
           <div className="xl:col-span-1">
             <FieldLabel>Search Courses</FieldLabel>
@@ -522,12 +545,12 @@ export function CoursesManager({
             </AdminSelect>
           </div>
 
-          <div className="relative">
+          <div className="relative z-50">
             <FieldLabel>Category</FieldLabel>
             <button
               type="button"
               onClick={() => setCategoryFilterOpen((current) => !current)}
-              className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-slate-100"
+              className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-[#050811] px-4 py-3 text-sm text-slate-100 shadow-[0_18px_40px_-28px_rgba(2,6,23,0.95)]"
             >
               <span className="truncate">
                 {selectedCategories.length === 0
@@ -538,7 +561,7 @@ export function CoursesManager({
             </button>
 
             {categoryFilterOpen ? (
-              <div className="absolute z-20 mt-2 w-full rounded-2xl border border-white/10 bg-[#070b12] p-3 shadow-2xl">
+              <div className="absolute z-50 mt-2 w-full rounded-2xl border border-white/10 bg-[#050811] p-3 shadow-[0_28px_80px_-36px_rgba(2,6,23,0.98)]">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Categories
@@ -631,8 +654,8 @@ export function CoursesManager({
           action={<CreateButton onClick={openCreate}>Create Course</CreateButton>}
         />
       ) : (
-        <AdminCard className="overflow-hidden">
-          <div className="overflow-x-auto">
+        <AdminCard className="relative z-0 overflow-visible">
+          <div className="overflow-x-auto overflow-y-visible rounded-[28px]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.03]">
@@ -653,7 +676,7 @@ export function CoursesManager({
                       <div>
                         <p className="font-semibold text-white">{course.title}</p>
                         <p className="mt-1 text-xs text-slate-400">
-                          {course.instructorName} • {course.hasSubscriptionAccess ? "Included in subscriptions" : "Standalone only"}
+                          {course.instructorName} | {course.hasSubscriptionAccess ? "Included in subscriptions" : "Standalone only"}
                         </p>
                       </div>
                     </td>
@@ -667,7 +690,7 @@ export function CoursesManager({
                       <div className="space-y-1">
                         <p className="text-sm font-semibold text-white">{course.curriculum.length} sections</p>
                         <p className="text-xs text-slate-400">
-                          {course.curriculum.reduce((sum, section) => sum + section.lessons.length, 0)} lessons • {course.assets.length} downloads
+                          {course.curriculum.reduce((sum, section) => sum + section.lessons.length, 0)} lessons | {course.assets.length} downloads
                         </p>
                       </div>
                     </td>
@@ -771,12 +794,26 @@ export function CoursesManager({
                   </AdminSelect>
                 </div>
                 <div className="md:col-span-2">
-                  <FieldLabel>Description</FieldLabel>
-                  <AdminTextarea rows={5} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+                  <FieldLabel>About This Course</FieldLabel>
+                  <AdminTextarea
+                    rows={5}
+                    value={form.description}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, description: event.target.value }))
+                    }
+                    placeholder="Write the full course overview that appears in the About This Course section."
+                  />
                 </div>
                 <div className="md:col-span-2">
-                  <FieldLabel>Short Description</FieldLabel>
-                  <AdminTextarea rows={3} value={form.shortDescription} onChange={(event) => setForm((current) => ({ ...current, shortDescription: event.target.value }))} />
+                  <FieldLabel>Course Summary</FieldLabel>
+                  <AdminTextarea
+                    rows={3}
+                    value={form.shortDescription}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, shortDescription: event.target.value }))
+                    }
+                    placeholder="Short summary shown near the title, in cards, and in SEO snippets."
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <div className="space-y-4">
@@ -869,13 +906,32 @@ export function CoursesManager({
                 </div>
                 <div>
                   <FieldLabel>Instructor</FieldLabel>
-                  <AdminSelect value={form.instructorId} onChange={(event) => setForm((current) => ({ ...current, instructorId: event.target.value }))}>
+                  <AdminInput
+                    list="course-instructor-options"
+                    value={form.instructorName}
+                    onChange={(event) => {
+                      const nextInstructorName = event.target.value;
+                      const matchedInstructor = findInstructorOptionByLabel(
+                        instructorOptions,
+                        nextInstructorName
+                      );
+
+                      setForm((current) => ({
+                        ...current,
+                        instructorName: nextInstructorName,
+                        instructorId: matchedInstructor?.value || "",
+                      }));
+                    }}
+                    placeholder="Type instructor name or email"
+                  />
+                  <datalist id="course-instructor-options">
                     {instructorOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
+                      <option key={option.value} value={option.label} />
                     ))}
-                  </AdminSelect>
+                  </datalist>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Type any instructor name you want, or choose a matching existing account suggestion to keep the course linked to that profile.
+                  </p>
                 </div>
                 <div>
                   <FieldLabel>Level</FieldLabel>

@@ -1,10 +1,37 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { Clock, ArrowLeft, Tag, BookOpen, Share2 } from "lucide-react";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { getBlogPostBySlug, getBlogPosts } from "@/lib/data";
+import { buildBlogPostJsonLd } from "@/lib/seo";
+import { buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getBlogPostBySlug(slug);
+
+  if (!post) {
+    return buildSiteMetadata(`/blog/${slug}`, {
+      title: "Article Not Found",
+      description: "This article could not be found.",
+    });
+  }
+
+  return buildSiteMetadata(`/blog/${post.slug}`, {
+    title: `${post.title} | AI Genius Lab Journal`,
+    description: post.excerpt || post.content?.slice(0, 160) || post.title,
+    image: post.coverImage || undefined,
+  });
+}
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -16,15 +43,27 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
   const related = (await getBlogPosts(6)).filter((entry) => entry.slug !== slug).slice(0, 2);
   const content = (post.content || post.excerpt || "").trim();
+  const branding = await getSiteBranding();
+  const articleJsonLd = buildBlogPostJsonLd(post, branding);
 
   return (
     <div className="min-h-screen bg-background">
+      <JsonLd data={articleJsonLd} />
       <Navbar />
-      <div>
-        <div className="relative">
+      <div className="w-full">
+        <div className="relative w-full">
           {post.coverImage && (
-            <div className="relative aspect-[3/1] max-h-80 overflow-hidden">
-              <Image src={post.coverImage} alt={post.title} fill className="object-cover" />
+            <div className="relative w-full aspect-[16/7] min-h-[18rem] overflow-hidden bg-slate-100 dark:bg-slate-900 sm:max-h-[28rem]">
+              <Image
+                src={post.coverImage}
+                alt={post.title}
+                fill
+                quality={75}
+                placeholder="blur"
+                blurDataURL={IMAGE_BLUR_DATA_URL}
+                sizes="100vw"
+                className="object-cover object-center"
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
             </div>
           )}
@@ -184,7 +223,11 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                             src={entry.coverImage}
                             alt={entry.title}
                             fill
-                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                            quality={75}
+                            placeholder="blur"
+                            blurDataURL={IMAGE_BLUR_DATA_URL}
+                            sizes="(min-width: 640px) 26vw, 100vw"
+                            className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
                           />
                         </div>
                       )}

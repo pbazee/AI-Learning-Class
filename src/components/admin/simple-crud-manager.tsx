@@ -186,8 +186,8 @@ export function SimpleCrudManager<T extends { id: string }, FormState extends Re
       {!hasItems ? (
         <EmptyState title={emptyTitle} description={emptyDescription} action={<CreateButton onClick={openCreate}>{createLabel}</CreateButton>} />
       ) : (
-        <AdminCard className="overflow-hidden">
-          <div className="overflow-x-auto">
+        <AdminCard className="overflow-visible">
+          <div className="overflow-x-auto overflow-y-visible rounded-[28px]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">

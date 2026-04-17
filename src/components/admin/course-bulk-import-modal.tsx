@@ -36,8 +36,8 @@ type RawImportRow = Record<string, string>;
 
 const mappingConfig: Array<{ key: MappingField; label: string; required?: boolean }> = [
   { key: "title", label: "Title", required: true },
-  { key: "description", label: "Description", required: true },
-  { key: "shortDescription", label: "Short Description" },
+  { key: "description", label: "About This Course", required: true },
+  { key: "shortDescription", label: "Course Summary" },
   { key: "category", label: "Category", required: true },
   { key: "price", label: "Price" },
   { key: "level", label: "Level" },

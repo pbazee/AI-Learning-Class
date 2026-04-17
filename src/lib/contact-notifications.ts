@@ -22,10 +22,10 @@ async function getNotificationContext() {
     },
   });
 
-  const siteName = settings?.siteName?.trim() || "AI Learning Class";
+  const siteName = settings?.siteName?.trim() || "AI GENIUS LAB";
   const adminEmail = normalizeEmail(settings?.adminEmail) || getPrimaryAdminEmail();
   const supportEmail = normalizeEmail(settings?.supportEmail) || normalizeEmail(process.env.RESEND_FROM_EMAIL);
-  const fromAddress = process.env.RESEND_FROM_EMAIL || settings?.supportEmail || "noreply@ailearningclass.com";
+  const fromAddress = process.env.RESEND_FROM_EMAIL || settings?.supportEmail || "noreply@aigeniuslab.com";
 
   return {
     siteName,
@@ -137,3 +137,4 @@ export async function notifyContactReply(input: {
     return { sent: false };
   }
 }
+

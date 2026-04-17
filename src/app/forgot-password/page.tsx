@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Mail } from "lucide-react";
-import { Footer } from "@/components/layout/Footer";
-import { Navbar } from "@/components/layout/Navbar";
+import { FooterClient } from "@/components/layout/FooterClient";
+import { NavbarClient } from "@/components/layout/NavbarClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase";
@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <NavbarClient />
       <main className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
         <Card className="w-full max-w-lg">
           <CardHeader>
@@ -97,7 +97,7 @@ export default function ForgotPasswordPage() {
           </CardContent>
         </Card>
       </main>
-      <Footer />
+      <FooterClient />
     </div>
   );
 }

@@ -218,15 +218,17 @@ model AIPrompt {
 }
 
 model LessonProgress {
-  id             String    @id @default(uuid())
-  userId         String
-  lessonId       String
-  isCompleted    Boolean   @default(false)
-  watchedSeconds Int       @default(0)
-  completedAt    DateTime?
-  updatedAt      DateTime  @updatedAt
-  lesson         Lesson    @relation(fields: [lessonId], references: [id])
-  user           User      @relation(fields: [userId], references: [id])
+  id              String    @id @default(uuid())
+  userId          String
+  lessonId        String
+  isCompleted     Boolean   @default(false)
+  watchedSeconds  Int       @default(0)
+  completedAt     DateTime?
+  updatedAt       DateTime  @updatedAt
+  progressPercent Float     @default(0)
+  lastPdfPage     Int?
+  lesson          Lesson    @relation(fields: [lessonId], references: [id])
+  user            User      @relation(fields: [userId], references: [id])
 
   @@unique([userId, lessonId])
 }
@@ -314,6 +316,7 @@ model SubscriptionPlan {
   stripeYearlyPriceId String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+  askAiLimit          Int                @default(20)
   subscriptions       UserSubscription[]
 }
 
@@ -542,7 +545,7 @@ model FAQ {
 
 model SiteSettings {
   id                String   @id @default("singleton")
-  siteName          String   @default("AI Learning Class")
+  siteName          String   @default("AI GENIUS LAB")
   supportEmail      String?
   supportPhone      String?
   adminEmail        String?

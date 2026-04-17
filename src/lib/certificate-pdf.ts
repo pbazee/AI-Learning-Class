@@ -51,7 +51,7 @@ export function getCertificateDownloadFileName(certificate: {
   const recipientName =
     certificate.user.name ||
     certificate.user.email ||
-    "AI Learning Class Learner";
+    "AI GENIUS LAB Learner";
 
   return getCertificatePdfFileName({
     courseTitle: certificate.course.title,
@@ -147,10 +147,10 @@ function buildCertificatePdfBuffer(
       size: "A4",
       info: {
         Title: `Certificate of Completion - ${certificate.recipientName}`,
-        Author: "AI Learning Class",
+        Author: "AI GENIUS LAB",
         Subject: `Official learning credential for ${certificate.courseTitle}`,
-        Creator: "AI Learning Class",
-        Producer: "AI Learning Class",
+        Creator: "AI GENIUS LAB",
+        Producer: "AI GENIUS LAB",
         CreationDate: new Date(),
       },
     });
@@ -217,7 +217,7 @@ function buildCertificatePdfBuffer(
       font: "Helvetica-Bold",
       size: 32,
     });
-    drawCenteredText(document, "AI Learning Class", {
+    drawCenteredText(document, "AI GENIUS LAB", {
       x: contentX,
       y: badgeY + 92,
       width: contentWidth,
@@ -309,7 +309,7 @@ function buildCertificatePdfBuffer(
 
     const signatureY = gridTop + gridHeight - 78;
     document.font("Times-Italic").fontSize(22).fillColor(PDF_COLORS.text);
-    document.text("AI Learning Class", leftInnerX, signatureY, {
+    document.text("AI GENIUS LAB", leftInnerX, signatureY, {
       width: leftInnerWidth,
     });
     document.save();
@@ -429,3 +429,4 @@ export async function ensureCertificatePdfAsset(
     };
   }
 }
+

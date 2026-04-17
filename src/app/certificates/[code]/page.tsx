@@ -125,7 +125,7 @@ export default async function CertificateDetailPage({
                     </p>
                     <div className="mt-5 max-w-[260px]">
                       <p className="text-[2rem] font-semibold italic tracking-[-0.05em] text-white">
-                        AI Learning Class
+                        AI GENIUS LAB
                       </p>
                       <div className="mt-1 h-px w-full bg-white/45" />
                       <p className="mt-3 text-sm font-medium text-white/80">
@@ -213,3 +213,4 @@ export default async function CertificateDetailPage({
     </div>
   );
 }
+

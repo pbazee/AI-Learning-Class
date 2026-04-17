@@ -1,38 +1,43 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { AICopilot } from "@/components/courses/AICopilot";
-import { useToast } from "@/components/ui/ToastProvider";
+import { AnimatePresence } from "framer-motion";
+import { AskAI } from "@/components/courses/AskAI";
 import {
   ChevronLeft,
   ChevronRight,
   Menu,
   X,
-  Play,
   FileText,
-  BarChart2,
-  Award,
   CheckCircle2,
-  Circle,
   Sparkles,
-  Download,
-  ThumbsUp,
-  Flag,
-  Volume2,
-  ExternalLink,
   Loader2,
   NotebookText,
   Clock3,
-  Save,
-  Grip,
-  Maximize2,
   Lock,
 } from "lucide-react";
+import { DEFAULT_ASK_AI_NAME, clampPercentage } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import type { Course } from "@/types";
+
+/**
+ * PDF Viewer Integration
+ * Strictly Dynamic to avoid SSR issues with pdfjs-dist.
+ */
+const LessonPdfViewer = dynamic(
+  () => import("./LessonPdfViewer").then((mod) => mod.LessonPdfViewer),
+  { 
+    ssr: false, 
+    loading: () => (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[#02040a] text-slate-400">
+        <Loader2 className="h-6 w-6 animate-spin text-primary-blue" />
+        <p className="text-xs font-medium animate-pulse">Initializing PDF environment...</p>
+      </div>
+    )
+  }
+);
 
 type LessonPlayerNote = {
   id: string;
@@ -40,128 +45,76 @@ type LessonPlayerNote = {
   timestamp: string;
 };
 
-type NotesPanelPosition = {
-  x: number;
-  y: number;
-};
-
-type NotesPanelSize = {
-  width: number;
-  height: number;
-};
-
 type CourseLesson = NonNullable<Course["modules"]>[number]["lessons"][number];
 
-const savedAtFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-const NOTES_PANEL_OPEN_KEY = "ai-learning-class:lesson-notes-panel-open";
-const NOTES_PANEL_POSITION_KEY = "ai-learning-class:lesson-notes-panel-position";
-const NOTES_PANEL_SIZE_KEY = "ai-learning-class:lesson-notes-panel-size";
-const DESKTOP_BREAKPOINT = 1024;
-const DESKTOP_PANEL_MIN_WIDTH = 340;
-const DESKTOP_PANEL_MIN_HEIGHT = 320;
-const DESKTOP_PANEL_DEFAULT_SIZE: NotesPanelSize = {
-  width: 420,
-  height: 460,
+type LessonProgressState = {
+  progressPercent: number;
+  watchedSeconds: number;
+  lastPdfPage: number | null;
+  isCompleted: boolean;
 };
 
-function formatSavedAt(value: string) {
-  return savedAtFormatter.format(new Date(value));
-}
+type LessonProgressMap = Record<string, LessonProgressState>;
 
-function isDesktopViewport() {
-  return typeof window !== "undefined" && window.innerWidth >= DESKTOP_BREAKPOINT;
-}
+const NOTES_PANEL_OPEN_KEY = "ai-genius-lab:lesson-notes-panel-open";
+const DESKTOP_BREAKPOINT = 1024;
+const PROGRESS_SYNC_DEBOUNCE_MS = 1200;
+const LESSON_COMPLETE_THRESHOLD = 99;
 
-function getDefaultPanelPosition(size: NotesPanelSize): NotesPanelPosition {
-  if (typeof window === "undefined") {
-    return { x: 24, y: 96 };
-  }
+function normalizeLessonProgressEntry(
+  value?: Partial<LessonProgressState> | null
+): LessonProgressState {
+  const isCompleted = Boolean(value?.isCompleted);
+  const progressPercent = clampPercentage(
+    isCompleted ? 100 : value?.progressPercent ?? 0
+  );
 
-  const margin = 24;
   return {
-    x: Math.max(margin, window.innerWidth - size.width - margin),
-    y: 96,
+    progressPercent,
+    watchedSeconds:
+      typeof value?.watchedSeconds === "number" && Number.isFinite(value.watchedSeconds)
+        ? Math.max(0, Math.round(value.watchedSeconds))
+        : 0,
+    lastPdfPage:
+      typeof value?.lastPdfPage === "number" && Number.isFinite(value.lastPdfPage)
+        ? Math.max(1, Math.round(value.lastPdfPage))
+        : null,
+    isCompleted: isCompleted || progressPercent >= 100,
   };
 }
 
-function clampPanelPosition(position: NotesPanelPosition, size: NotesPanelSize) {
-  if (typeof window === "undefined") {
-    return position;
-  }
+function normalizeLessonProgressMap(
+  completedLessonIds: string[],
+  progressMap: LessonProgressMap
+) {
+  const normalized = Object.fromEntries(
+    Object.entries(progressMap).map(([lessonId, value]) => [
+      lessonId,
+      normalizeLessonProgressEntry(value),
+    ])
+  ) as LessonProgressMap;
 
-  const horizontalMargin = 16;
-  const topMargin = 88;
-  const maxX = Math.max(horizontalMargin, window.innerWidth - size.width - horizontalMargin);
-  const maxY = Math.max(topMargin, window.innerHeight - size.height - horizontalMargin);
+  completedLessonIds.forEach((lessonId) => {
+    normalized[lessonId] = normalizeLessonProgressEntry({
+      ...normalized[lessonId],
+      progressPercent: 100,
+      isCompleted: true,
+    });
+  });
 
-  return {
-    x: Math.min(Math.max(position.x, horizontalMargin), maxX),
-    y: Math.min(Math.max(position.y, topMargin), maxY),
-  };
+  return normalized;
 }
 
-function readStoredPanelSize() {
-  if (typeof window === "undefined") {
-    return DESKTOP_PANEL_DEFAULT_SIZE;
-  }
-
-  const rawValue = window.localStorage.getItem(NOTES_PANEL_SIZE_KEY);
-
-  if (!rawValue) {
-    return DESKTOP_PANEL_DEFAULT_SIZE;
-  }
-
-  try {
-    const parsed = JSON.parse(rawValue) as Partial<NotesPanelSize>;
-    return {
-      width: Math.max(DESKTOP_PANEL_MIN_WIDTH, Math.round(parsed.width ?? DESKTOP_PANEL_DEFAULT_SIZE.width)),
-      height: Math.max(
-        DESKTOP_PANEL_MIN_HEIGHT,
-        Math.round(parsed.height ?? DESKTOP_PANEL_DEFAULT_SIZE.height)
-      ),
-    };
-  } catch {
-    return DESKTOP_PANEL_DEFAULT_SIZE;
-  }
-}
-
-function readStoredPanelPosition(size: NotesPanelSize) {
-  if (typeof window === "undefined") {
-    return getDefaultPanelPosition(size);
-  }
-
-  const rawValue = window.localStorage.getItem(NOTES_PANEL_POSITION_KEY);
-
-  if (!rawValue) {
-    return getDefaultPanelPosition(size);
-  }
-
-  try {
-    const parsed = JSON.parse(rawValue) as Partial<NotesPanelPosition>;
-    return clampPanelPosition(
-      {
-        x: Math.round(parsed.x ?? getDefaultPanelPosition(size).x),
-        y: Math.round(parsed.y ?? getDefaultPanelPosition(size).y),
-      },
-      size
-    );
-  } catch {
-    return getDefaultPanelPosition(size);
-  }
-}
-
-function readStoredPanelOpenState() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return window.localStorage.getItem(NOTES_PANEL_OPEN_KEY) === "true";
+function areLessonProgressStatesEqual(
+  left?: LessonProgressState | null,
+  right?: LessonProgressState | null
+) {
+  return (
+    left?.progressPercent === right?.progressPercent &&
+    left?.watchedSeconds === right?.watchedSeconds &&
+    left?.lastPdfPage === right?.lastPdfPage &&
+    left?.isCompleted === right?.isCompleted
+  );
 }
 
 export function LessonPlayerClient({
@@ -169,20 +122,28 @@ export function LessonPlayerClient({
   initialLessonId,
   viewerId,
   initialCompletedLessonIds,
+  initialLessonProgressMap,
   initialNotes,
   initialNoteContent,
   hasFullCourseAccess,
+  askAiEnabled,
+  askAiAssistantLabel = DEFAULT_ASK_AI_NAME,
 }: {
   course: Course;
   initialLessonId: string;
   viewerId: string | null;
   initialCompletedLessonIds: string[];
+  initialLessonProgressMap: LessonProgressMap;
   initialNotes: LessonPlayerNote[];
   initialNoteContent: string;
   hasFullCourseAccess: boolean;
+  askAiEnabled: boolean;
+  askAiAssistantLabel?: string;
 }) {
-  const { toast } = useToast();
-  const router = useRouter();
+  // --- Hydration Management ---
+  const [isMounted, setIsMounted] = useState(false);
+
+  // --- UI State ---
   const modules = course.modules ?? [];
   const allLessons = useMemo(() => modules.flatMap((module) => module.lessons), [modules]);
   const isLessonUnlocked = useCallback(
@@ -191,6 +152,9 @@ export function LessonPlayerClient({
   );
   const currentLesson = allLessons.find((lesson) => lesson.id === initialLessonId) ?? allLessons[0];
   const currentIndex = allLessons.findIndex((lesson) => lesson.id === currentLesson.id);
+  const currentModule = modules.find((module) =>
+    module.lessons.some((lesson) => lesson.id === currentLesson.id)
+  );
   const prevLesson =
     currentIndex > 0
       ? [...allLessons.slice(0, currentIndex)].reverse().find((lesson) => isLessonUnlocked(lesson))
@@ -199,1352 +163,390 @@ export function LessonPlayerClient({
     currentIndex >= 0
       ? allLessons.slice(currentIndex + 1).find((lesson) => isLessonUnlocked(lesson))
       : undefined;
-  const hasLockedLessonsAhead =
-    !hasFullCourseAccess &&
-    allLessons.slice(currentIndex + 1).some((lesson) => !isLessonUnlocked(lesson));
-  const currentModule = modules.find((module) =>
-    module.lessons.some((lesson) => lesson.id === currentLesson.id)
-  );
+  
   const primaryAssetUrl = currentLesson.assetUrl || currentLesson.videoUrl;
   const isPreviewOnlyLesson = currentLesson.isPreview && !hasFullCourseAccess;
-  const previewMinutesLimit =
-    isPreviewOnlyLesson &&
-    (currentLesson.type === "VIDEO" || currentLesson.type === "AUDIO" || currentLesson.type === "LIVE")
-      ? currentLesson.previewMinutes ?? undefined
-      : undefined;
   const previewPagesLimit =
     isPreviewOnlyLesson && currentLesson.type === "PDF"
       ? currentLesson.previewPages ?? undefined
       : undefined;
-  const resources = [
-    primaryAssetUrl && currentLesson.allowDownload && hasFullCourseAccess
-      ? { name: "Lesson asset", href: primaryAssetUrl, type: currentLesson.type.toLowerCase() }
-      : null,
-    course.previewVideoUrl
-      ? { name: "Course preview", href: course.previewVideoUrl, type: "video" }
-      : null,
-  ].filter(Boolean) as Array<{ name: string; href: string; type: string }>;
 
+  // --- Preferences & Layout States (Initialized with Defaults) ---
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [copilotOpen, setCopilotOpen] = useState(false);
-  const [tab, setTab] = useState<"overview" | "notes" | "resources">("overview");
-  const [completedLessonIds, setCompletedLessonIds] = useState(initialCompletedLessonIds);
-  const [completionPending, setCompletionPending] = useState(false);
-  const [noteContent, setNoteContent] = useState(initialNoteContent);
-  const [savedNoteContent, setSavedNoteContent] = useState(initialNoteContent);
-  const [savedNotes, setSavedNotes] = useState(initialNotes);
-  const [noteState, setNoteState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">(
-    initialNoteContent ? "saved" : "idle"
+  const [askAiOpen, setAskAiOpen] = useState(false);
+  const [lessonProgressMap, setLessonProgressMap] = useState<LessonProgressMap>(() =>
+    normalizeLessonProgressMap(initialCompletedLessonIds, initialLessonProgressMap)
   );
-  const [notesPanelOpen, setNotesPanelOpen] = useState(readStoredPanelOpenState);
-  const [isDesktopPanel, setIsDesktopPanel] = useState(isDesktopViewport);
-  const [notesPanelSize, setNotesPanelSize] = useState<NotesPanelSize>(readStoredPanelSize);
-  const [notesPanelPosition, setNotesPanelPosition] = useState<NotesPanelPosition>(() =>
-    readStoredPanelPosition(readStoredPanelSize())
-  );
-  const [isDraggingNotesPanel, setIsDraggingNotesPanel] = useState(false);
-  const [previewConsumedSeconds, setPreviewConsumedSeconds] = useState(0);
-  const [previewLocked, setPreviewLocked] = useState(false);
-  const [previewPdfPage, setPreviewPdfPage] = useState(1);
-  const notesPanelRef = useRef<HTMLDivElement | null>(null);
-  const notesPanelDragStateRef = useRef<{
-    offsetX: number;
-    offsetY: number;
-  } | null>(null);
-  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [notesPanelOpen, setNotesPanelOpen] = useState(false);
+  const initialProgress = normalizeLessonProgressEntry(initialLessonProgressMap[initialLessonId]);
+
+  // --- PDF & Media States ---
+  const [previewPdfPage, setPreviewPdfPage] = useState(initialProgress.lastPdfPage ?? 1);
+  const [pdfViewportWidth, setPdfViewportWidth] = useState(0);
+  const currentLessonProgress = normalizeLessonProgressEntry(lessonProgressMap[currentLesson.id]);
+
+  // --- Refs ---
+  const pdfViewportRef = useRef<HTMLDivElement | null>(null);
+  const progressSyncTimeoutRef = useRef<number | null>(null);
+  const queuedProgressRef = useRef<LessonProgressState | null>(null);
+  const lastSyncedProgressRef = useRef<LessonProgressState>(initialProgress);
+
+  // --- Hydration & Preference Loading ---
+  useEffect(() => {
+    setIsMounted(true);
+
+    if (typeof window !== "undefined") {
+      const storedOpen = window.localStorage.getItem(NOTES_PANEL_OPEN_KEY) === "true";
+      setNotesPanelOpen(storedOpen);
+
+      const desktop = window.innerWidth >= DESKTOP_BREAKPOINT;
+      if (!desktop) {
+        setSidebarOpen(false);
+      }
+    }
+  }, []);
+
+  // --- Side Effects ---
+  useEffect(() => {
+    if (!isMounted) return;
+    window.localStorage.setItem(NOTES_PANEL_OPEN_KEY, String(notesPanelOpen));
+  }, [notesPanelOpen, isMounted]);
 
   useEffect(() => {
-    setCompletedLessonIds(initialCompletedLessonIds);
-  }, [initialCompletedLessonIds]);
-
-  useEffect(() => {
-    setNoteContent(initialNoteContent);
-    setSavedNoteContent(initialNoteContent);
-    setSavedNotes(initialNotes);
-    setNoteState(initialNoteContent ? "saved" : "idle");
-  }, [currentLesson.id, initialNoteContent, initialNotes]);
-
-  useEffect(() => {
-    setPreviewConsumedSeconds(0);
-    setPreviewLocked(false);
-    setPreviewPdfPage(1);
+    const nextPreviewPage = currentLessonProgress.lastPdfPage ?? 1;
+    setPreviewPdfPage(nextPreviewPage);
+    queuedProgressRef.current = null;
+    lastSyncedProgressRef.current = currentLessonProgress;
   }, [currentLesson.id]);
 
   useEffect(() => {
-    if (noteState === "saving") {
+    if (!isMounted || currentLesson.type !== "PDF" || !pdfViewportRef.current) {
       return;
     }
 
-    if (noteContent !== savedNoteContent) {
-      setNoteState("dirty");
-      return;
-    }
-
-    setNoteState(savedNoteContent.trim().length > 0 ? "saved" : "idle");
-  }, [noteContent, noteState, savedNoteContent]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const syncViewport = () => {
-      const nextIsDesktop = isDesktopViewport();
-      setIsDesktopPanel(nextIsDesktop);
-
-      if (nextIsDesktop) {
-        setNotesPanelPosition((current) => clampPanelPosition(current, notesPanelSize));
-      } else {
-        setSidebarOpen(false);
-      }
+    const viewportElement = pdfViewportRef.current;
+    const syncViewportWidth = () => {
+      const nextWidth = Math.max(0, Math.round(viewportElement.clientWidth));
+      setPdfViewportWidth((current) => (current === nextWidth ? current : nextWidth));
     };
 
-    syncViewport();
-    window.addEventListener("resize", syncViewport);
+    syncViewportWidth();
 
-    return () => window.removeEventListener("resize", syncViewport);
-  }, [notesPanelSize]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", syncViewportWidth);
+      return () => window.removeEventListener("resize", syncViewportWidth);
     }
 
-    window.localStorage.setItem(NOTES_PANEL_OPEN_KEY, String(notesPanelOpen));
-  }, [notesPanelOpen]);
+    const observer = new ResizeObserver(() => syncViewportWidth());
+    observer.observe(viewportElement);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(NOTES_PANEL_SIZE_KEY, JSON.stringify(notesPanelSize));
-  }, [notesPanelSize]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(NOTES_PANEL_POSITION_KEY, JSON.stringify(notesPanelPosition));
-  }, [notesPanelPosition]);
-
-  useEffect(() => {
-    if (!notesPanelOpen || !isDesktopPanel || !notesPanelRef.current || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const panelEntry = entries[0];
-      if (!panelEntry) {
-        return;
-      }
-
-      const nextSize = {
-        width: Math.max(DESKTOP_PANEL_MIN_WIDTH, Math.round(panelEntry.contentRect.width)),
-        height: Math.max(DESKTOP_PANEL_MIN_HEIGHT, Math.round(panelEntry.contentRect.height)),
-      };
-
-      setNotesPanelSize((current) =>
-        current.width === nextSize.width && current.height === nextSize.height ? current : nextSize
-      );
-      setNotesPanelPosition((current) => clampPanelPosition(current, nextSize));
-    });
-
-    observer.observe(notesPanelRef.current);
     return () => observer.disconnect();
-  }, [isDesktopPanel, notesPanelOpen]);
+  }, [currentLesson.id, currentLesson.type, isMounted]);
 
+  // Initial Data Fetch / Touch
   useEffect(() => {
-    if (!isDraggingNotesPanel) {
-      return;
-    }
+    if (!viewerId || !hasFullCourseAccess || !isMounted) return;
 
-    const handlePointerMove = (event: PointerEvent) => {
-      const dragState = notesPanelDragStateRef.current;
-      if (!dragState) {
-        return;
-      }
-
-      setNotesPanelPosition(
-        clampPanelPosition(
-          {
-            x: event.clientX - dragState.offsetX,
-            y: event.clientY - dragState.offsetY,
-          },
-          notesPanelSize
-        )
-      );
-    };
-
-    const handlePointerUp = () => {
-      notesPanelDragStateRef.current = null;
-      setIsDraggingNotesPanel(false);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [isDraggingNotesPanel, notesPanelSize]);
-
-  useEffect(() => {
-    if (!viewerId || !hasFullCourseAccess) {
-      return;
-    }
-
-    // Updated: touching the lesson on open keeps resume links pointed at the learner's latest classroom location.
+    // Coordinated touch: Only fires once per lesson per mount
     void fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ touchOnly: true }),
     })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload?.progress?.completedLessonIds) {
-          return;
+      .then(async (res) => {
+        const payload = await res.json().catch(() => null);
+        if (res.ok && payload?.progress) {
+          setLessonProgressMap(
+            normalizeLessonProgressMap(
+              payload.progress.completedLessonIds ?? [],
+              payload.progress.lessonProgressByLessonId ?? {}
+            )
+          );
         }
-
-        setCompletedLessonIds(payload.progress.completedLessonIds);
       })
       .catch(() => {});
-  }, [currentLesson.id, hasFullCourseAccess, viewerId]);
+  }, [currentLesson.id, hasFullCourseAccess, viewerId, isMounted]);
 
-  const completedLessonSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
-  const completedCount = completedLessonSet.size;
-  const progress = allLessons.length > 0 ? Math.round((completedCount / allLessons.length) * 100) : 0;
-  const currentLessonCompleted = completedLessonSet.has(currentLesson.id);
-  const noteHasChanges = noteContent !== savedNoteContent;
-  const noteCanSave = noteContent.trim().length > 0 && noteHasChanges;
-  const previewLimitSeconds = previewMinutesLimit ? previewMinutesLimit * 60 : 0;
-  const hasTimedPreviewLimit = previewLimitSeconds > 0;
-  const hasPdfPreviewLimit = Boolean(previewPagesLimit && previewPagesLimit > 0);
-  const previewProgress = hasTimedPreviewLimit
-    ? Math.min(100, Math.round((previewConsumedSeconds / previewLimitSeconds) * 100))
-    : hasPdfPreviewLimit && previewPagesLimit
-      ? Math.min(100, Math.round((previewPdfPage / previewPagesLimit) * 100))
-      : 0;
-  const pdfPreviewMaxed = Boolean(hasPdfPreviewLimit && previewPagesLimit && previewPdfPage >= previewPagesLimit);
-  const previewStatusText = hasTimedPreviewLimit
-    ? `${Math.min(previewMinutesLimit ?? 0, Math.max(0, Math.ceil(previewConsumedSeconds / 60)))} / ${previewMinutesLimit} minutes previewed`
-    : hasPdfPreviewLimit && previewPagesLimit
-      ? `${Math.min(previewPdfPage, previewPagesLimit)} / ${previewPagesLimit} preview pages unlocked`
-      : null;
-
-  const handleTimedPreviewUpdate = useCallback(
-    (event: React.SyntheticEvent<HTMLVideoElement | HTMLAudioElement>) => {
-      if (!hasTimedPreviewLimit) {
+  // --- Handlers ---
+  const flushPendingLessonProgress = useCallback(
+    (lessonId: string) => {
+      if (!viewerId || !hasFullCourseAccess) {
         return;
       }
 
-      const element = event.currentTarget;
-      const nextTime = Math.min(element.currentTime, previewLimitSeconds);
-      setPreviewConsumedSeconds(nextTime);
-
-      if (element.currentTime >= previewLimitSeconds) {
-        element.currentTime = previewLimitSeconds;
-        element.pause();
-        setPreviewLocked(true);
+      const pendingProgress = queuedProgressRef.current;
+      if (
+        !pendingProgress ||
+        areLessonProgressStatesEqual(pendingProgress, lastSyncedProgressRef.current)
+      ) {
+        return;
       }
+
+      const body = JSON.stringify(pendingProgress);
+      queuedProgressRef.current = null;
+
+      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        const sent = navigator.sendBeacon(
+          `/api/learn/lessons/${lessonId}/progress`,
+          new Blob([body], { type: "application/json" })
+        );
+
+        if (sent) {
+          lastSyncedProgressRef.current = pendingProgress;
+          return;
+        }
+      }
+
+      void fetch(`/api/learn/lessons/${lessonId}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      })
+        .then((response) => {
+          if (response.ok) {
+            lastSyncedProgressRef.current = pendingProgress;
+            return;
+          }
+
+          queuedProgressRef.current = pendingProgress;
+        })
+        .catch(() => {
+          queuedProgressRef.current = pendingProgress;
+        });
     },
-    [hasTimedPreviewLimit, previewLimitSeconds]
+    [hasFullCourseAccess, viewerId]
   );
 
-  const updateCompletedLessonIds = useCallback((lessonId: string, isCompleted: boolean) => {
-    setCompletedLessonIds((current) => {
-      if (isCompleted) {
-        return current.includes(lessonId) ? current : [...current, lessonId];
-      }
+  const queueLessonProgressSync = useCallback((snapshot: LessonProgressState) => {
+    if (!viewerId || !hasFullCourseAccess) return;
 
-      return current.filter((entry) => entry !== lessonId);
-    });
-  }, []);
+    if (areLessonProgressStatesEqual(snapshot, lastSyncedProgressRef.current)) {
+      return;
+    }
 
-  const persistLessonCompletion = useCallback(
-    async (isCompleted: boolean) => {
-      if (!hasFullCourseAccess) {
-        toast("Unlock the full course to track completion for this lesson.", "error");
+    if (progressSyncTimeoutRef.current) {
+      window.clearTimeout(progressSyncTimeoutRef.current);
+    }
+
+    queuedProgressRef.current = snapshot;
+
+    progressSyncTimeoutRef.current = window.setTimeout(async () => {
+      const toSync = queuedProgressRef.current;
+      if (!toSync || areLessonProgressStatesEqual(toSync, lastSyncedProgressRef.current)) {
         return;
       }
-
-      if (!viewerId) {
-        toast("Please sign in to track lesson progress.", "error");
-        return;
-      }
-
-      const previousLessonIds = completedLessonIds;
-      updateCompletedLessonIds(currentLesson.id, isCompleted);
-      setCompletionPending(true);
 
       try {
-        const response = await fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
+        const res = await fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ isCompleted }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(toSync),
         });
-
-        const payload = await response.json();
-
-        if (!response.ok) {
-          throw new Error(payload.error || "Unable to update lesson progress.");
+        if (res.ok) {
+          lastSyncedProgressRef.current = toSync;
+          queuedProgressRef.current = null;
         }
+      } catch {}
+    }, PROGRESS_SYNC_DEBOUNCE_MS);
+  }, [currentLesson.id, hasFullCourseAccess, viewerId]);
 
-        setCompletedLessonIds(payload.progress.completedLessonIds);
-        toast(isCompleted ? "Lesson marked complete." : "Lesson marked incomplete.", "success");
-      } catch (error) {
-        setCompletedLessonIds(previousLessonIds);
-        toast(
-          error instanceof Error ? error.message : "Unable to update lesson progress.",
-          "error"
-        );
-      } finally {
-        setCompletionPending(false);
+  const handlePdfProgressUpdate = useCallback((percent: number, page: number) => {
+    setPreviewPdfPage(page);
+    if (!hasFullCourseAccess || !viewerId) return;
+
+    const normalized = normalizeLessonProgressEntry({
+      ...lessonProgressMap[currentLesson.id],
+      progressPercent: percent >= LESSON_COMPLETE_THRESHOLD ? 100 : percent,
+      lastPdfPage: page,
+      isCompleted: percent >= LESSON_COMPLETE_THRESHOLD,
+    });
+
+    setLessonProgressMap((current) => ({ ...current, [currentLesson.id]: normalized }));
+    queueLessonProgressSync(normalized);
+  }, [currentLesson.id, hasFullCourseAccess, lessonProgressMap, queueLessonProgressSync, viewerId]);
+
+  useEffect(() => {
+    return () => {
+      if (progressSyncTimeoutRef.current) {
+        window.clearTimeout(progressSyncTimeoutRef.current);
+        progressSyncTimeoutRef.current = null;
       }
-    },
-    [completedLessonIds, currentLesson.id, hasFullCourseAccess, toast, updateCompletedLessonIds, viewerId]
-  );
 
-  const saveNote = useCallback(async () => {
-    if (!viewerId) {
-      toast("Please sign in to save notes to your workspace.", "error");
-      return false;
+      flushPendingLessonProgress(currentLesson.id);
+    };
+  }, [currentLesson.id, flushPendingLessonProgress]);
+
+  useEffect(() => {
+    if (!isMounted) {
+      return;
     }
 
-    if (!noteContent.trim()) {
-      setNoteState("error");
-      toast("Add a few words before saving your notes.", "error");
-      return false;
-    }
+    const handlePageHide = () => flushPendingLessonProgress(currentLesson.id);
+    window.addEventListener("pagehide", handlePageHide);
 
-    if (!noteHasChanges) {
-      setNoteState(savedNoteContent ? "saved" : "idle");
-      toast("Your latest notes are already saved.", "success");
-      return false;
-    }
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [currentLesson.id, flushPendingLessonProgress, isMounted]);
 
-    setNoteState("saving");
+  // --- Render Guard (The Hydration Fix) ---
+  if (!isMounted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#04070d]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary-blue" />
+      </div>
+    );
+  }
 
-    try {
-      const response = await fetch(`/api/learn/lessons/${currentLesson.id}/notes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content: noteContent }),
-      });
-
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to save notes right now.");
-      }
-
-      setSavedNotes((current) => [payload.note, ...current]);
-      setSavedNoteContent(noteContent);
-      setNoteState("saved");
-      toast("Notes saved to this lesson.", "success");
-      return true;
-    } catch (error) {
-      setNoteState("error");
-      toast(error instanceof Error ? error.message : "Unable to save notes right now.", "error");
-      return false;
-    }
-  }, [currentLesson.id, noteContent, noteHasChanges, savedNoteContent, toast, viewerId]);
-
-  const openNotesPanel = useCallback(() => {
-    setNotesPanelOpen(true);
-    setTab("notes");
-  }, []);
-
-  const resetNotesPanelLayout = useCallback(() => {
-    setNotesPanelSize(DESKTOP_PANEL_DEFAULT_SIZE);
-    setNotesPanelPosition(getDefaultPanelPosition(DESKTOP_PANEL_DEFAULT_SIZE));
-  }, []);
-
-  const beginNotesPanelDrag = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!isDesktopPanel) {
-        return;
-      }
-
-      const target = event.target as HTMLElement;
-      if (target.closest("button")) {
-        return;
-      }
-
-      notesPanelDragStateRef.current = {
-        offsetX: event.clientX - notesPanelPosition.x,
-        offsetY: event.clientY - notesPanelPosition.y,
-      };
-      setIsDraggingNotesPanel(true);
-      event.preventDefault();
-    },
-    [isDesktopPanel, notesPanelPosition.x, notesPanelPosition.y]
-  );
-
-  const handlePlayerTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
-  }, []);
-
-  const handlePlayerTouchEnd = useCallback(
-    (event: React.TouchEvent<HTMLDivElement>) => {
-      const start = swipeStartRef.current;
-      swipeStartRef.current = null;
-
-      if (!start) {
-        return;
-      }
-
-      const touch = event.changedTouches[0];
-      const deltaX = touch.clientX - start.x;
-      const deltaY = touch.clientY - start.y;
-
-      if (Math.abs(deltaX) < 72 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
-        return;
-      }
-
-      if (deltaX < 0 && nextLesson) {
-        router.push(`/learn/${course.slug}/${nextLesson.id}`);
-      }
-
-      if (deltaX > 0 && prevLesson) {
-        router.push(`/learn/${course.slug}/${prevLesson.id}`);
-      }
-    },
-    [course.slug, nextLesson, prevLesson, router]
-  );
-
-  const notesStatusLabel =
-    noteState === "saving"
-      ? "Saving notes..."
-      : noteState === "saved"
-        ? savedNotes[0]
-          ? `Saved ${formatSavedAt(savedNotes[0].timestamp)}`
-          : "Saved"
-        : noteState === "error"
-          ? "Save failed"
-        : noteState === "dirty"
-            ? "Unsaved changes"
-            : "No saved notes yet";
-  const mobileNotesHeight = copilotOpen ? 34 : 44;
-  const mobileCopilotHeight = notesPanelOpen ? 28 : 40;
-  const mobileSheetBottom = "5.75rem";
-  const mobileCopilotOffset = notesPanelOpen
-    ? `calc(${mobileNotesHeight}vh + 6.25rem)`
-    : mobileSheetBottom;
+  const hasPdfPreviewLimit = Boolean(previewPagesLimit && previewPagesLimit > 0);
+  const pdfPreviewMaxed = Boolean(hasPdfPreviewLimit && previewPagesLimit && previewPdfPage >= previewPagesLimit);
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b border-border bg-white/90 px-4 backdrop-blur-xl dark:bg-slate-950/90">
-        <div className="flex items-center gap-3">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-[#04070d] text-slate-100">
+      {/* Header */}
+      <header className="z-40 flex h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#04070d]/80 px-4 backdrop-blur-md sm:px-6">
+        <div className="flex items-center gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="rounded-xl border border-border p-2 text-muted-foreground hover:border-primary-blue/30 hover:bg-primary-blue/10 hover:text-primary-blue"
+            className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
           >
-            {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
-          <Link
-            href={`/courses/${course.slug}`}
-            className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            <span className="hidden max-w-[240px] truncate sm:block">{course.title}</span>
+          <div className="hidden h-6 w-px bg-white/10 sm:block" />
+          <Link href={`/courses/${course.slug}`} className="group flex items-center gap-2">
+            <h1 className="max-w-[120px] truncate text-sm font-bold text-white transition-colors group-hover:text-primary-blue sm:max-w-xs">
+              {course.title}
+            </h1>
           </Link>
         </div>
 
-        {/* Updated: course progress is driven by the learner's real completed lesson count. */}
-        <div className="hidden items-center gap-3 md:flex">
-          <div className="h-2 w-44 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary-blue transition-[width] duration-300 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <div className="text-right">
-            <p className="text-xs font-semibold text-foreground">{progress}% through course</p>
-            <p className="text-[11px] text-muted-foreground">
-              {completedCount} / {allLessons.length} completed
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setNotesPanelOpen((current) => !current)}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
-              notesPanelOpen
-                ? "border-primary-blue bg-primary-blue text-white"
-                : "border-primary-blue/20 bg-primary-blue/10 text-primary-blue hover:bg-primary-blue/15"
-            )}
-          >
-            <NotebookText className="h-3.5 w-3.5" />
-            <span className="hidden sm:block">{notesPanelOpen ? "Hide Notes" : "Open Notes"}</span>
-          </button>
-
-          <button
-            onClick={() => setCopilotOpen(!copilotOpen)}
-            className="inline-flex items-center gap-2 rounded-xl border border-primary-blue/20 bg-primary-blue/10 px-3 py-2 text-xs font-semibold text-primary-blue hover:bg-primary-blue/15"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span className="hidden sm:block">AI Copilot</span>
-          </button>
-
-          {nextLesson ? (
-            <Link
-              href={`/learn/${course.slug}/${nextLesson.id}`}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary-blue px-3 py-2 text-xs font-semibold text-white hover:bg-primary-blue/90"
+        <div className="flex items-center gap-3">
+          {askAiEnabled && (
+            <button
+              onClick={() => setAskAiOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-primary-blue/10 px-4 py-2 text-xs font-bold text-primary-blue transition-all hover:bg-primary-blue/20"
             >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Link>
-          ) : hasLockedLessonsAhead ? (
-            <Link
-              href={`/courses/${course.slug}`}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary-blue px-3 py-2 text-xs font-semibold text-white hover:bg-primary-blue/90"
-            >
-              Unlock Course
-              <Lock className="h-3.5 w-3.5" />
-            </Link>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-primary-blue/20 bg-primary-blue/10 px-3 py-2 text-xs font-semibold text-primary-blue">
-              <Award className="h-3.5 w-3.5" />
-              Completed
-            </span>
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">Ask AI</span>
+            </button>
           )}
+          <div className="hidden h-6 w-px bg-white/10 sm:block" />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setNotesPanelOpen(!notesPanelOpen)}
+              className={cn(
+                "rounded-lg p-2 transition-colors",
+                notesPanelOpen ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+              )}
+            >
+              <NotebookText className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <AnimatePresence>
-          {sidebarOpen && (
-            <motion.aside
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="shrink-0 overflow-y-auto border-r border-border bg-card"
-            >
-              <div className="p-5">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                      Course content
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {completedCount} of {allLessons.length} lessons complete
-                    </p>
+        {/* Main Content Area */}
+        <main className="relative flex flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8">
+              {/* Asset Viewer */}
+              <div ref={pdfViewportRef} className="relative mb-12 aspect-video min-h-[500px] overflow-hidden rounded-3xl border border-white/5 bg-black/40 shadow-2xl">
+                {currentLesson.type === "PDF" && primaryAssetUrl ? (
+                  <LessonPdfViewer
+                    key={currentLesson.id}
+                    file={primaryAssetUrl}
+                    lessonId={currentLesson.id}
+                    viewportWidth={pdfViewportWidth || 800}
+                    initialPage={currentLessonProgress.lastPdfPage || 1}
+                    onProgress={handlePdfProgressUpdate}
+                    maxPages={hasPdfPreviewLimit ? previewPagesLimit : undefined}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-slate-500">
+                    <FileText className="mr-2 h-10 w-10 opacity-20" />
+                    <p>Asset renderer not available</p>
                   </div>
-                  <Link
-                    href="/dashboard#workspace-notes"
-                    className="inline-flex items-center gap-1 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-blue hover:bg-primary-blue/15"
-                  >
-                    <NotebookText className="h-3 w-3" />
-                    My Workspace Notes
-                  </Link>
-                </div>
-
-                <div className="space-y-4">
-                  {modules.map((module) => (
-                    <div key={module.id} className="rounded-2xl border border-border bg-background/60 p-4">
-                      <div className="mb-3 flex items-center gap-2">
-                        <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="text-sm font-semibold text-foreground">{module.title}</span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {module.lessons.map((lesson) => {
-                          const isActive = lesson.id === currentLesson.id;
-                          const isCompleted = completedLessonSet.has(lesson.id);
-                          const isUnlocked = isLessonUnlocked(lesson);
-
-                          const lessonRow = (
-                            <>
-                              <span className="shrink-0">
-                                {!isUnlocked ? (
-                                  <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                                ) : isCompleted ? (
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-primary-blue" />
-                                ) : lesson.type === "QUIZ" ? (
-                                  <BarChart2 className="h-3.5 w-3.5 text-primary-blue" />
-                                ) : lesson.type === "PROJECT" || lesson.type === "ASSIGNMENT" ? (
-                                  <Award className="h-3.5 w-3.5 text-amber-500" />
-                                ) : lesson.type === "AUDIO" ? (
-                                  <Volume2 className="h-3.5 w-3.5 text-primary-blue" />
-                                ) : lesson.type === "PDF" || lesson.type === "TEXT" ? (
-                                  <FileText className="h-3.5 w-3.5 text-primary-blue" />
-                                ) : isActive ? (
-                                  <Play className="h-3.5 w-3.5" />
-                                ) : (
-                                  <Circle className="h-3.5 w-3.5" />
-                                )}
-                              </span>
-                              <span className="flex-1 line-clamp-1">{lesson.title}</span>
-                              {lesson.isPreview && (
-                                <span className="rounded-full bg-primary-blue/10 px-2 py-0.5 text-[10px] text-primary-blue">
-                                  Preview
-                                </span>
-                              )}
-                              {(lesson.duration ?? 0) > 0 && (
-                                <span className="shrink-0 text-[11px]">
-                                  {Math.ceil((lesson.duration ?? 0) / 60)}m
-                                </span>
-                              )}
-                            </>
-                          );
-
-                          return isUnlocked ? (
-                            <Link
-                              key={lesson.id}
-                              href={`/learn/${course.slug}/${lesson.id}`}
-                              className={cn(
-                                "flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition-all",
-                                isActive
-                                  ? "border-primary-blue/20 bg-primary-blue/10 text-primary-blue"
-                                  : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-                              )}
-                            >
-                              {lessonRow}
-                            </Link>
-                          ) : (
-                            <div
-                              key={lesson.id}
-                              className="flex items-center gap-2 rounded-xl border border-transparent px-3 py-2 text-xs text-muted-foreground/80 opacity-80"
-                            >
-                              {lessonRow}
-                              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]">
-                                Locked
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </motion.aside>
-          )}
-        </AnimatePresence>
-
-        <main className="flex-1 overflow-y-auto pb-32 lg:pb-0">
-          <div className="sticky top-0 z-20 border-b border-border bg-card lg:static">
-            <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-              <div className="mb-4 flex items-center justify-between gap-4 md:hidden">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">{progress}% through course</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {completedCount} / {allLessons.length} completed
-                  </p>
-                </div>
-                <div className="h-2 w-32 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary-blue" style={{ width: `${progress}%` }} />
-                </div>
+                )}
+                
+                {pdfPreviewMaxed && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 p-8 text-center backdrop-blur-sm">
+                    <Lock className="mb-4 h-12 w-12 text-primary-blue" />
+                    <h3 className="mb-2 text-xl font-bold">Preview Limit Reached</h3>
+                    <p className="mb-6 max-w-md text-sm text-slate-400">
+                      You've read the first {previewPagesLimit} pages of this lesson. 
+                      Unlock the full course to continue reading.
+                    </p>
+                    <Link href={`/courses/${course.slug}`} className="rounded-xl bg-primary-blue px-6 py-3 font-bold text-white hover:bg-primary-blue/90">
+                      Unlock Full Access
+                    </Link>
+                  </div>
+                )}
               </div>
 
-              <div className="overflow-hidden rounded-[28px] border border-slate-900 bg-slate-950 shadow-lg">
-                {(hasTimedPreviewLimit || hasPdfPreviewLimit) && previewStatusText ? (
-                  <div className="border-b border-white/10 bg-black/30 px-4 py-4 sm:px-6">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-blue">
-                          Limited preview
-                        </p>
-                        <p className="mt-1 text-sm text-white">{previewStatusText}</p>
-                      </div>
-                      <Link
-                        href={`/courses/${course.slug}`}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
-                      >
-                        Unlock Full Course
-                        <Lock className="h-4 w-4" />
-                      </Link>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-primary-blue transition-[width] duration-300"
-                        style={{ width: `${previewProgress}%` }}
-                      />
-                    </div>
+              {/* Lesson Info */}
+              <div className="mb-12">
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="rounded-full bg-primary-blue/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary-blue">
+                    Lesson {currentIndex + 1}
+                  </span>
+                  <div className="h-1 w-1 rounded-full bg-slate-700" />
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                    {currentModule?.title}
+                  </span>
+                </div>
+                <h2 className="mb-6 text-3xl font-extrabold text-white sm:text-4xl">
+                  {currentLesson.title}
+                </h2>
+                <div className="flex flex-wrap gap-4 border-y border-white/5 py-6">
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Clock3 className="h-4 w-4" />
+                    <span className="text-xs font-medium">{currentLesson.duration || "5m read"}</span>
                   </div>
-                ) : null}
-
-                <div
-                  className="relative flex aspect-video w-full items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900"
-                  onTouchStart={handlePlayerTouchStart}
-                  onTouchEnd={handlePlayerTouchEnd}
-                >
-                  {currentLesson.type === "VIDEO" && primaryAssetUrl ? (
-                    <>
-                      <video
-                        controls
-                        className="h-full w-full bg-black"
-                        src={primaryAssetUrl}
-                        onTimeUpdate={handleTimedPreviewUpdate}
-                      />
-                      {previewLocked ? (
-                        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 px-6 text-center">
-                          <div className="max-w-md rounded-[28px] border border-white/10 bg-black/40 p-6 backdrop-blur">
-                            <Lock className="mx-auto mb-4 h-12 w-12 text-primary-blue" />
-                            <h3 className="text-xl font-bold text-white">Preview complete</h3>
-                            <p className="mt-3 text-sm leading-6 text-slate-300">
-                              You&apos;ve reached the {previewMinutesLimit}-minute preview for this lesson. Unlock the full course to continue watching.
-                            </p>
-                            <Link
-                              href={`/courses/${course.slug}`}
-                              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white hover:bg-primary-blue/90"
-                            >
-                              Unlock Full Course
-                              <ChevronRight className="h-4 w-4" />
-                            </Link>
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : currentLesson.type === "AUDIO" && primaryAssetUrl ? (
-                    <div className="relative z-10 w-full max-w-2xl px-6 text-center sm:px-8">
-                      <Volume2 className="mx-auto mb-4 h-16 w-16 text-primary-blue" />
-                      <h3 className="mb-3 text-2xl font-bold text-white">{currentLesson.title}</h3>
-                      <p className="mb-6 text-slate-300">
-                        {currentLesson.description || "Listen directly inside the platform."}
-                      </p>
-                      <audio
-                        controls
-                        className="mx-auto w-full max-w-xl"
-                        src={primaryAssetUrl}
-                        onTimeUpdate={handleTimedPreviewUpdate}
-                      />
-                      {previewLocked ? (
-                        <div className="mt-5 rounded-[24px] border border-white/10 bg-black/40 p-5">
-                          <p className="text-sm leading-6 text-slate-300">
-                            You&apos;ve reached the {previewMinutesLimit}-minute audio preview.
-                          </p>
-                          <Link
-                            href={`/courses/${course.slug}`}
-                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white hover:bg-primary-blue/90"
-                          >
-                            Unlock Full Course
-                            <ChevronRight className="h-4 w-4" />
-                          </Link>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : currentLesson.type === "PDF" && primaryAssetUrl ? (
-                    <div className="flex h-full w-full flex-col">
-                      {hasPdfPreviewLimit && previewPagesLimit ? (
-                        <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-black/30 px-4 py-3 text-white sm:px-6">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewPdfPage((current) => Math.max(1, current - 1))}
-                            disabled={previewPdfPage <= 1}
-                            className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Previous page
-                          </button>
-                          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-                            Page {previewPdfPage} of {previewPagesLimit}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPreviewPdfPage((current) => Math.min(previewPagesLimit, current + 1))
-                            }
-                            disabled={previewPdfPage >= previewPagesLimit}
-                            className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Next page
-                          </button>
-                        </div>
-                      ) : null}
-                      <iframe
-                        src={
-                          hasPdfPreviewLimit
-                            ? `${primaryAssetUrl}#toolbar=0&navpanes=0&scrollbar=0&page=${previewPdfPage}`
-                            : primaryAssetUrl
-                        }
-                        title={currentLesson.title}
-                        className={cn("h-full w-full bg-white", hasPdfPreviewLimit && "pointer-events-none")}
-                      />
-                      {pdfPreviewMaxed ? (
-                        <div className="border-t border-white/10 bg-black/35 px-4 py-4 text-center sm:px-6">
-                          <p className="text-sm leading-6 text-slate-300">
-                            This preview is limited to {previewPagesLimit} page{previewPagesLimit === 1 ? "" : "s"}.
-                            Unlock the course to read the full lesson.
-                          </p>
-                          <Link
-                            href={`/courses/${course.slug}`}
-                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white hover:bg-primary-blue/90"
-                          >
-                            Unlock Full Course
-                            <ChevronRight className="h-4 w-4" />
-                          </Link>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : currentLesson.type === "QUIZ" ? (
-                    <div className="relative z-10 p-8 text-center">
-                      <BarChart2 className="mx-auto mb-4 h-16 w-16 text-primary-blue" />
-                      <h3 className="mb-2 text-2xl font-bold text-white">Module Quiz</h3>
-                      <p className="mb-6 text-slate-300">
-                        Test your understanding of the lesson material.
-                      </p>
-                      <button className="rounded-xl bg-primary-blue px-8 py-3 font-semibold text-white hover:bg-primary-blue/90">
-                        Start quiz
-                      </button>
-                    </div>
-                  ) : currentLesson.type === "PROJECT" || currentLesson.type === "ASSIGNMENT" ? (
-                    <div className="relative z-10 p-8 text-center">
-                      <Award className="mx-auto mb-4 h-16 w-16 text-amber-400" />
-                      <h3 className="mb-2 text-2xl font-bold text-white">Assignment Brief</h3>
-                      <p className="mb-6 text-slate-300">
-                        {currentLesson.content ||
-                          currentLesson.description ||
-                          "Apply the concepts in a practical, portfolio-ready assignment."}
-                      </p>
-                      {primaryAssetUrl ? (
-                        <a
-                          href={primaryAssetUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-xl bg-primary-blue px-8 py-3 font-semibold text-white hover:bg-primary-blue/90"
-                        >
-                          Open assignment asset
-                        </a>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="relative z-10 max-w-2xl p-8 text-center">
-                      <FileText className="mx-auto mb-4 h-16 w-16 text-primary-blue" />
-                      <h3 className="mb-2 text-2xl font-bold text-white">{currentLesson.title}</h3>
-                      <p className="text-slate-300">
-                        {currentLesson.content?.slice(0, 220) ||
-                          currentLesson.description ||
-                          "Read through the written lesson content and take notes as you go."}
-                      </p>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <FileText className="h-4 w-4" />
+                    <span className="text-xs font-medium">{currentLesson.type} Content</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-
-          <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h1 className="mb-1 text-2xl font-black text-foreground">{currentLesson.title}</h1>
-                <p className="text-sm text-muted-foreground">
-                  {course.title} / {currentModule?.title}
-                </p>
-              </div>
-
-              <div className="flex flex-col items-start gap-2 sm:items-end">
-                {currentLessonCompleted ? (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-xs font-semibold text-primary-blue">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Completed
-                  </span>
-                ) : null}
-
-                {hasFullCourseAccess ? (
-                  <button
-                    onClick={() => void persistLessonCompletion(!currentLessonCompleted)}
-                    disabled={completionPending}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-70",
-                      currentLessonCompleted
-                        ? "border border-border bg-card text-muted-foreground hover:border-primary-blue/20 hover:bg-primary-blue/10 hover:text-primary-blue"
-                        : "bg-primary-blue text-white hover:bg-primary-blue/90"
-                    )}
-                  >
-                    {completionPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    {currentLessonCompleted ? "Mark incomplete" : "Mark complete"}
-                  </button>
-                ) : (
-                  <Link
-                    href={`/courses/${course.slug}`}
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
-                  >
-                    <Lock className="h-4 w-4" />
-                    Unlock full course
-                  </Link>
-                )}
-              </div>
-            </div>
-
-            <div className="mb-8 flex items-center justify-between border-b border-border pb-6">
+          
+          {/* Navigation Bar */}
+          <div className="border-t border-white/5 bg-[#04070d]/60 p-4 backdrop-blur-md">
+            <div className="mx-auto flex max-w-5xl items-center justify-between">
               {prevLesson ? (
-                <Link
-                  href={`/learn/${course.slug}/${prevLesson.id}`}
-                  className="group flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                  <span className="hidden max-w-[220px] truncate sm:block">{prevLesson.title}</span>
-                  <span className="sm:hidden">Previous</span>
+                <Link href={`/learn/${course.slug}/${prevLesson.id}`} className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/5">
+                  <ChevronLeft className="h-4 w-4" />
+                  Prev
                 </Link>
-              ) : (
-                <div />
-              )}
-
+              ) : <div />}
+              
               {nextLesson ? (
-                <Link
-                  href={`/learn/${course.slug}/${nextLesson.id}`}
-                  className="group flex items-center gap-2 text-sm font-medium text-primary-blue hover:text-primary-blue/80"
-                >
-                  <span className="hidden max-w-[220px] truncate sm:block">{nextLesson.title}</span>
-                  <span className="sm:hidden">Next</span>
-                  <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              ) : hasLockedLessonsAhead ? (
-                <Link
-                  href={`/courses/${course.slug}`}
-                  className="flex items-center gap-2 text-sm font-medium text-primary-blue"
-                >
-                  <Lock className="h-4 w-4" />
-                  Unlock full course
+                <Link href={`/learn/${course.slug}/${nextLesson.id}`} className="flex items-center gap-2 rounded-xl bg-white px-5 py-2 text-sm font-bold text-black hover:bg-slate-200">
+                  Next
+                  <ChevronRight className="h-4 w-4" />
                 </Link>
               ) : (
-                <Link
-                  href={`/courses/${course.slug}`}
-                  className="flex items-center gap-2 text-sm font-medium text-primary-blue"
-                >
-                  <Award className="h-4 w-4" />
-                  Back to course
-                </Link>
+                <div className="flex items-center gap-2 text-slate-500">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <span className="text-xs font-bold uppercase tracking-widest">Course Complete</span>
+                </div>
               )}
             </div>
-
-            <div className="mb-6 flex gap-1 rounded-2xl border border-border bg-card p-1">
-              {(["overview", "notes", "resources"] as const).map((entry) => (
-                <button
-                  key={entry}
-                  onClick={() => {
-                    setTab(entry);
-                    if (entry === "notes") {
-                      setNotesPanelOpen(true);
-                    }
-                  }}
-                  className={cn(
-                    "rounded-xl px-4 py-2 text-sm font-medium capitalize transition-colors",
-                    tab === entry
-                      ? "bg-primary-blue text-white"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {entry}
-                </button>
-              ))}
-            </div>
-
-            {tab === "overview" && (
-              <div className="space-y-6">
-                <div className="surface-card p-6">
-                  <h3 className="mb-3 text-base font-bold text-foreground">About this lesson</h3>
-                  <p className="text-sm leading-7 text-muted-foreground">
-                    {currentLesson.description ||
-                      currentLesson.content ||
-                      `Work through ${currentLesson.title.toLowerCase()} to connect the concept to practical execution.`}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                    Was this helpful?
-                  </span>
-                  <button className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:border-primary-blue/30 hover:bg-primary-blue/10 hover:text-primary-blue">
-                    <ThumbsUp className="h-3.5 w-3.5" />
-                    Yes
-                  </button>
-                  <button className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:border-primary-blue/30 hover:bg-primary-blue/10 hover:text-primary-blue">
-                    <Flag className="h-3.5 w-3.5" />
-                    Report
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {tab === "notes" && (
-              <div className="space-y-5">
-                <div className="surface-card p-6">
-                  {/* Updated: lesson notes now live in a floating workspace so they stay available across every player tab. */}
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
-                        <NotebookText className="h-4 w-4 text-primary-blue" />
-                        Floating lesson notes
-                      </h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Keep the panel open while you switch tabs. Notes save only when you click the blue Save Notes button.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={openNotesPanel}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
-                    >
-                      <NotebookText className="h-4 w-4" />
-                      {notesPanelOpen ? "Focus Notes Panel" : "Open Notes Panel"}
-                    </button>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-2xl border border-border bg-background/80 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
-                        Current draft
-                      </p>
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                        {noteContent.trim().length > 0
-                          ? noteContent
-                          : viewerId
-                            ? "Open the floating notes panel to start writing for this lesson."
-                            : "Sign in to save notes for this lesson."}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-background/80 p-4">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
-                        <Clock3 className="h-3.5 w-3.5" />
-                        Save status
-                      </div>
-                      <p className="mt-3 text-sm leading-6 text-muted-foreground">{notesStatusLabel}</p>
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        {savedNotes[0]
-                          ? `Latest lesson snapshot: ${formatSavedAt(savedNotes[0].timestamp)}`
-                          : "Saved note snapshots for this lesson will appear as you study."}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="surface-card p-6" id="lesson-saved-notes">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <h4 className="text-base font-bold text-foreground">Saved notes</h4>
-                    <Link
-                      href="/dashboard#workspace-notes"
-                      className="text-sm font-medium text-primary-blue hover:text-primary-blue/80"
-                    >
-                      View all workspace notes
-                    </Link>
-                  </div>
-
-                  {savedNotes.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Your saved note snapshots for this lesson will appear here.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {savedNotes.map((note) => (
-                        <div key={note.id} className="rounded-2xl border border-border bg-background/80 p-4">
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
-                            {formatSavedAt(note.timestamp)}
-                          </p>
-                          <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                            {note.content}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {tab === "resources" && (
-              <div className="space-y-3">
-                {resources.length === 0 ? (
-                  <div className="surface-card p-6 text-sm text-muted-foreground">
-                    No external lesson resources are attached yet.
-                  </div>
-                ) : (
-                  resources.map((resource) => (
-                    <a
-                      key={resource.href}
-                      href={resource.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="surface-card flex items-center gap-4 p-4"
-                    >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
-                        <Download className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-foreground">{resource.name}</p>
-                        <p className="text-xs text-muted-foreground">{resource.type.toUpperCase()}</p>
-                      </div>
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary-blue">
-                        Open <ExternalLink className="h-3 w-3" />
-                      </span>
-                    </a>
-                  ))
-                )}
-              </div>
-            )}
           </div>
         </main>
 
+        {/* Floating AI Panel */}
         <AnimatePresence>
-          {copilotOpen && isDesktopPanel && (
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: 384 }}
-              exit={{ width: 0 }}
-              className="hidden shrink-0 overflow-hidden border-l border-border xl:block"
-            >
-              <AICopilot courseTitle={course.title} onClose={() => setCopilotOpen(false)} />
-            </motion.div>
+          {askAiOpen && (
+            <AskAI 
+              courseTitle={course.title}
+              assistantLabel={askAiAssistantLabel}
+              onClose={() => setAskAiOpen(false)}
+            />
           )}
         </AnimatePresence>
       </div>
-
-      <AnimatePresence>
-        {!isDesktopPanel && copilotOpen ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.18 }}
-            className="pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex flex-col lg:hidden"
-          >
-            <div
-              className="pointer-events-auto mx-3 overflow-hidden rounded-[28px] border border-border bg-card shadow-[0_32px_90px_-40px_rgba(15,23,42,0.72)]"
-              style={{ height: `${mobileCopilotHeight}vh`, marginBottom: mobileCopilotOffset }}
-            >
-              <AICopilot
-                courseTitle={course.title}
-                onClose={() => setCopilotOpen(false)}
-                variant="embedded"
-              />
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 pt-3 backdrop-blur-xl lg:hidden">
-        <div className="rounded-[24px] border border-border bg-card px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_24px_60px_-38px_rgba(15,23,42,0.45)]">
-          <div className="mb-3 flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span>
-              Lesson {Math.max(currentIndex + 1, 1)} of {allLessons.length}
-            </span>
-            <span>{progress}% complete</span>
-          </div>
-
-          <div className="grid grid-cols-5 gap-2">
-            {prevLesson ? (
-              <Link
-                href={`/learn/${course.slug}/${prevLesson.id}`}
-                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-border px-2 py-2 text-[11px] font-semibold text-foreground"
-              >
-                <ChevronLeft className="h-4 w-4 text-primary-blue" />
-                Prev
-              </Link>
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-border px-2 py-2 text-[11px] font-semibold text-muted-foreground">
-                <ChevronLeft className="h-4 w-4" />
-                Prev
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setNotesPanelOpen((current) => !current)}
-              className={cn(
-                "flex flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-[11px] font-semibold transition-colors",
-                notesPanelOpen
-                  ? "border-primary-blue bg-primary-blue text-white"
-                  : "border-border text-foreground"
-              )}
-            >
-              <NotebookText className="h-4 w-4" />
-              Notes
-            </button>
-
-            <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-2 py-2 text-[11px] font-semibold text-primary-blue">
-              <CheckCircle2 className="h-4 w-4" />
-              {completedCount}/{allLessons.length}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setCopilotOpen((current) => !current)}
-              className={cn(
-                "flex flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-[11px] font-semibold transition-colors",
-                copilotOpen
-                  ? "border-primary-blue bg-primary-blue text-white"
-                  : "border-border text-foreground"
-              )}
-            >
-              <Sparkles className="h-4 w-4" />
-              Copilot
-            </button>
-
-            {nextLesson ? (
-              <Link
-                href={`/learn/${course.slug}/${nextLesson.id}`}
-                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-border px-2 py-2 text-[11px] font-semibold text-foreground"
-              >
-                <ChevronRight className="h-4 w-4 text-primary-blue" />
-                Next
-              </Link>
-            ) : hasLockedLessonsAhead ? (
-              <Link
-                href={`/courses/${course.slug}`}
-                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-primary-blue/20 bg-primary-blue/10 px-2 py-2 text-[11px] font-semibold text-primary-blue"
-              >
-                <Lock className="h-4 w-4" />
-                Unlock
-              </Link>
-            ) : (
-              <Link
-                href={`/courses/${course.slug}`}
-                className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-border px-2 py-2 text-[11px] font-semibold text-foreground"
-              >
-                <Award className="h-4 w-4 text-primary-blue" />
-                Course
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {notesPanelOpen && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            transition={{ duration: 0.18 }}
-            className="pointer-events-none fixed inset-0 z-40 flex flex-col"
-          >
-            <div
-              ref={notesPanelRef}
-              className={cn(
-                "overflow-hidden rounded-[28px] border border-border bg-card/96 shadow-[0_32px_90px_-40px_rgba(15,23,42,0.72)] backdrop-blur-xl",
-                isDesktopPanel
-                  ? "pointer-events-auto fixed resize overflow-auto"
-                  : "pointer-events-auto mx-3 mt-auto"
-              )}
-              style={
-                isDesktopPanel
-                  ? {
-                      left: notesPanelPosition.x,
-                      top: notesPanelPosition.y,
-                      width: notesPanelSize.width,
-                      height: notesPanelSize.height,
-                      minWidth: DESKTOP_PANEL_MIN_WIDTH,
-                      minHeight: DESKTOP_PANEL_MIN_HEIGHT,
-                    }
-                  : {
-                      height: `${mobileNotesHeight}vh`,
-                      marginBottom: mobileSheetBottom,
-                    }
-              }
-            >
-              {/* Updated: floating notes panel is draggable on desktop and stays open while the learner navigates the player. */}
-              <div
-                onPointerDown={beginNotesPanelDrag}
-                className={cn(
-                  "flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3",
-                  isDesktopPanel ? "cursor-grab active:cursor-grabbing" : "cursor-default"
-                )}
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
-                    <NotebookText className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-foreground">Notes for {currentLesson.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">{notesStatusLabel}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {isDesktopPanel ? (
-                    <button
-                      type="button"
-                      onClick={resetNotesPanelLayout}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted-foreground hover:border-primary-blue/20 hover:bg-primary-blue/10 hover:text-primary-blue"
-                      aria-label="Reset notes panel layout"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setNotesPanelOpen(false)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted-foreground hover:border-primary-blue/20 hover:bg-primary-blue/10 hover:text-primary-blue"
-                    aria-label="Close notes panel"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex h-[calc(100%-4.25rem)] flex-col">
-                <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Grip className="h-3.5 w-3.5 text-primary-blue" />
-                    {isDesktopPanel ? "Drag from the header and resize from the corner." : "Floating notes panel"}
-                  </div>
-                  <Link
-                    href="/dashboard#workspace-notes"
-                    className="text-xs font-semibold text-primary-blue hover:text-primary-blue/80"
-                  >
-                    Workspace Notes
-                  </Link>
-                </div>
-
-                <div className="flex flex-1 flex-col gap-4 p-4">
-                  <textarea
-                    value={noteContent}
-                    onChange={(event) => setNoteContent(event.target.value)}
-                    placeholder={
-                      viewerId
-                        ? "Capture what matters from this lesson. Your save creates a timestamped snapshot for this lesson."
-                        : "Sign in to save notes for this lesson."
-                    }
-                    disabled={!viewerId}
-                    className="input-surface min-h-[220px] w-full flex-1 resize-none disabled:cursor-not-allowed disabled:opacity-70"
-                  />
-
-                  <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-xs text-muted-foreground">
-                      {noteHasChanges
-                        ? "You have unsaved changes for this lesson."
-                        : savedNotes[0]
-                          ? `Latest lesson snapshot: ${formatSavedAt(savedNotes[0].timestamp)}`
-                          : "No saved lesson snapshot yet."}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void saveNote()}
-                      disabled={!viewerId || !noteCanSave || noteState === "saving"}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {noteState === "saving" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4" />
-                      )}
-                      Save Notes
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   CheckoutQuoteError,
   type CheckoutItemInput,
 } from "@/lib/checkout";
+import type { BillingCycle } from "@/lib/site";
 import { withRequestTiming } from "@/lib/server-performance";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
@@ -14,6 +15,8 @@ export async function POST(request: NextRequest) {
       const body = await request.json().catch(() => ({}));
       const items = Array.isArray(body.items) ? (body.items as CheckoutItemInput[]) : [];
       const planSlug = typeof body.planSlug === "string" ? body.planSlug : null;
+      const billingCycle =
+        body.billingCycle === "yearly" ? ("yearly" as BillingCycle) : ("monthly" as BillingCycle);
       const gateway = typeof body.method === "string" ? body.method : null;
       const country = typeof body.country === "string" ? body.country : null;
       const couponCode =
@@ -27,6 +30,7 @@ export async function POST(request: NextRequest) {
         request,
         items,
         planSlug,
+        billingCycle,
         gateway,
         country,
         couponCode,

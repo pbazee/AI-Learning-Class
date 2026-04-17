@@ -167,7 +167,7 @@ export function AffiliateDashboard() {
       return [];
     }
 
-    const text = encodeURIComponent("Join me on AI Learning Class and explore practical AI training.");
+    const text = encodeURIComponent("Join me on AI GENIUS LAB and explore practical AI training.");
     const url = encodeURIComponent(affiliateLink);
 
     return [
@@ -281,7 +281,7 @@ export function AffiliateDashboard() {
               Growth, commissions, and payouts in one polished view.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-white/88">
-              Share your AI Learning Class link, monitor performance, and manage payouts with a {data.program.payoutGraceDays}-day payout protection window.
+              Share your AI GENIUS LAB link, monitor performance, and manage payouts with a {data.program.payoutGraceDays}-day payout protection window.
             </p>
           </div>
 
@@ -668,4 +668,5 @@ export function AffiliateDashboard() {
     </div>
   );
 }
+
 

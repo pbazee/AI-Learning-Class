@@ -44,3 +44,24 @@ export function resolveMediaUrl({
 }) {
   return normalizeValue(url) || resolveSupabaseStorageUrl(path, bucket) || fallback;
 }
+
+export function appendMediaVersion(
+  url?: string | null,
+  version?: number | string | Date | null
+) {
+  const normalizedUrl = normalizeValue(url);
+
+  if (!normalizedUrl || version == null) {
+    return normalizedUrl;
+  }
+
+  const resolvedVersion =
+    version instanceof Date ? version.getTime() : String(version).trim();
+
+  if (!resolvedVersion) {
+    return normalizedUrl;
+  }
+
+  const separator = normalizedUrl.includes("?") ? "&" : "?";
+  return `${normalizedUrl}${separator}v=${resolvedVersion}`;
+}

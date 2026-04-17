@@ -1,13 +1,23 @@
+import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Trophy, Medal, Award, TrendingUp, Star } from "lucide-react";
 import { getLeaderboard } from "@/lib/data";
+import { buildSiteMetadata } from "@/lib/site-server";
 
 const badgeCopy: Record<string, string> = {
   Trophy: "🏆",
   Silver: "🥈",
   Bronze: "🥉",
 };
+
+export async function generateMetadata(): Promise<Metadata> {
+  return buildSiteMetadata("/leaderboard", {
+    title: "Leaderboard",
+    description:
+      "See the top-performing learners on AI GENIUS LAB based on course completions, progress, and certificates.",
+  });
+}
 
 export default async function LeaderboardPage() {
   const { leaders, stats } = await getLeaderboard();
@@ -24,7 +34,7 @@ export default async function LeaderboardPage() {
               <Trophy className="h-4 w-4" />
               Global Rankings
             </div>
-            <h1 className="mb-3 text-3xl font-black sm:text-4xl">AI Learning Leaderboard</h1>
+            <h1 className="mb-3 text-3xl font-black sm:text-4xl">AI GENIUS LAB Leaderboard</h1>
             <p className="mx-auto max-w-xl text-lg text-blue-100">
               Top learners ranked by completed courses, lesson progress, and certificate milestones.
             </p>

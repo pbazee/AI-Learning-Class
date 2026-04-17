@@ -1,4 +1,4 @@
-import { Navbar } from "@/components/layout/Navbar";
+﻿import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { AffiliatePortal } from "@/components/affiliate/AffiliatePortal";
 import { redirect } from "next/navigation";
@@ -61,7 +61,7 @@ export default async function AffiliatePage() {
             Earn Money Teaching <span className="text-white/90">AI</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base text-white sm:text-lg">
-            Join our affiliate program and earn commissions for every learner you refer to AI Learning Class.
+            Join our affiliate program and earn commissions for every learner you refer to AI Genius Lab.
             Share your passion for AI education and get paid for it with <span className="font-bold text-white">{commissionRate}% commission</span>.
           </p>
           <LinkButton href={ctaHref} label={ctaLabel} />
@@ -111,3 +111,4 @@ function LinkButton({ href, label }: { href: string; label: string }) {
     </a>
   );
 }
+

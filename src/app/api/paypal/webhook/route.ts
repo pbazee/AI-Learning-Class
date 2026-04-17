@@ -44,6 +44,7 @@ async function finalizePaypalOrder(orderPayload: any) {
     orderId: providerState?.orderId,
     providerReference: orderPayload.id,
     planSlug: providerState?.planSlug,
+    billingCycle: providerState?.billingCycle,
     couponCode: providerState?.couponCode,
     affiliateCode: providerState?.affiliateCode,
     customerEmail: orderPayload?.payer?.email_address ?? null,

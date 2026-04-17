@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import { clampPercentage } from "@/lib/site";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 
 export type LessonPlayerNote = {
@@ -35,6 +36,8 @@ type LessonNotesTableCheckRow = {
 
 let lessonNotesTableReady: Promise<boolean> | null = null;
 let lessonNotesTableAvailable = false;
+let lessonProgressColumnsReady: Promise<boolean> | null = null;
+let lessonProgressColumnsAvailable = false;
 
 async function ensureLessonNotesTable() {
   if (lessonNotesTableAvailable) {
@@ -128,12 +131,76 @@ function serializeWorkspaceNote(row: WorkspaceLessonNoteRow): WorkspaceLessonNot
   };
 }
 
+export async function ensureLessonProgressColumns() {
+  if (lessonProgressColumnsAvailable) {
+    return true;
+  }
+
+  if (!lessonProgressColumnsReady) {
+    lessonProgressColumnsReady = (async () => {
+      try {
+        await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "LessonProgress"
+          ADD COLUMN IF NOT EXISTS "progressPercent" DOUBLE PRECISION NOT NULL DEFAULT 0
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "LessonProgress"
+          ADD COLUMN IF NOT EXISTS "lastPdfPage" INTEGER
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          UPDATE "LessonProgress"
+          SET "progressPercent" = CASE WHEN "isCompleted" = TRUE THEN 100 ELSE COALESCE("progressPercent", 0) END
+          WHERE "progressPercent" IS NULL OR ("isCompleted" = TRUE AND "progressPercent" < 100)
+        `);
+
+        lessonProgressColumnsAvailable = true;
+        return true;
+      } catch (error) {
+        lessonProgressColumnsAvailable = false;
+
+        if (isPrismaConnectionError(error)) {
+          console.error(
+            "[lesson-player] Unable to ensure lesson progress columns right now.",
+            error
+          );
+          return false;
+        }
+
+        throw error;
+      }
+    })().catch((error) => {
+      lessonProgressColumnsReady = null;
+      throw error;
+    });
+  }
+
+  const isReady = await lessonProgressColumnsReady;
+
+  if (!isReady) {
+    lessonProgressColumnsReady = null;
+  }
+
+  return isReady;
+}
+
 export async function getCourseProgressState(userId: string, courseId: string) {
-  const [completedRows, totalLessons] = await Promise.all([
+  await ensureLessonProgressColumns();
+
+  const [lessons, progressRows] = await Promise.all([
+    prisma.lesson.findMany({
+      where: {
+        module: {
+          courseId,
+        },
+      },
+      select: {
+        id: true,
+      },
+      orderBy: [{ module: { order: "asc" } }, { order: "asc" }],
+    }),
     prisma.lessonProgress.findMany({
       where: {
         userId,
-        isCompleted: true,
         lesson: {
           module: {
             courseId,
@@ -142,25 +209,50 @@ export async function getCourseProgressState(userId: string, courseId: string) {
       },
       select: {
         lessonId: true,
-      },
-    }),
-    prisma.lesson.count({
-      where: {
-        module: {
-          courseId,
-        },
+        isCompleted: true,
+        progressPercent: true,
+        watchedSeconds: true,
+        lastPdfPage: true,
       },
     }),
   ]);
 
-  const completedLessonIds = completedRows.map((row) => row.lessonId);
+  const lessonProgressByLessonId = Object.fromEntries(
+    progressRows.map((row) => [
+      row.lessonId,
+      {
+        progressPercent: clampPercentage(row.isCompleted ? 100 : row.progressPercent ?? 0),
+        watchedSeconds: row.watchedSeconds,
+        lastPdfPage: row.lastPdfPage ?? null,
+        isCompleted: row.isCompleted,
+      },
+    ])
+  );
+
+  const completedLessonIds = lessons
+    .filter((lesson) => {
+      const progress = lessonProgressByLessonId[lesson.id];
+      return Boolean(progress?.isCompleted || (progress?.progressPercent ?? 0) >= 100);
+    })
+    .map((lesson) => lesson.id);
   const completedCount = completedLessonIds.length;
+  const totalLessons = lessons.length;
+  const percentage =
+    totalLessons > 0
+      ? Math.round(
+          lessons.reduce(
+            (sum, lesson) => sum + (lessonProgressByLessonId[lesson.id]?.progressPercent ?? 0),
+            0
+          ) / totalLessons
+        )
+      : 0;
 
   return {
     completedLessonIds,
     completedCount,
     totalLessons,
-    percentage: totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0,
+    percentage,
+    lessonProgressByLessonId,
   };
 }
 

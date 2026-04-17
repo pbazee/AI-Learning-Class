@@ -1,8 +1,8 @@
 export const DEFAULT_ABOUT_CONTENT = {
-  eyebrow: "About AI Learning Class",
+  eyebrow: "About AI GENIUS LAB",
   title: "Practical AI education for people building real careers.",
   subtitle:
-    "AI Learning Class helps learners move from curiosity to capability with structured courses, production-minded projects, and guided progress that keeps momentum high.",
+    "AI GENIUS LAB helps learners move from curiosity to capability with structured courses, production-minded projects, and guided progress that keeps momentum high.",
   mission:
     "Our mission is to make high-quality AI learning clear, hands-on, and globally accessible for ambitious learners, teams, and operators.",
   story:
@@ -73,3 +73,4 @@ export function getAboutContentFromSocialLinks(value: unknown): AboutContent {
     valueThreeBody: readAboutField(socialLinks, "valueThreeBody"),
   };
 }
+

@@ -177,17 +177,17 @@ export function createCertificatePdfDocument(certificate: CertificatePresentatio
   return (
     <Document
       title={`Certificate of Completion - ${certificate.recipientName}`}
-      author="AI Learning Class"
+      author="AI GENIUS LAB"
       subject={`Official learning credential for ${certificate.courseTitle}`}
-      creator="AI Learning Class"
-      producer="AI Learning Class"
+      creator="AI GENIUS LAB"
+      producer="AI GENIUS LAB"
       creationDate={new Date()}
     >
       <Page size="A4" style={styles.page}>
         <View style={styles.shell}>
           <Text style={styles.badge}>OFFICIAL LEARNING CREDENTIAL</Text>
           <Text style={styles.title}>Certificate of Completion</Text>
-          <Text style={styles.subtitle}>AI Learning Class</Text>
+          <Text style={styles.subtitle}>AI GENIUS LAB</Text>
 
           <Text style={styles.recipientLabel}>This certifies that</Text>
           <Text style={styles.recipient}>{certificate.recipientName}</Text>
@@ -205,7 +205,7 @@ export function createCertificatePdfDocument(certificate: CertificatePresentatio
               <Text style={styles.panelValue}>{certificate.statusLabel}</Text>
 
               <View style={styles.signatureWrap}>
-                <Text style={styles.signatureText}>AI Learning Class</Text>
+                <Text style={styles.signatureText}>AI GENIUS LAB</Text>
                 <View style={styles.signatureLine} />
                 <Text style={styles.signatureLabel}>Admin Signature</Text>
               </View>
@@ -235,3 +235,4 @@ export function CertificatePdfDocument({
 }) {
   return createCertificatePdfDocument(certificate);
 }
+

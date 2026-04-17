@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -89,14 +89,14 @@ export function ReferralsDashboard() {
       return [];
     }
 
-    const message = encodeURIComponent("Join AI Learning Class with my referral link and start learning practical AI skills.");
+    const message = encodeURIComponent("Join AI Genius Lab with my referral link and start learning practical AI skills.");
     const encodedUrl = encodeURIComponent(referralLink);
 
     return [
       { label: "WhatsApp", href: `https://wa.me/?text=${message}%20${encodedUrl}` },
       { label: "LinkedIn", href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}` },
       { label: "X", href: `https://twitter.com/intent/tweet?text=${message}&url=${encodedUrl}` },
-      { label: "Email", href: `mailto:?subject=Join%20AI%20Learning%20Class&body=${message}%20${encodedUrl}` },
+      { label: "Email", href: `mailto:?subject=Join%20AI%20Genius%20Lab&body=${message}%20${encodedUrl}` },
     ];
   }, [referralLink]);
 
@@ -290,7 +290,7 @@ export function ReferralsDashboard() {
                     </div>
                     {referral.friendRewardCode || referral.referrerRewardCode ? (
                       <p className="mt-3 text-xs text-muted-foreground">
-                        Codes: {[referral.friendRewardCode, referral.referrerRewardCode].filter(Boolean).join(" • ")}
+                        Codes: {[referral.friendRewardCode, referral.referrerRewardCode].filter(Boolean).join(" | ")}
                       </p>
                     ) : null}
                     {referral.fraudReason ? (
@@ -314,3 +314,4 @@ export function ReferralsDashboard() {
     </div>
   );
 }
+

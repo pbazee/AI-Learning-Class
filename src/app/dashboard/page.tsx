@@ -3,6 +3,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import {
   Award,
   CreditCard,
@@ -113,7 +114,7 @@ export default async function DashboardPage() {
   const purchasedCourseCount = new Set(purchasedItems.map((item) => item.courseId)).size;
   const hasTeamsSubscription = activeSubscription?.plan.slug === "teams";
   const subscriptionSummary = activeSubscription
-    ? `${activeSubscription.status.toLowerCase().replace("_", " ")} • ${activeSubscription.billingCycle}`
+    ? `${activeSubscription.status.toLowerCase().replace("_", " ")} | ${activeSubscription.billingCycle}`
     : "Upgrade anytime from pricing";
 
   const recentActivity = [
@@ -249,7 +250,10 @@ export default async function DashboardPage() {
                               src={enrollment.course.thumbnailUrl || thumbnailFallback}
                               alt={enrollment.course.title}
                               fill
-                              quality={100}
+                              quality={75}
+                              placeholder="blur"
+                              blurDataURL={IMAGE_BLUR_DATA_URL}
+                              sizes="(min-width: 640px) 96px, 100vw"
                               className="object-cover"
                             />
                           </div>
@@ -443,10 +447,10 @@ export default async function DashboardPage() {
               <div className="rounded-2xl border border-primary-blue/20 bg-primary-blue/10 p-5">
                 <div className="mb-3 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary-blue" />
-                  <h2 className="text-sm font-bold text-foreground">AI Tutor</h2>
+                  <h2 className="text-sm font-bold text-foreground">Ask AI</h2>
                 </div>
                 <p className="mb-4 text-xs text-muted-foreground">
-                  Ask for summaries, practice questions, and study planning help tied to your real courses.
+                  Get summaries, practice questions, and study planning help tied to your real courses.
                 </p>
                 <Link
                   href="/courses"

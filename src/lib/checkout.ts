@@ -11,6 +11,7 @@ import {
   type SupportedCheckoutCurrency,
 } from "@/lib/checkout-currency";
 import { prisma } from "@/lib/prisma";
+import { resolveYearlyPrice, type BillingCycle } from "@/lib/site";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
 export type CheckoutGateway = "stripe" | "paypal" | "paystack";
@@ -36,6 +37,7 @@ export type CheckoutQuote = {
   appliedCouponCode: string | null;
   appliedCouponDescription: string | null;
   planSlug: string | null;
+  billingCycle: BillingCycle | null;
 };
 
 export class CheckoutQuoteError extends Error {
@@ -143,7 +145,10 @@ async function resolveManualCoupon(couponCode?: string | null) {
   return coupon;
 }
 
-async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | null> {
+async function getManagedPlanItem(
+  planSlug: string,
+  billingCycle: BillingCycle
+): Promise<CheckoutLineItem | null> {
   await ensureSubscriptionPlansTable();
   const plan = await prisma.subscriptionPlan.findUnique({
     where: { slug: planSlug },
@@ -151,6 +156,7 @@ async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | 
       currency: true,
       name: true,
       price: true,
+      yearlyPrice: true,
       isActive: true,
     },
   });
@@ -162,8 +168,13 @@ async function getManagedPlanItem(planSlug: string): Promise<CheckoutLineItem | 
   return {
     currency: normalizeCheckoutCurrency(plan.currency),
     kind: "plan",
-    title: `${plan.name} Plan`,
-    price: plan.price,
+    title: `${plan.name} ${billingCycle === "yearly" ? "Yearly" : "Monthly"} Plan`,
+    price:
+      billingCycle === "yearly"
+        ? roundCurrencyAmount(
+            resolveYearlyPrice(plan.price, plan.yearlyPrice) ?? plan.price * 12
+          )
+        : plan.price,
   };
 }
 
@@ -242,6 +253,7 @@ export async function buildCheckoutQuote({
   request,
   items,
   planSlug,
+  billingCycle,
   gateway,
   country,
   couponCode,
@@ -252,6 +264,7 @@ export async function buildCheckoutQuote({
   request: NextRequest;
   items?: CheckoutItemInput[];
   planSlug?: string | null;
+  billingCycle?: BillingCycle | null;
   gateway?: CheckoutGateway | null;
   country?: string | null;
   couponCode?: string | null;
@@ -260,7 +273,11 @@ export async function buildCheckoutQuote({
   userId?: string | null;
 }): Promise<CheckoutQuote> {
   const normalizedPlanSlug = planSlug?.trim().toLowerCase() || null;
-  const planItem = normalizedPlanSlug ? await getManagedPlanItem(normalizedPlanSlug) : null;
+  const normalizedBillingCycle: BillingCycle =
+    billingCycle === "yearly" ? "yearly" : "monthly";
+  const planItem = normalizedPlanSlug
+    ? await getManagedPlanItem(normalizedPlanSlug, normalizedBillingCycle)
+    : null;
   const sourceLineItems = planItem ? [planItem] : await sanitizeCartItems(items ?? [], userId);
   const quoteCurrency = resolveCheckoutCurrency({
     gateway,
@@ -289,5 +306,6 @@ export async function buildCheckoutQuote({
     appliedCouponCode: coupon?.code ?? null,
     appliedCouponDescription: coupon?.description ?? null,
     planSlug: planItem ? normalizedPlanSlug : null,
+    billingCycle: planItem ? normalizedBillingCycle : null,
   };
 }

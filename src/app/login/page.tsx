@@ -1,14 +1,16 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Brain, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
+import { SiteLogo } from "@/components/layout/SiteLogo";
 import {
   buildAuthCallbackUrl,
   DEFAULT_AFTER_AUTH,
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
+import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { createClient } from "@/lib/supabase";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -48,12 +50,46 @@ function LoginPageInner() {
   const [loading, setLoading] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
   const [newsletterOptIn, setNewsletterOptIn] = useState(true);
+  const [branding, setBranding] = useState({
+    siteName: DEFAULT_SITE_NAME,
+    logoUrl: "",
+  });
   const [error, setError] = useState<string | null>(
     callbackError === "oauth_failed" ? "Google sign-in failed. Please try again." :
     callbackError === "magic_link_failed" ? "Your magic link expired or is invalid. Please request a new one." :
     callbackError === "auth_callback_failed" ? "Authentication failed. Please try again." :
     null
   );
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadBranding() {
+      try {
+        const response = await fetch("/api/settings?keys=siteName,logoUrl", {
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!mounted || !response.ok || !payload) {
+          return;
+        }
+
+        setBranding({
+          siteName: payload.siteName?.trim() || DEFAULT_SITE_NAME,
+          logoUrl: payload.logoUrl || "",
+        });
+      } catch {
+        // Auth pages fall back to the default brand mark if settings are unavailable.
+      }
+    }
+
+    void loadBranding();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   async function syncNewsletterPreference(nextEmail: string) {
     if (!newsletterOptIn || !nextEmail.trim()) {
@@ -173,13 +209,13 @@ function LoginPageInner() {
       >
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-sm">
-              <Brain className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-xl text-foreground">
-              AI Learning <span className="text-blue-600">Class</span>
-            </span>
+          <Link href="/" className="inline-flex items-center justify-center">
+            <SiteLogo
+              siteName={branding.siteName}
+              logoUrl={branding.logoUrl || undefined}
+              compact
+              textClassName="text-foreground"
+            />
           </Link>
           <h1 className="text-2xl font-black text-foreground mt-6 mb-1">Welcome back</h1>
           <p className="text-muted-foreground text-sm">Sign in to continue your AI learning journey</p>

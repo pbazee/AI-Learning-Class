@@ -4,13 +4,16 @@ import { getUserCourseAccessMap } from "@/lib/data";
 import { recordUserCourseOwnership } from "@/lib/learner-records";
 import { syncCourseEnrollmentCount } from "@/lib/course-metrics";
 import { prisma } from "@/lib/prisma";
-import { getCourseProgressState } from "@/lib/lesson-player";
+import { ensureLessonProgressColumns, getCourseProgressState } from "@/lib/lesson-player";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 
 const progressPayloadSchema = z.object({
   isCompleted: z.boolean().optional(),
   touchOnly: z.boolean().optional(),
+  progressPercent: z.number().min(0).max(100).optional(),
+  watchedSeconds: z.number().min(0).optional(),
+  lastPdfPage: z.number().int().min(1).optional(),
 });
 
 export async function POST(
@@ -36,6 +39,7 @@ export async function POST(
     }
 
     const payload = progressPayloadSchema.parse(await request.json());
+    await ensureLessonProgressColumns();
     const lesson = await prisma.lesson.findUnique({
       where: { id: lessonId },
       select: {
@@ -67,7 +71,6 @@ export async function POST(
         },
       },
       update: {
-        status: "ACTIVE",
         expiresAt: courseAccess.expiresAt ? new Date(courseAccess.expiresAt) : null,
       },
       create: {
@@ -86,6 +89,21 @@ export async function POST(
     });
     await syncCourseEnrollmentCount(lesson.module.courseId);
 
+    const existingProgress = await prisma.lessonProgress.findUnique({
+      where: {
+        userId_lessonId: {
+          userId: profile.id,
+          lessonId,
+        },
+      },
+      select: {
+        progressPercent: true,
+        watchedSeconds: true,
+        lastPdfPage: true,
+        isCompleted: true,
+      },
+    });
+
     if (payload.touchOnly) {
       await prisma.lessonProgress.upsert({
         where: {
@@ -103,10 +121,38 @@ export async function POST(
           userId: profile.id,
           lessonId,
           isCompleted: false,
+          progressPercent: 0,
           completedAt: null,
         },
       });
-    } else if (typeof payload.isCompleted === "boolean") {
+    } else if (
+      typeof payload.isCompleted === "boolean" ||
+      typeof payload.progressPercent === "number" ||
+      typeof payload.watchedSeconds === "number"
+    ) {
+      const nextProgressPercent =
+        typeof payload.progressPercent === "number"
+          ? Math.max(existingProgress?.progressPercent ?? 0, payload.progressPercent)
+          : payload.isCompleted
+            ? 100
+            : payload.isCompleted === false
+              ? Math.min(existingProgress?.progressPercent ?? 0, 99)
+              : existingProgress?.progressPercent ?? 0;
+      const nextWatchedSeconds =
+        typeof payload.watchedSeconds === "number"
+          ? Math.max(existingProgress?.watchedSeconds ?? 0, Math.round(payload.watchedSeconds))
+          : existingProgress?.watchedSeconds ?? 0;
+      const nextLastPdfPage =
+        typeof payload.lastPdfPage === "number"
+          ? Math.max(1, Math.round(payload.lastPdfPage))
+          : existingProgress?.lastPdfPage ?? null;
+      const nextIsCompleted =
+        payload.isCompleted === true
+          ? true
+          : payload.isCompleted === false
+            ? false
+            : nextProgressPercent >= 100 || existingProgress?.isCompleted === true;
+
       await prisma.lessonProgress.upsert({
         where: {
           userId_lessonId: {
@@ -115,14 +161,20 @@ export async function POST(
           },
         },
         update: {
-          isCompleted: payload.isCompleted,
-          completedAt: payload.isCompleted ? new Date() : null,
+          isCompleted: nextIsCompleted,
+          progressPercent: nextProgressPercent,
+          watchedSeconds: nextWatchedSeconds,
+          lastPdfPage: nextLastPdfPage,
+          completedAt: nextIsCompleted ? new Date() : null,
         },
         create: {
           userId: profile.id,
           lessonId,
-          isCompleted: payload.isCompleted,
-          completedAt: payload.isCompleted ? new Date() : null,
+          isCompleted: nextIsCompleted,
+          progressPercent: nextProgressPercent,
+          watchedSeconds: nextWatchedSeconds,
+          lastPdfPage: nextLastPdfPage,
+          completedAt: nextIsCompleted ? new Date() : null,
         },
       });
     } else {
@@ -130,6 +182,21 @@ export async function POST(
     }
 
     const progress = await getCourseProgressState(profile.id, lesson.module.courseId);
+
+    if (progress.percentage === 100) {
+      await prisma.enrollment.update({
+        where: {
+          userId_courseId: {
+            userId: profile.id,
+            courseId: lesson.module.courseId,
+          },
+        },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,

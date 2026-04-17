@@ -240,6 +240,7 @@ export interface SubscriptionPlan {
   description?: string;
   price: number;
   yearlyPrice?: number;
+  askAiLimit?: number;
   currency: string;
   features: string[];
   isPopular: boolean;
@@ -316,5 +317,6 @@ export interface BlogPost {
   authorName?: string;
   tags: string[];
   publishedAt?: string;
+  publishedAtIso?: string;
   readTime?: string;
 }

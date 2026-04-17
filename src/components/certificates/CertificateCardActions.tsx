@@ -28,7 +28,7 @@ export function CertificateCardActions({
     try {
       if (navigator.share) {
         await navigator.share({
-          title: "AI Learning Class Certificate",
+          title: "AI GENIUS LAB Certificate",
           text: `View certificate ${code}`,
           url: shareUrl,
         });
@@ -68,3 +68,4 @@ export function CertificateCardActions({
     </div>
   );
 }
+

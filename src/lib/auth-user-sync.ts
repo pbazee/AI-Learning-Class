@@ -35,7 +35,7 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
     },
     create: {
       id: "singleton",
-      siteName: "AI Learning Class",
+      siteName: "AI GENIUS LAB",
       adminEmail: configuredAdminEmail,
     },
     select: {
@@ -119,3 +119,4 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
     },
   });
 }
+

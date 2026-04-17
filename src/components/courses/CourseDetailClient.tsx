@@ -4,16 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
-import { AICopilot } from "@/components/courses/AICopilot";
+import { AskAI } from "@/components/courses/AskAI";
+import { ExpiredSubscriptionNotice } from "@/components/courses/ExpiredSubscriptionNotice";
 import { CoursePreviewModal } from "@/components/courses/CoursePreviewModal";
 import { CourseReviewsSection } from "@/components/courses/CourseReviewsSection";
 import { useToast } from "@/components/ui/ToastProvider";
+import { DEFAULT_ASK_AI_NAME } from "@/lib/site";
 import {
   buildFreeCourseLoginPath,
   enrollInFreeCourse,
 } from "@/lib/course-enrollment";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { useCartStore } from "@/store/cart";
 import {
   Star,
@@ -50,11 +51,21 @@ export function CourseDetailClient({
   viewer,
   courseAccess,
   previewState,
+  askAiEnabled,
+  askAiAssistantLabel = DEFAULT_ASK_AI_NAME,
+  expiredAccess,
 }: {
   course: Course;
   viewer: { id: string; name?: string | null } | null;
   courseAccess?: CourseAccessState;
   previewState?: CoursePreviewState | null;
+  askAiEnabled: boolean;
+  askAiAssistantLabel?: string;
+  expiredAccess?: {
+    expiredAt?: string | null;
+    planSlug?: string | null;
+    billingCycle?: "monthly" | "yearly" | null;
+  } | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -62,7 +73,7 @@ export function CourseDetailClient({
   const modules = course.modules ?? [];
   const autoEnrollTriggeredRef = useRef(false);
   const [expandedModule, setExpandedModule] = useState<string | null>(modules[0]?.id ?? null);
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [askAiOpen, setAskAiOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const { addItem, isInCart, removeItem } = useCartStore();
@@ -70,6 +81,10 @@ export function CourseDetailClient({
   const isFreeCourse = course.price === 0 || course.isFree;
   const resolvedCourseAccess = courseAccess ?? previewState?.courseAccess;
   const hasAccess = Boolean(resolvedCourseAccess?.hasAccess);
+  const defaultLessonId = modules[0]?.lessons[0]?.id;
+  const classroomHref =
+    resolvedCourseAccess?.lessonHref ??
+    (defaultLessonId ? `/learn/${course.slug}/${defaultLessonId}` : `/courses/${course.slug}`);
   const shouldAutoEnroll = searchParams.get("enroll") === "free";
   const hasPreviewContent =
     Boolean(previewState?.previewLessons?.length) ||
@@ -159,8 +174,8 @@ export function CourseDetailClient({
   }
 
   async function handlePrimaryAction() {
-    if (hasAccess && resolvedCourseAccess?.lessonHref) {
-      router.push(resolvedCourseAccess.lessonHref);
+    if (hasAccess) {
+      router.push(classroomHref);
       return;
     }
 
@@ -169,10 +184,7 @@ export function CourseDetailClient({
 
   function handlePreviewAccessAction() {
     setPreviewOpen(false);
-
-    if (resolvedCourseAccess?.lessonHref) {
-      router.push(resolvedCourseAccess.lessonHref);
-    }
+    router.push(classroomHref);
   }
 
   const discount =
@@ -196,7 +208,10 @@ export function CourseDetailClient({
           src={course.thumbnailUrl || thumbnailFallback}
           alt={course.title}
           fill
-          quality={100}
+          quality={75}
+          placeholder="blur"
+          blurDataURL={IMAGE_BLUR_DATA_URL}
+          sizes="(min-width: 1024px) 33vw, 100vw"
           className="object-cover opacity-60 transition-all duration-500 group-hover:scale-[1.02] group-hover:opacity-80"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-slate-950/10 via-slate-950/10 to-slate-950/70" />
@@ -211,8 +226,15 @@ export function CourseDetailClient({
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
+    <div className="min-h-screen">
+
+      {expiredAccess ? (
+        <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+          <ExpiredSubscriptionNotice
+            renewHref={`/checkout?plan=${expiredAccess.planSlug === "teams" ? "teams" : "pro"}&billing=${expiredAccess.billingCycle ?? "monthly"}`}
+          />
+        </div>
+      ) : null}
 
       <div className="border-b border-primary-blue/10 bg-gradient-to-b from-primary-blue/10 via-white to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-950">
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -333,16 +355,33 @@ export function CourseDetailClient({
                         </button>
                       )}
 
-                      <button
-                        onClick={() => setCopilotOpen(true)}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3 text-sm font-medium text-primary-blue transition-all hover:bg-primary-blue/15"
-                      >
-                        <Sparkles className="h-4 w-4" /> Ask AI Copilot about this course
-                      </button>
+                      {askAiEnabled ? (
+                        <button
+                          onClick={() => setAskAiOpen(true)}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3 text-sm font-medium text-primary-blue transition-all hover:bg-primary-blue/15"
+                        >
+                          <Sparkles className="h-4 w-4" /> {askAiAssistantLabel} about this course
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
               </div>
+
+              <details className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm" open>
+                <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-left">
+                  <div>
+                    <p className="text-lg font-bold text-foreground">About this course</p>
+                    <p className="mt-1 text-sm text-muted-foreground">The full course overview learners see on the detail page.</p>
+                  </div>
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                </summary>
+                <div className="border-t border-border px-5 py-4">
+                  <div className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                    {course.description}
+                  </div>
+                </div>
+              </details>
 
               <details className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm" open>
                 <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-left">
@@ -554,7 +593,7 @@ export function CourseDetailClient({
                         alt={course.instructorName}
                         width={44}
                         height={44}
-                        quality={100}
+                        quality={75}
                         className="rounded-full ring-2 ring-primary-blue/30"
                       />
                     )}
@@ -567,6 +606,13 @@ export function CourseDetailClient({
               </div>
 
               <div className="space-y-10">
+                <div>
+                  <h2 className="mb-5 text-2xl font-black text-foreground">About This Course</h2>
+                  <div className="max-w-4xl whitespace-pre-wrap text-base leading-8 text-muted-foreground">
+                    {course.description}
+                  </div>
+                </div>
+
                 <div>
                   <h2 className="mb-5 text-2xl font-black text-foreground">What You&apos;ll Learn</h2>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -749,12 +795,14 @@ export function CourseDetailClient({
                       </button>
                     )}
 
-                    <button
-                      onClick={() => setCopilotOpen(true)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3 text-sm font-medium text-primary-blue transition-all hover:bg-primary-blue/15"
-                    >
-                      <Sparkles className="h-4 w-4" /> Ask AI Copilot about this course
-                    </button>
+                    {askAiEnabled ? (
+                      <button
+                        onClick={() => setAskAiOpen(true)}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3 text-sm font-medium text-primary-blue transition-all hover:bg-primary-blue/15"
+                      >
+                        <Sparkles className="h-4 w-4" /> {askAiAssistantLabel} about this course
+                      </button>
+                    ) : null}
                   </div>
 
                   <p className="mt-4 text-center text-xs text-muted-foreground">30-day money-back guarantee</p>
@@ -766,7 +814,7 @@ export function CourseDetailClient({
                         `${formatDuration(course.totalDuration)} on-demand video`,
                         `${course.totalLessons} lessons & exercises`,
                         "Downloadable resources & code",
-                        "AI co-pilot learning assistant",
+                        `${askAiAssistantLabel} learning assistant`,
                         "Certificate of completion",
                         "Lifetime access",
                       ].map((item) => (
@@ -797,9 +845,13 @@ export function CourseDetailClient({
         open={previewOpen}
         previewState={previewState}
       />
-      {copilotOpen && <AICopilot courseTitle={course.title} onClose={() => setCopilotOpen(false)} />}
-
-      <Footer />
+      {askAiEnabled && askAiOpen ? (
+        <AskAI
+          courseTitle={course.title}
+          assistantLabel={askAiAssistantLabel}
+          onClose={() => setAskAiOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

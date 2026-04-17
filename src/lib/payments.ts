@@ -12,6 +12,7 @@ import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
 import { evaluateAffiliateFraud } from "@/lib/growth-utils";
 import { recordUserCourseOwnership } from "@/lib/learner-records";
 import { prisma } from "@/lib/prisma";
+import type { BillingCycle } from "@/lib/site";
 import {
   ensureOwnerTeamWorkspace,
   syncWorkspaceMemberAccessWindow,
@@ -48,12 +49,14 @@ function chooseLaterDate(left?: Date | null, right?: Date | null) {
 
 export function encodeProviderState({
   affiliateCode,
+  billingCycle,
   couponCode,
   orderId,
   planSlug,
 }: {
   orderId: string;
   planSlug?: string | null;
+  billingCycle?: BillingCycle | null;
   couponCode?: string | null;
   affiliateCode?: string | null;
 }) {
@@ -61,6 +64,7 @@ export function encodeProviderState({
     JSON.stringify({
       orderId,
       planSlug: normalizeOptionalValue(planSlug),
+      billingCycle: billingCycle === "yearly" ? "yearly" : "monthly",
       couponCode: normalizeOptionalValue(couponCode),
       affiliateCode: normalizeOptionalValue(affiliateCode),
     }),
@@ -80,6 +84,7 @@ export function decodeProviderState(value?: string | null) {
       Buffer.from(normalizedValue, "base64url").toString("utf8")
     ) as {
       affiliateCode?: string | null;
+      billingCycle?: string | null;
       couponCode?: string | null;
       orderId?: string | null;
       planSlug?: string | null;
@@ -93,6 +98,7 @@ export function decodeProviderState(value?: string | null) {
     return {
       orderId,
       planSlug: normalizeOptionalValue(decoded.planSlug),
+      billingCycle: decoded.billingCycle === "yearly" ? "yearly" : "monthly",
       couponCode: normalizeOptionalValue(decoded.couponCode),
       affiliateCode: normalizeOptionalValue(decoded.affiliateCode),
     };
@@ -288,8 +294,10 @@ async function activatePlanAccess(
 
   const now = new Date();
   const currentPeriodStart = options?.currentPeriodStart ?? now;
-  const currentPeriodEnd = options?.currentPeriodEnd ?? addMonths(currentPeriodStart, 1);
   const billingCycle = options?.billingCycle ?? "monthly";
+  const currentPeriodEnd =
+    options?.currentPeriodEnd ??
+    addMonths(currentPeriodStart, billingCycle.toLowerCase() === "yearly" ? 12 : 1);
   const stripeSubscriptionId = normalizeOptionalValue(options?.stripeSubscriptionId);
 
   const existingSubscription = stripeSubscriptionId
@@ -353,7 +361,7 @@ async function activatePlanAccess(
   let teamWorkspaceId: string | null = null;
 
   if (plan.slug === "teams") {
-    const workspace = await ensureOwnerTeamWorkspace(transaction, userId, "AI Learning Class Team");
+    const workspace = await ensureOwnerTeamWorkspace(transaction, userId, "AI GENIUS LAB Team");
     teamWorkspaceId = workspace.id;
     await syncWorkspaceMemberAccessWindow(transaction, workspace.id, currentPeriodEnd);
   }
@@ -823,7 +831,7 @@ export async function syncManagedStripeSubscription({
         const workspace = await ensureOwnerTeamWorkspace(
           transaction,
           subscription.userId,
-          "AI Learning Class Team"
+          "AI GENIUS LAB Team"
         );
         teamWorkspaceId = workspace.id;
         await syncWorkspaceMemberAccessWindow(transaction, workspace.id, currentPeriodEnd);
@@ -874,3 +882,4 @@ export async function syncManagedStripeSubscription({
     return subscription.id;
   });
 }
+

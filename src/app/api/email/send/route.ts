@@ -1,4 +1,4 @@
-// src/app/api/email/send/route.ts
+﻿// src/app/api/email/send/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 type EmailType = "enrollment" | "certificate" | "welcome" | "admin_alert";
@@ -11,25 +11,24 @@ interface EmailPayload {
 
 function buildEmailHTML(type: EmailType, data: Record<string, string>): { subject: string; html: string } {
   const baseStyle = `font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #060614; color: #f9fafb;`;
-  const accentColor = "#00d4ff";
 
   switch (type) {
     case "welcome":
       return {
-        subject: `Welcome to AI Learning Class, ${data.name}! 🚀`,
+        subject: `Welcome to AI Genius Lab, ${data.name}!`,
         html: `
           <div style="${baseStyle} padding: 40px 20px; max-width: 600px; margin: 0 auto;">
             <div style="text-align: center; margin-bottom: 32px;">
               <h1 style="font-size: 28px; font-weight: 900; background: linear-gradient(135deg, #00d4ff, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-                AI Learning Class
+                AI Genius Lab
               </h1>
             </div>
-            <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 16px;">Welcome aboard, ${data.name}! 🎉</h2>
+            <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 16px;">Welcome aboard, ${data.name}!</h2>
             <p style="color: #9ca3af; line-height: 1.6; margin-bottom: 24px;">
               You've joined 500,000+ AI learners worldwide. Your personalized learning path is ready.
             </p>
             <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard" style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #00d4ff, #7c3aed); color: white; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px;">
-              Start Learning →
+              Start Learning
             </a>
           </div>
         `,
@@ -37,7 +36,7 @@ function buildEmailHTML(type: EmailType, data: Record<string, string>): { subjec
 
     case "enrollment":
       return {
-        subject: `You're enrolled in "${data.courseTitle}" ✅`,
+        subject: `You're enrolled in "${data.courseTitle}"`,
         html: `
           <div style="${baseStyle} padding: 40px 20px; max-width: 600px; margin: 0 auto;">
             <h2 style="font-size: 22px; font-weight: 800; margin-bottom: 12px; color: #00d4ff;">Enrollment Confirmed!</h2>
@@ -47,10 +46,10 @@ function buildEmailHTML(type: EmailType, data: Record<string, string>): { subjec
               Start learning at your own pace, anytime, anywhere.
             </p>
             <a href="${process.env.NEXT_PUBLIC_APP_URL}/courses/${data.courseSlug}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #00d4ff, #7c3aed); color: white; text-decoration: none; border-radius: 12px; font-weight: 700;">
-              Go to Course →
+              Go to Course
             </a>
             <p style="color: #6b7280; font-size: 12px; margin-top: 32px;">
-              Order ID: ${data.orderId} · Receipt: ${data.receiptUrl || "Sent separately"}
+              Order ID: ${data.orderId} | Receipt: ${data.receiptUrl || "Sent separately"}
             </p>
           </div>
         `,
@@ -58,11 +57,10 @@ function buildEmailHTML(type: EmailType, data: Record<string, string>): { subjec
 
     case "certificate":
       return {
-        subject: `🏆 Your Certificate for "${data.courseTitle}" is ready!`,
+        subject: `Your certificate for "${data.courseTitle}" is ready!`,
         html: `
           <div style="${baseStyle} padding: 40px 20px; max-width: 600px; margin: 0 auto;">
             <div style="text-align: center; margin-bottom: 32px;">
-              <div style="font-size: 48px; margin-bottom: 16px;">🏆</div>
               <h2 style="font-size: 24px; font-weight: 900; color: #f59e0b;">Congratulations, ${data.name}!</h2>
               <p style="color: #9ca3af; margin-top: 8px;">You've completed <strong style="color: white;">${data.courseTitle}</strong></p>
             </div>
@@ -71,7 +69,7 @@ function buildEmailHTML(type: EmailType, data: Record<string, string>): { subjec
               <p style="color: #00d4ff; font-family: monospace; font-size: 18px; font-weight: 700;">${data.certificateCode}</p>
             </div>
             <a href="${process.env.NEXT_PUBLIC_APP_URL}/certificates/${data.certificateCode}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; text-decoration: none; border-radius: 12px; font-weight: 700;">
-              Download Certificate →
+              Download Certificate
             </a>
           </div>
         `,
@@ -89,7 +87,7 @@ function buildEmailHTML(type: EmailType, data: Record<string, string>): { subjec
       };
 
     default:
-      return { subject: "AI Learning Class", html: "<p>Notification from AI Learning Class</p>" };
+      return { subject: "AI Genius Lab", html: "<p>Notification from AI Genius Lab</p>" };
   }
 }
 
@@ -98,7 +96,7 @@ export async function POST(req: NextRequest) {
     const payload: EmailPayload = await req.json();
 
     if (!process.env.RESEND_API_KEY) {
-      console.log("📧 Email would be sent:", payload.type, "→", payload.to);
+      console.log("[email] Would send:", payload.type, "to", payload.to);
       return NextResponse.json({ sent: false, reason: "RESEND_API_KEY not configured" });
     }
 
@@ -108,7 +106,7 @@ export async function POST(req: NextRequest) {
     const { subject, html } = buildEmailHTML(payload.type, payload.data);
 
     const result = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || "noreply@ailearning.com",
+      from: process.env.RESEND_FROM_EMAIL || "noreply@aigeniuslab.com",
       to: payload.to,
       subject,
       html,
@@ -120,3 +118,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ sent: false, error: error.message }, { status: 500 });
   }
 }
+

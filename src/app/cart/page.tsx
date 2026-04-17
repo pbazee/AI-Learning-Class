@@ -2,8 +2,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
+import { NavbarClient } from "@/components/layout/NavbarClient";
+import { FooterClient } from "@/components/layout/FooterClient";
 import { useCartStore } from "@/store/cart";
 import { formatPrice } from "@/lib/utils";
 import { X, ShoppingCart, ArrowRight, Shield, Tag } from "lucide-react";
@@ -23,7 +23,7 @@ export default function CartPage() {
 
   return (
     <div className="site-shell">
-      <Navbar />
+      <NavbarClient />
       <div className="pb-20 pt-8">
         <div className="section-frame">
           <div className="mb-8 flex items-end justify-between gap-4">
@@ -58,7 +58,14 @@ export default function CartPage() {
                   <div key={item.courseId} className="surface-card flex items-start gap-4 p-5">
                     {item.thumbnailUrl && (
                       <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-2xl bg-blue-50">
-                        <Image src={item.thumbnailUrl} alt={item.title} fill className="object-cover" />
+                        <Image
+                          src={item.thumbnailUrl}
+                          alt={item.title}
+                          fill
+                          quality={75}
+                          sizes="128px"
+                          className="object-cover"
+                        />
                       </div>
                     )}
 
@@ -163,7 +170,7 @@ export default function CartPage() {
           )}
         </div>
       </div>
-      <Footer />
+      <FooterClient />
     </div>
   );
 }

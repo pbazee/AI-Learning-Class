@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { ArrowRight, Clock, BookOpen } from "lucide-react";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import type { BlogPost } from "@/types";
 
 export function BlogSection({ posts }: { posts: BlogPost[] }) {
@@ -51,7 +52,11 @@ export function BlogSection({ posts }: { posts: BlogPost[] }) {
                         src={post.coverImage}
                         alt={post.title}
                         fill
-                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                        quality={75}
+                        placeholder="blur"
+                        blurDataURL={IMAGE_BLUR_DATA_URL}
+                        sizes="(min-width: 1024px) 30vw, (min-width: 768px) 33vw, 100vw"
+                        className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
                       />
                     )}
                     <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">

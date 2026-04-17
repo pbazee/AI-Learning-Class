@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Sparkles,
 } from "lucide-react";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { resolveMediaUrl } from "@/lib/media";
 import type { Category } from "@/types";
 
@@ -30,10 +31,10 @@ const iconMap: Record<string, ElementType> = {
 };
 
 const fallbackImages = [
-  "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=1600&fit=crop",
-  "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&h=1600&fit=crop",
-  "https://images.unsplash.com/photo-1676299081847-824916de030a?w=1200&h=1600&fit=crop",
-  "https://images.unsplash.com/photo-1674027444485-cec3da58eef4?w=1200&h=1600&fit=crop",
+  "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=800&fit=crop",
+  "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&h=800&fit=crop",
+  "https://images.unsplash.com/photo-1676299081847-824916de030a?w=1200&h=800&fit=crop",
+  "https://images.unsplash.com/photo-1674027444485-cec3da58eef4?w=1200&h=800&fit=crop",
 ];
 
 export function CategoriesGrid({
@@ -85,21 +86,23 @@ export function CategoriesGrid({
               >
                 <Link
                   href={`/courses?category=${category.slug}`}
-                  className="group relative flex min-h-[420px] overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_28px_90px_-42px_rgba(15,23,42,0.7)] transition-all duration-500 hover:-translate-y-1.5 hover:border-primary-blue/35 hover:shadow-[0_35px_120px_-40px_rgba(59,130,246,0.38)]"
+                  className="group relative flex min-h-[320px] overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-[0_28px_90px_-42px_rgba(15,23,42,0.7)] transition-all duration-500 hover:-translate-y-1.5 hover:border-primary-blue/35 hover:shadow-[0_35px_120px_-40px_rgba(59,130,246,0.38)] sm:min-h-[392px]"
                 >
                   <Image
                     src={imageSrc}
                     alt={category.name}
                     fill
-                    quality={100}
-                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                    quality={75}
+                    placeholder="blur"
+                    blurDataURL={IMAGE_BLUR_DATA_URL}
+                    sizes="(min-width: 1280px) 23vw, (min-width: 1024px) 25vw, (min-width: 640px) 48vw, 86vw"
                     className="object-cover transition-transform duration-700 group-hover:scale-105"
                   />
                   <div className="absolute inset-0 bg-slate-950/10" />
                   {/* Updated: keep the image dominant and move the copy/action into the lower 25-30% of the card. */}
                   <div className="absolute inset-x-0 bottom-0 h-[28%] bg-gradient-to-t from-slate-950/96 via-slate-950/58 to-transparent" />
 
-                  <div className="relative z-10 flex h-full w-full flex-col justify-between p-6">
+                  <div className="relative z-10 flex h-full w-full flex-col justify-between p-5 sm:p-6">
                     <div className="flex items-start">
                       <div className="inline-flex items-center gap-2 rounded-full border border-white/18 bg-black/35 px-3.5 py-2 shadow-[0_10px_35px_rgba(2,6,23,0.35)] backdrop-blur-md">
                         <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/16 bg-white/10">
@@ -111,7 +114,7 @@ export function CategoriesGrid({
                       </div>
                     </div>
 
-                    <div className="mt-auto max-w-[15.75rem] space-y-4 pt-52 sm:pt-56">
+                    <div className="mt-auto max-w-[15rem] space-y-3 pt-36 sm:pt-56">
                       <p className="line-clamp-3 text-sm leading-6 text-slate-100 drop-shadow-[0_8px_24px_rgba(2,6,23,0.8)] sm:text-base">
                         {category.description ||
                           "Explore a premium AI learning track designed to move you from foundations to real-world execution."}

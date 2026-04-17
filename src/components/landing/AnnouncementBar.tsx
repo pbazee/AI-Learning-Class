@@ -88,7 +88,7 @@ export function AnnouncementBar() {
       style={{ backgroundColor: ann.bgColor || "#1d4ed8" }}
     >
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08),transparent,rgba(255,255,255,0.08))]" />
-      <div className="relative mx-auto flex min-h-10 max-w-7xl items-center justify-center gap-2 px-6 py-1.5 sm:px-8">
+      <div className="header-frame relative flex min-h-8 items-center justify-center gap-2 py-1 pr-10 sm:pr-12">
         {activeAnnouncements.length > 1 && (
           <button
             onClick={() => setCurrent((p) => (p - 1 + activeAnnouncements.length) % activeAnnouncements.length)}
@@ -98,7 +98,7 @@ export function AnnouncementBar() {
           </button>
         )}
 
-        <p className="truncate text-center text-[11px] font-semibold tracking-[0.02em] text-white sm:text-[13px]">
+        <p className="min-w-0 flex-1 truncate text-center text-[11px] font-semibold tracking-[0.02em] text-white sm:text-[13px]">
           {ann.text}
           {ann.link && ann.linkText && (
             <Link

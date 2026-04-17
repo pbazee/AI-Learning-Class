@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
     },
     create: {
       id: "singleton",
-      siteName: "AI Learning Class",
+      siteName: DEFAULT_SITE_NAME,
       supportEmail: supportEmail || null,
       supportPhone: supportPhone || null,
       supportAddress: supportAddress || null,
@@ -81,3 +82,4 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ success: true, message: "Settings saved successfully." });
 }
+

@@ -151,12 +151,12 @@ function getApiRateLimitRule(request: NextRequest): RateLimitRule | null {
     };
   }
 
-  if (pathname.startsWith("/api/copilot")) {
+  if (pathname.startsWith("/api/ask-ai")) {
     return {
-      id: "copilot",
+      id: "ask-ai",
       limit: 30,
       windowMs: 5 * 60 * 1000,
-      message: "Too many AI Copilot requests. Please wait a moment and try again.",
+      message: "Too many Ask AI requests. Please wait a moment and try again.",
     };
   }
 
@@ -311,6 +311,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/stripe/webhook|api/paypal/webhook|api/paystack/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon|apple-icon|api/stripe/webhook|api/paypal/webhook|api/paystack/webhook|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

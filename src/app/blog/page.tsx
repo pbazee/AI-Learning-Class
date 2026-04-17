@@ -1,9 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Clock, BookOpen, Tag } from "lucide-react";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { getBlogPosts } from "@/lib/data";
+import { buildSiteMetadata } from "@/lib/site-server";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return buildSiteMetadata("/blog", {
+    title: "AI GENIUS LAB Blog",
+    description:
+      "Read AI GENIUS LAB articles on LLM engineering, machine learning, prompt design, product strategy, and modern AI workflows.",
+  });
+}
 
 export default async function BlogPage() {
   const posts = await getBlogPosts();
@@ -38,7 +49,7 @@ export default async function BlogPage() {
               <span className="text-sm font-medium uppercase tracking-wider text-blue-600">AI Journal</span>
             </div>
             <h1 className="mb-3 text-4xl font-black text-foreground">
-              The <span className="text-blue-600">AI Learning</span> Blog
+              The <span className="text-blue-600">AI GENIUS LAB</span> Blog
             </h1>
             <p className="max-w-2xl text-muted-foreground">
               Deep dives on LLMs, ML research breakdowns, career guides, and tutorials from leading AI practitioners.
@@ -57,7 +68,11 @@ export default async function BlogPage() {
                         src={featured.coverImage}
                         alt={featured.title}
                         fill
-                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                        quality={75}
+                        placeholder="blur"
+                        blurDataURL={IMAGE_BLUR_DATA_URL}
+                        sizes="(min-width: 1024px) 52vw, 100vw"
+                        className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
                       />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
@@ -108,7 +123,11 @@ export default async function BlogPage() {
                             src={post.coverImage}
                             alt={post.title}
                             fill
-                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                            quality={75}
+                            placeholder="blur"
+                            blurDataURL={IMAGE_BLUR_DATA_URL}
+                            sizes="(min-width: 1024px) 26vw, (min-width: 640px) 50vw, 100vw"
+                            className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
                           />
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />

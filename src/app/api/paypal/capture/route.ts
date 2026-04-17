@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       orderId: providerState?.orderId,
       providerReference: payload.id,
       planSlug: providerState?.planSlug,
+      billingCycle: providerState?.billingCycle,
       couponCode: providerState?.couponCode,
       affiliateCode: providerState?.affiliateCode,
       customerEmail:

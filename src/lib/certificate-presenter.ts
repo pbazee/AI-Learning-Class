@@ -61,7 +61,7 @@ export function getCertificatePdfFileName(input: {
   courseTitle: string;
   recipientName: string;
 }) {
-  return `ai-learning-class-certificate-${slugify(input.recipientName)}-${slugify(input.courseTitle) || "course"}.pdf`;
+  return `ai-genius-lab-certificate-${slugify(input.recipientName)}-${slugify(input.courseTitle) || "course"}.pdf`;
 }
 
 export function getCertificateHref(code: string) {
@@ -84,7 +84,7 @@ export async function buildCertificatePresentation(
   certificate: CertificatePresentationSource,
   options?: CertificatePresentationOptions
 ): Promise<CertificatePresentation> {
-  const recipientName = certificate.user.name || certificate.user.email || "AI Learning Class Learner";
+  const recipientName = certificate.user.name || certificate.user.email || "AI GENIUS LAB Learner";
   const courseTitle = certificate.course.title;
   const issuedLabel = issuedDateFormatter.format(new Date(certificate.issuedAt));
   const certificateHref = getCertificateHref(certificate.code);
@@ -92,7 +92,7 @@ export async function buildCertificatePresentation(
   const verifyDisplayUrl = verifyUrl.replace(/^https?:\/\//, "");
   const viewPdfHref = getCertificatePdfHref(certificate.code);
   const downloadPdfHref = getCertificatePdfHref(certificate.code, { download: true });
-  const completionStatement = `successfully completed ${courseTitle}, demonstrating practical achievement through AI Learning Class coursework.`;
+  const completionStatement = `successfully completed ${courseTitle}, demonstrating practical achievement through AI GENIUS LAB coursework.`;
   const fileName = getCertificatePdfFileName({
     courseTitle,
     recipientName,
@@ -107,7 +107,7 @@ export async function buildCertificatePresentation(
     },
   });
 
-  const shareTitle = `I earned the ${courseTitle} certificate on AI Learning Class`;
+  const shareTitle = `I earned the ${courseTitle} certificate on AI GENIUS LAB`;
   const shareBody = `${shareTitle}. Verify it here: ${verifyUrl}`;
 
   return {
@@ -127,7 +127,8 @@ export async function buildCertificatePresentation(
     shareLinks: {
       linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(verifyUrl)}`,
       x: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareTitle)}&url=${encodeURIComponent(verifyUrl)}`,
-      email: `mailto:?subject=${encodeURIComponent("My AI Learning Class Certificate")}&body=${encodeURIComponent(shareBody)}`,
+      email: `mailto:?subject=${encodeURIComponent("My AI GENIUS LAB Certificate")}&body=${encodeURIComponent(shareBody)}`,
     },
   };
 }
+

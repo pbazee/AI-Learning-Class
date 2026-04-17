@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { X, Send, Sparkles, Bot, User, Loader2, Lock } from "lucide-react";
+import { DEFAULT_ASK_AI_NAME } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -11,7 +12,7 @@ interface Message {
   timestamp: Date;
 }
 
-type CopilotQuota = {
+type AskAiQuota = {
   planName: string;
   limit: number;
   used: number;
@@ -19,9 +20,10 @@ type CopilotQuota = {
   monthKey: string;
 };
 
-interface AICopilotProps {
+interface AskAIProps {
   courseTitle: string;
   onClose: () => void;
+  assistantLabel?: string;
   variant?: "overlay" | "embedded";
   className?: string;
 }
@@ -33,22 +35,23 @@ const suggestions = [
   "What projects will I build?",
 ];
 
-export function AICopilot({
+export function AskAI({
   courseTitle,
   onClose,
+  assistantLabel = DEFAULT_ASK_AI_NAME,
   variant = "overlay",
   className,
-}: AICopilotProps) {
+}: AskAIProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: `Hi! I'm your AI learning copilot for **"${courseTitle}"**. I can summarize concepts, create practice questions, and help you plan your study sessions.`,
+      content: `Hi! I'm your **${assistantLabel}** assistant for **"${courseTitle}"**. I can summarize concepts, create practice questions, and help you plan your study sessions.`,
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [quota, setQuota] = useState<CopilotQuota | null>(null);
+  const [quota, setQuota] = useState<AskAiQuota | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(true);
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -66,15 +69,21 @@ export function AICopilot({
     let cancelled = false;
 
     async function loadQuota() {
+      // Coordinated delay: Prevents auth lock contention when multiple 
+      // authenticated fetches fire simultaneously on mount.
+      await new Promise(resolve => setTimeout(resolve, 400));
+      
+      if (cancelled) return;
+
       setQuotaLoading(true);
       setQuotaError(null);
 
       try {
-        const response = await fetch("/api/copilot");
+        const response = await fetch("/api/ask-ai");
         const payload = await response.json().catch(() => null);
 
         if (!response.ok || !payload?.quota) {
-          throw new Error(payload?.error || "Please sign in to use AI Copilot.");
+          throw new Error(payload?.error || `Please sign in to use ${assistantLabel}.`);
         }
 
         if (!cancelled) {
@@ -83,7 +92,9 @@ export function AICopilot({
       } catch (error) {
         if (!cancelled) {
           setQuota(null);
-          setQuotaError(error instanceof Error ? error.message : "Unable to load AI Copilot quota.");
+          setQuotaError(
+            error instanceof Error ? error.message : `Unable to load ${assistantLabel} quota.`
+          );
         }
       } finally {
         if (!cancelled) {
@@ -97,7 +108,7 @@ export function AICopilot({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [assistantLabel]);
 
   async function sendMessage(content: string) {
     if (!content.trim() || loading) return;
@@ -109,7 +120,7 @@ export function AICopilot({
           role: "assistant",
           content: quota
             ? `You have reached your ${quota.planName} plan limit for this month.`
-            : "Please sign in to use AI Copilot.",
+            : `Please sign in to use ${assistantLabel}.`,
           timestamp: new Date(),
         },
       ]);
@@ -122,7 +133,7 @@ export function AICopilot({
     setLoading(true);
 
     try {
-      const res = await fetch("/api/copilot", {
+      const res = await fetch("/api/ask-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -183,7 +194,7 @@ export function AICopilot({
     ? `${quota.remaining} of ${quota.limit} requests left this month`
     : quotaLoading
       ? "Loading quota..."
-      : quotaError || "Please sign in to use AI Copilot";
+      : quotaError || `Please sign in to use ${assistantLabel}`;
 
   const inputDisabled = loading || quotaLoading || !quota || quota.remaining <= 0;
   const motionProps =
@@ -203,10 +214,10 @@ export function AICopilot({
     <motion.div
       {...motionProps}
       className={cn(
-        "flex h-full w-full flex-col bg-white dark:bg-slate-950",
+        "flex w-full flex-col bg-white dark:bg-slate-950",
         variant === "overlay"
-          ? "fixed right-0 top-0 z-50 border-l border-border shadow-[0_0_60px_rgba(15,23,42,0.12)] sm:w-96"
-          : "border-0 shadow-none",
+          ? "fixed inset-x-0 bottom-0 z-[120] max-h-[calc(100vh-120px)] overflow-hidden rounded-t-[28px] border border-border shadow-[0_0_60px_rgba(15,23,42,0.12)] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[26rem] sm:rounded-[30px]"
+          : "h-full border-0 shadow-none",
         className
       )}
     >
@@ -216,11 +227,14 @@ export function AICopilot({
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <div className="text-sm font-bold text-foreground">AI Learning Copilot</div>
+            <div className="text-sm font-bold text-foreground">{assistantLabel}</div>
             <div className="text-xs text-muted-foreground">{quota?.planName || "Free"} plan</div>
           </div>
         </div>
-        <button onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-card hover:text-foreground">
+        <button
+          onClick={onClose}
+          className="rounded-lg p-2 text-muted-foreground hover:bg-card hover:text-foreground"
+        >
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -228,7 +242,9 @@ export function AICopilot({
       <div className="border-b border-border bg-background px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">Monthly quota</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-blue">
+              Monthly quota
+            </p>
             <p className="mt-1 text-sm text-foreground">{quotaLabel}</p>
           </div>
           {quota && quota.remaining <= 0 ? (
@@ -239,13 +255,18 @@ export function AICopilot({
         </div>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto bg-background p-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-background p-4">
         {messages.map((msg, i) => (
-          <div key={i} className={cn("flex gap-3", msg.role === "user" ? "flex-row-reverse" : "flex-row")}>
+          <div
+            key={i}
+            className={cn("flex gap-3", msg.role === "user" ? "flex-row-reverse" : "flex-row")}
+          >
             <div
               className={cn(
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl",
-                msg.role === "assistant" ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                msg.role === "assistant"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
               )}
             >
               {msg.role === "assistant" ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
@@ -279,7 +300,9 @@ export function AICopilot({
 
       {messages.length === 1 && (
         <div className="border-t border-border px-4 py-3">
-          <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Quick prompts</p>
+          <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            Quick prompts
+          </p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((suggestion) => (
               <button
@@ -303,7 +326,7 @@ export function AICopilot({
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={quota ? "Ask anything about this course..." : "Sign in to unlock AI Copilot"}
+            placeholder={quota ? "Ask anything about this course..." : `Sign in to unlock ${assistantLabel}`}
             disabled={inputDisabled}
             className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
           />
@@ -322,3 +345,5 @@ export function AICopilot({
     </motion.div>
   );
 }
+
+export const AICopilot = AskAI;

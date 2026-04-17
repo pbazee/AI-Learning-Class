@@ -20,6 +20,7 @@ import { HOMEPAGE_PARAGRAPH_SECTION_KEYS } from "@/lib/homepage-paragraphs";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
 import { PUBLIC_CACHE_TAGS } from "@/lib/cache-config";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
+import { DEFAULT_ASK_AI_NAME, DEFAULT_SITE_NAME } from "@/lib/site";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 import { deleteAdminStorageObjects } from "@/lib/supabase-admin";
 import { syncSupabaseAuthRole } from "@/lib/supabase-auth-admin";
@@ -102,7 +103,8 @@ const courseSchema = z.object({
   thumbnailUrl: z.string().optional(),
   thumbnailPath: z.string().optional(),
   categoryId: z.string().min(1, "Select a category."),
-  instructorId: z.string().min(1, "Select an instructor."),
+  instructorId: z.string().optional(),
+  instructorName: z.string().trim().min(1, "Type an instructor name."),
   level: z.enum(levelOptions),
   language: z.string().optional(),
   price: z.coerce.number().min(0),
@@ -178,6 +180,7 @@ const planSchema = z.object({
   description: z.string().optional(),
   price: z.coerce.number().min(0),
   yearlyPrice: z.coerce.number().min(0).optional(),
+  askAiLimit: z.coerce.number().int().min(0).optional().default(20),
   currency: z.string().min(3).default("USD"),
   features: z.array(z.string()).optional().default([]),
   coursesIncluded: z.array(z.string()).optional().default([]),
@@ -278,12 +281,25 @@ const faqSchema = z.object({
 
 const settingsSchema = z.object({
   siteName: z.string().min(2, "Site name is required."),
+  logoUrl: z.string().optional(),
+  faviconUrl: z.string().optional(),
   supportEmail: z.string().optional(),
   supportPhone: z.string().optional(),
   adminEmail: z.string().optional(),
   supportAddress: z.string().optional(),
   maintenanceMode: z.boolean().optional().default(false),
   socialLinks: z.record(z.string()).optional().default({}),
+});
+
+const askAiSettingsSchema = z.object({
+  enabled: z.boolean().optional().default(true),
+  assistantLabel: z.string().min(2).max(60).optional().default(DEFAULT_ASK_AI_NAME),
+  systemPrompt: z.string().max(2000).optional().default(""),
+});
+
+const askAiPlanLimitSchema = z.object({
+  planId: z.string().min(1),
+  askAiLimit: z.coerce.number().int().min(0),
 });
 
 const homepageParagraphSchema = z.object({
@@ -354,6 +370,57 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
+}
+
+function normalizeInstructorDisplayName(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+async function resolveCourseInstructorId({
+  instructorId,
+  instructorName,
+}: {
+  instructorId?: string;
+  instructorName: string;
+}) {
+  const explicitInstructorId = optionalString(instructorId);
+
+  if (explicitInstructorId) {
+    return explicitInstructorId;
+  }
+
+  const normalizedInstructorName = normalizeInstructorDisplayName(instructorName);
+  const existingInstructor = await prisma.user.findFirst({
+    where: {
+      role: { in: ["INSTRUCTOR", "ADMIN", "SUPER_ADMIN"] },
+      name: {
+        equals: normalizedInstructorName,
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingInstructor) {
+    return existingInstructor.id;
+  }
+
+  // Create a reusable placeholder profile so free-text instructors can still be linked consistently.
+  const placeholderLocalPart = `${slugify(normalizedInstructorName) || "instructor"}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+  const createdInstructor = await prisma.user.create({
+    data: {
+      email: `${placeholderLocalPart}@placeholder.aigeniuslab.local`,
+      name: normalizedInstructorName,
+      role: "INSTRUCTOR",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  return createdInstructor.id;
 }
 
 async function ensureUniqueCourseSlug(baseValue: string, reserved = new Set<string>()) {
@@ -1041,14 +1108,14 @@ export async function getUserDetailsAction(userId: string) {
         id: `order-${order.id}`,
         type: "payment",
         label: `Payment ${order.status.toLowerCase()}`,
-        detail: `${order.items.map((item) => item.course.title).join(", ") || "Course purchase"} • ${order.currency} ${order.totalAmount}`,
+        detail: `${order.items.map((item) => item.course.title).join(", ") || "Course purchase"} | ${order.currency} ${order.totalAmount}`,
         date: order.createdAt.toISOString(),
       })),
       ...user.progress.slice(0, 8).map((progress) => ({
         id: `progress-${progress.id}`,
         type: "lesson",
         label: progress.isCompleted ? "Completed lesson" : "Visited lesson",
-        detail: `${progress.lesson.title} • ${progress.lesson.module.course.title}`,
+        detail: `${progress.lesson.title} | ${progress.lesson.module.course.title}`,
         date: (progress.completedAt ?? progress.updatedAt).toISOString(),
       })),
       ...user.subscriptions.map((subscription) => ({
@@ -1154,6 +1221,10 @@ export async function saveCourseAction(input: z.input<typeof courseSchema>) {
     "saveCourse",
     ["/admin", "/admin/courses", "/courses", "/"],
     async (values) => {
+      const instructorId = await resolveCourseInstructorId({
+        instructorId: values.instructorId,
+        instructorName: values.instructorName,
+      });
       const slug = slugify(values.slug || values.title);
       const isFree = Boolean(values.isFree);
       const payload = {
@@ -1166,7 +1237,7 @@ export async function saveCourseAction(input: z.input<typeof courseSchema>) {
         thumbnailUrl: optionalString(values.thumbnailUrl),
         thumbnailPath: optionalString(values.thumbnailPath),
         categoryId: values.categoryId,
-        instructorId: values.instructorId,
+        instructorId,
         level: values.level as Level,
         language: optionalString(values.language) || "English",
         price: isFree ? 0 : values.price,
@@ -1468,6 +1539,7 @@ export async function saveSubscriptionPlanAction(input: z.input<typeof planSchem
           description: optionalString(values.description),
           price: values.price,
           yearlyPrice: optionalNumber(values.yearlyPrice),
+          askAiLimit: values.askAiLimit ?? 20,
           currency: values.currency.toUpperCase(),
           features: uniqueStrings(values.features),
           coursesIncluded: uniqueStrings(values.coursesIncluded),
@@ -1480,6 +1552,7 @@ export async function saveSubscriptionPlanAction(input: z.input<typeof planSchem
           description: optionalString(values.description),
           price: values.price,
           yearlyPrice: optionalNumber(values.yearlyPrice),
+          askAiLimit: values.askAiLimit ?? 20,
           currency: values.currency.toUpperCase(),
           features: uniqueStrings(values.features),
           coursesIncluded: uniqueStrings(values.coursesIncluded),
@@ -1704,7 +1777,7 @@ export async function replyToContactMessageAction(
         },
       });
 
-      const senderName = siteSettings?.siteName?.trim() || "AI Learning Class";
+      const senderName = siteSettings?.siteName?.trim() || "AI Genius Lab";
       const senderEmail = normalizeEmail(siteSettings?.supportEmail) || undefined;
 
       const reply = await prisma.$transaction(async (tx) => {
@@ -1910,12 +1983,14 @@ export async function saveSiteSettingsAction(input: z.input<typeof settingsSchem
     settingsSchema,
     input,
     "saveSiteSettings",
-    ["/admin/settings", "/", "/pricing", "/about"],
+    ["/admin/settings", "/", "/pricing", "/about", "/faqs", "/courses", "/blog"],
     async (values) =>
       prisma.siteSettings.upsert({
         where: { id: "singleton" },
         update: {
           siteName: values.siteName.trim(),
+          logoUrl: optionalString(values.logoUrl),
+          faviconUrl: optionalString(values.faviconUrl),
           supportEmail: optionalString(values.supportEmail),
           supportPhone: optionalString(values.supportPhone),
           adminEmail: optionalString(values.adminEmail),
@@ -1926,6 +2001,8 @@ export async function saveSiteSettingsAction(input: z.input<typeof settingsSchem
         create: {
           id: "singleton",
           siteName: values.siteName.trim(),
+          logoUrl: optionalString(values.logoUrl),
+          faviconUrl: optionalString(values.faviconUrl),
           supportEmail: optionalString(values.supportEmail),
           supportPhone: optionalString(values.supportPhone),
           adminEmail: optionalString(values.adminEmail),
@@ -1959,6 +2036,68 @@ export async function saveHomepageParagraphAction(input: z.input<typeof homepage
   );
 }
 
+export async function saveAskAiSettingsAction(input: z.input<typeof askAiSettingsSchema>) {
+  return runValidatedAdminAction(
+    askAiSettingsSchema,
+    input,
+    "saveAskAiSettings",
+    ["/admin/ask-ai", "/courses", "/learn"],
+    async (values) => {
+      const existing = await prisma.siteSettings.findUnique({
+        where: { id: "singleton" },
+        select: {
+          socialLinks: true,
+        },
+      });
+
+      const existingSocialLinks =
+        existing?.socialLinks && typeof existing.socialLinks === "object" && !Array.isArray(existing.socialLinks)
+          ? Object.fromEntries(Object.entries(existing.socialLinks).map(([key, value]) => [key, String(value)]))
+          : {};
+
+      const socialLinks = {
+        ...existingSocialLinks,
+        askAiEnabled: String(values.enabled ?? true),
+        askAiAssistantLabel: values.assistantLabel?.trim() || DEFAULT_ASK_AI_NAME,
+        askAiSystemPrompt: values.systemPrompt?.trim() || "",
+      };
+
+      return prisma.siteSettings.upsert({
+        where: { id: "singleton" },
+        update: {
+          socialLinks,
+        },
+        create: {
+          id: "singleton",
+          siteName: DEFAULT_SITE_NAME,
+          socialLinks,
+        },
+      });
+    },
+    "Ask AI settings saved successfully."
+  );
+}
+
+export async function updateAskAiPlanLimitAction(input: z.input<typeof askAiPlanLimitSchema>) {
+  return runValidatedAdminAction(
+    askAiPlanLimitSchema,
+    input,
+    "updateAskAiPlanLimit",
+    ["/admin/ask-ai", "/admin/subscriptions", "/pricing", "/"],
+    async (values) => {
+      await ensureSubscriptionPlansTable();
+
+      return prisma.subscriptionPlan.update({
+        where: { id: values.planId },
+        data: {
+          askAiLimit: values.askAiLimit,
+        },
+      });
+    },
+    "Ask AI plan limit updated."
+  );
+}
+
 export async function deleteHomepageParagraphAction(input: z.input<typeof homepageParagraphDeleteSchema>) {
   return runValidatedAdminAction(
     homepageParagraphDeleteSchema,
@@ -1978,7 +2117,7 @@ export async function saveFaqAction(input: z.input<typeof faqSchema>) {
     faqSchema,
     input,
     "saveFaq",
-    ["/admin/settings"],
+    ["/admin/settings", "/faqs"],
     async (values) =>
       prisma.fAQ.upsert({
         where: { id: values.id || "__new__" },
@@ -2002,7 +2141,7 @@ export async function saveFaqAction(input: z.input<typeof faqSchema>) {
 export async function deleteFaqAction(id: string) {
   return runAdminAction(
     "deleteFaq",
-    ["/admin/settings"],
+    ["/admin/settings", "/faqs"],
     async () => prisma.fAQ.delete({ where: { id } }),
     "FAQ deleted successfully."
   );
@@ -2060,7 +2199,7 @@ export async function sendNewsletterAction(input: z.input<typeof newsletterSchem
       const fromAddress =
         process.env.RESEND_FROM_EMAIL ||
         siteSettings?.supportEmail ||
-        "noreply@ailearningclass.com";
+        "noreply@aigeniuslab.com";
 
       await resend.emails.send({
         from: fromAddress,
@@ -2069,7 +2208,7 @@ export async function sendNewsletterAction(input: z.input<typeof newsletterSchem
         html: `
           <div style="font-family: Inter, Arial, sans-serif; margin: 0 auto; max-width: 720px; padding: 32px; background: #f8fbff; color: #0f172a;">
             <p style="margin: 0 0 12px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">
-              ${siteSettings?.siteName || "AI Learning Class"}
+              ${siteSettings?.siteName || "AI Genius Lab"}
             </p>
             <h1 style="margin: 0 0 12px; font-size: 32px; line-height: 1.15; color: #020617;">
               ${values.subject.trim()}
@@ -2091,3 +2230,4 @@ export async function sendNewsletterAction(input: z.input<typeof newsletterSchem
     "Newsletter sent successfully."
   );
 }
+

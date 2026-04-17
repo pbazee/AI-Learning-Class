@@ -31,6 +31,7 @@ export default async function AdminSubscriptionsPage() {
         description: plan.description,
         price: plan.price,
         yearlyPrice: plan.yearlyPrice,
+        askAiLimit: plan.askAiLimit,
         currency: plan.currency,
         features: plan.features,
         coursesIncluded: plan.coursesIncluded,

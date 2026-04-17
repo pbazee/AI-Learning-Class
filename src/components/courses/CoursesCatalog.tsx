@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
 import { CourseCard } from "@/components/courses/CourseCard";
 import { useStorefrontPersonalization } from "@/components/storefront/StorefrontPersonalizationProvider";
 import { Search, X } from "lucide-react";
@@ -183,8 +181,7 @@ export function CoursesCatalog({
     specialFilter !== "all";
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
+    <div className="bg-background">
       <div>
         <div className="border-b border-border bg-card">
           <div className="bg-primary-blue">
@@ -286,7 +283,6 @@ export function CoursesCatalog({
 
           {filtered.length === 0 ? (
             <div className="py-24 text-center">
-              <div className="mb-4 text-6xl">AI</div>
               <h3 className="mb-2 text-xl font-bold text-foreground">No courses found</h3>
               <p className="mb-6 text-muted-foreground">Try adjusting your filters or search term.</p>
               <button
@@ -312,7 +308,6 @@ export function CoursesCatalog({
           )}
         </div>
       </div>
-      <Footer />
     </div>
   );
 }

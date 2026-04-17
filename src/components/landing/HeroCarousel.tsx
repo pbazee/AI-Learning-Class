@@ -13,6 +13,7 @@ import {
   Star,
   Users,
 } from "lucide-react";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import type { HeroSlide } from "@/types";
 
 type HeroStat = {
@@ -126,7 +127,9 @@ export function HeroCarousel({
             alt={currentSlide.title}
             fill
             priority
-            quality={100}
+            quality={75}
+            placeholder="blur"
+            blurDataURL={IMAGE_BLUR_DATA_URL}
             className="object-cover object-[58%_center] sm:object-center"
             sizes="100vw"
           />

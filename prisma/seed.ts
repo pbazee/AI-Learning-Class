@@ -22,10 +22,10 @@ const trustedLogos = [
 ];
 
 async function main() {
-  console.log("🌱 Seeding database...");
+  console.log("ðŸŒ± Seeding database...");
 
   // Categories
-  console.log("📁 Seeding categories...");
+  console.log("ðŸ“ Seeding categories...");
   for (const cat of seedCategories) {
     await prisma.category.upsert({
       where: { slug: cat.slug },
@@ -47,13 +47,13 @@ async function main() {
     update: {},
     create: {
       email: "instructor@ailearning.com",
-      name: "AI Learning Class",
+      name: "AI Genius Lab",
       role: "INSTRUCTOR",
     },
   });
 
   // Courses
-  console.log("📚 Seeding 20 AI courses...");
+  console.log("ðŸ“š Seeding 20 AI courses...");
   for (const course of seedCourses) {
     await prisma.course.upsert({
       where: { slug: course.slug },
@@ -87,7 +87,7 @@ async function main() {
   }
 
   // Hero slides
-  console.log("🖼️  Seeding hero slides...");
+  console.log("ðŸ–¼ï¸  Seeding hero slides...");
   for (const slide of seedHeroSlides) {
     await prisma.heroSlide.upsert({
       where: { id: slide.id },
@@ -97,7 +97,7 @@ async function main() {
   }
 
   // Announcements
-  console.log("📢 Seeding announcements...");
+  console.log("ðŸ“¢ Seeding announcements...");
   for (const ann of seedAnnouncements) {
     await prisma.announcement.upsert({
       where: { id: ann.id },
@@ -113,7 +113,7 @@ async function main() {
   }
 
   // Subscription plans
-  console.log("💳 Seeding subscription plans...");
+  console.log("ðŸ’³ Seeding subscription plans...");
   for (const plan of seedSubscriptionPlans) {
     await prisma.subscriptionPlan.upsert({
       where: { slug: plan.slug },
@@ -156,12 +156,14 @@ async function main() {
   await prisma.siteSettings.upsert({
     where: { id: "singleton" },
     update: {
+      siteName: "AI GENIUS LAB",
+      supportEmail: "support@aigeniuslab.com",
       adminEmail: primaryAdminEmail,
     },
     create: {
       id: "singleton",
-      siteName: "AI Learning Class",
-      supportEmail: "support@ailearning.com",
+      siteName: "AI GENIUS LAB",
+      supportEmail: "support@aigeniuslab.com",
       adminEmail: primaryAdminEmail,
     },
   });
@@ -180,18 +182,19 @@ async function main() {
     },
   });
 
-  console.log("✅ Database seeded successfully!");
-  console.log(`   📚 ${seedCourses.length} courses`);
-  console.log(`   📁 ${seedCategories.length} categories`);
-  console.log(`   🖼️  ${seedHeroSlides.length} hero slides`);
-  console.log(`   📢 ${seedAnnouncements.length} announcements`);
-  console.log(`   💳 ${seedSubscriptionPlans.length} subscription plans`);
+  console.log("âœ… Database seeded successfully!");
+  console.log(`   ðŸ“š ${seedCourses.length} courses`);
+  console.log(`   ðŸ“ ${seedCategories.length} categories`);
+  console.log(`   ðŸ–¼ï¸  ${seedHeroSlides.length} hero slides`);
+  console.log(`   ðŸ“¢ ${seedAnnouncements.length} announcements`);
+  console.log(`   ðŸ’³ ${seedSubscriptionPlans.length} subscription plans`);
   console.log(`   trusted logos: ${trustedLogos.length}`);
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Seed error:", e);
+    console.error("âŒ Seed error:", e);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
+

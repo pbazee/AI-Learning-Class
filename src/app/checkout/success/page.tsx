@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Navbar } from "@/components/layout/Navbar";
+import { NavbarClient } from "@/components/layout/NavbarClient";
 import { Check, BookOpen, Award, ArrowRight, Sparkles, Mail } from "lucide-react";
 
 export default function CheckoutSuccessPage() {
@@ -18,7 +18,7 @@ export default function CheckoutSuccessPage() {
 
   return (
     <div className="site-shell">
-      <Navbar />
+      <NavbarClient />
 
       {confetti && (
         <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">

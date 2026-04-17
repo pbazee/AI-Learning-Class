@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import { getActiveCatalogEntitlement } from "@/lib/access-control";
 import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "@/lib/prisma";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
@@ -8,7 +9,13 @@ type UserAiUsageRow = {
   request_count: number;
 };
 
-export type CopilotQuota = {
+type AskAiPlanRecord = {
+  slug?: string | null;
+  name?: string | null;
+  askAiLimit?: number | null;
+};
+
+export type AskAiQuota = {
   planName: string;
   limit: number;
   used: number;
@@ -24,7 +31,11 @@ function getCurrentMonthKey() {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function getPlanLimit(plan?: { slug?: string | null; name?: string | null } | null) {
+function getPlanLimit(plan?: AskAiPlanRecord | null) {
+  if (typeof plan?.askAiLimit === "number" && Number.isFinite(plan.askAiLimit)) {
+    return Math.max(0, Math.round(plan.askAiLimit));
+  }
+
   const normalized = `${plan?.slug ?? ""} ${plan?.name ?? ""}`.trim().toLowerCase();
 
   if (normalized.includes("team")) {
@@ -38,7 +49,7 @@ function getPlanLimit(plan?: { slug?: string | null; name?: string | null } | nu
   return 20;
 }
 
-function getPlanName(plan?: { name?: string | null } | null) {
+function getPlanName(plan?: AskAiPlanRecord | null) {
   return plan?.name?.trim() || "Free";
 }
 
@@ -74,7 +85,7 @@ async function ensureUserAiUsageTable() {
         if (isPrismaConnectionError(error)) {
           logPrismaConnectionEvent(
             "userAiUsageTable",
-            "[copilot-usage] Unable to ensure the AI usage table right now.",
+            "[ask-ai-usage] Unable to ensure the Ask AI usage table right now.",
             error,
             "warn"
           );
@@ -98,34 +109,46 @@ async function ensureUserAiUsageTable() {
   return isReady;
 }
 
-export async function getUserCopilotQuota(userId: string): Promise<CopilotQuota> {
+async function resolveUserAskAiPlan(userId: string): Promise<AskAiPlanRecord | null> {
   await ensureSubscriptionPlansTable();
-  const usageTableReady = await ensureUserAiUsageTable();
-  const monthKey = getCurrentMonthKey();
 
-  const activeSubscription = await prisma.userSubscription.findFirst({
-    where: {
-      userId,
-      status: "ACTIVE",
-      currentPeriodEnd: {
-        gte: new Date(),
-      },
-    },
-    orderBy: {
-      currentPeriodEnd: "desc",
-    },
-    include: {
-      plan: {
-        select: {
-          slug: true,
-          name: true,
-        },
-      },
+  const entitlement = await getActiveCatalogEntitlement(userId);
+  const planSlug = entitlement.planSlug?.trim().toLowerCase() || "free";
+
+  const plan = await prisma.subscriptionPlan.findUnique({
+    where: { slug: planSlug },
+    select: {
+      slug: true,
+      name: true,
+      askAiLimit: true,
     },
   });
 
-  const limit = getPlanLimit(activeSubscription?.plan);
-  const planName = getPlanName(activeSubscription?.plan);
+  if (plan) {
+    return plan;
+  }
+
+  if (planSlug === "free") {
+    return {
+      slug: "free",
+      name: "Free",
+      askAiLimit: 20,
+    };
+  }
+
+  return {
+    slug: entitlement.planSlug,
+    name: entitlement.planSlug,
+    askAiLimit: null,
+  };
+}
+
+export async function getUserAskAiQuota(userId: string): Promise<AskAiQuota> {
+  const usageTableReady = await ensureUserAiUsageTable();
+  const monthKey = getCurrentMonthKey();
+  const plan = await resolveUserAskAiPlan(userId);
+  const limit = getPlanLimit(plan);
+  const planName = getPlanName(plan);
 
   if (!usageTableReady) {
     return {
@@ -158,8 +181,8 @@ export async function getUserCopilotQuota(userId: string): Promise<CopilotQuota>
   } catch (error) {
     if (isPrismaConnectionError(error)) {
       logPrismaConnectionEvent(
-        "userCopilotQuota",
-        "[copilot-usage] Unable to read AI usage right now. Returning a safe quota view.",
+        "userAskAiQuota",
+        "[ask-ai-usage] Unable to read Ask AI usage right now. Returning a safe quota view.",
         error,
         "warn"
       );
@@ -176,7 +199,7 @@ export async function getUserCopilotQuota(userId: string): Promise<CopilotQuota>
   }
 }
 
-export async function incrementUserCopilotUsage(userId: string, monthKey: string) {
+export async function incrementUserAskAiUsage(userId: string, monthKey: string) {
   const usageTableReady = await ensureUserAiUsageTable();
 
   if (!usageTableReady) {
@@ -197,8 +220,8 @@ export async function incrementUserCopilotUsage(userId: string, monthKey: string
   } catch (error) {
     if (isPrismaConnectionError(error)) {
       logPrismaConnectionEvent(
-        "incrementUserCopilotUsage",
-        "[copilot-usage] Unable to record AI usage right now.",
+        "incrementUserAskAiUsage",
+        "[ask-ai-usage] Unable to record Ask AI usage right now.",
         error,
         "warn"
       );
@@ -208,3 +231,7 @@ export async function incrementUserCopilotUsage(userId: string, monthKey: string
     throw error;
   }
 }
+
+export type CopilotQuota = AskAiQuota;
+export const getUserCopilotQuota = getUserAskAiQuota;
+export const incrementUserCopilotUsage = incrementUserAskAiUsage;

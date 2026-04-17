@@ -12,6 +12,7 @@ type PlanRow = {
   description?: string | null;
   price: number;
   yearlyPrice?: number | null;
+  askAiLimit: number;
   currency: string;
   features: string[];
   coursesIncluded: string[];
@@ -54,6 +55,7 @@ export function SubscriptionPlansManager({ plans }: { plans: PlanRow[] }) {
         description: "",
         price: 0,
         yearlyPrice: "",
+        askAiLimit: 20,
         currency: "USD",
         featuresText: "",
         coursesIncludedText: "ALL",
@@ -67,6 +69,7 @@ export function SubscriptionPlansManager({ plans }: { plans: PlanRow[] }) {
         description: item.description || "",
         price: item.price,
         yearlyPrice: item.yearlyPrice != null ? String(item.yearlyPrice) : "",
+        askAiLimit: item.askAiLimit,
         currency: item.currency,
         featuresText: toLines(item.features),
         coursesIncludedText: toLines(item.coursesIncluded),
@@ -80,6 +83,7 @@ export function SubscriptionPlansManager({ plans }: { plans: PlanRow[] }) {
         description: form.description,
         price: form.price,
         yearlyPrice: form.yearlyPrice === "" ? undefined : Number(form.yearlyPrice),
+        askAiLimit: Number(form.askAiLimit || 0),
         currency: form.currency,
         features: fromLines(form.featuresText),
         coursesIncluded: fromLines(form.coursesIncludedText),
@@ -93,6 +97,7 @@ export function SubscriptionPlansManager({ plans }: { plans: PlanRow[] }) {
         { name: "slug", label: "Slug", type: "text", placeholder: "pro" },
         { name: "price", label: "Monthly Price", type: "number", step: "0.01" },
         { name: "yearlyPrice", label: "Yearly Price", type: "number", step: "0.01" },
+        { name: "askAiLimit", label: "Ask AI / Month", type: "number", step: "1" },
         { name: "currency", label: "Currency", type: "text", placeholder: "USD" },
         { name: "isPopular", label: "Highlight as Popular", type: "switch", hint: "Adds a featured state in pricing sections." },
         { name: "isActive", label: "Active Plan", type: "switch", hint: "Inactive plans are hidden from the storefront." },
@@ -123,7 +128,7 @@ export function SubscriptionPlansManager({ plans }: { plans: PlanRow[] }) {
         },
         {
           header: "Features",
-          cell: (item) => <span className="text-sm text-muted-foreground">{item.features.length} included</span>,
+          cell: (item) => <span className="text-sm text-muted-foreground">{item.features.length} included | {item.askAiLimit}/mo Ask AI</span>,
         },
         {
           header: "Subscribers",

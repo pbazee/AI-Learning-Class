@@ -10,7 +10,7 @@ import type {
 } from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Loader2, Plus, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -176,13 +176,105 @@ export function AdminTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>
 
 export function AdminSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select
-      {...props}
-      className={cn(
-        "w-full rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm text-slate-100 outline-none transition-all focus:border-primary-blue/60 focus:ring-2 focus:ring-primary-blue/15",
-        props.className
+    <div className="relative">
+      <select
+        {...props}
+        className={cn(
+          "admin-select relative z-10 w-full appearance-none rounded-2xl border border-white/10 bg-[#050811] px-4 py-3 text-sm text-slate-50 shadow-[0_18px_40px_-28px_rgba(2,6,23,0.95)] outline-none transition-all focus:border-primary-blue/60 focus:ring-2 focus:ring-primary-blue/15",
+          props.className
+        )}
+        style={{ colorScheme: "dark", ...props.style }}
+      />
+      <ChevronDown className="pointer-events-none absolute right-4 top-1/2 z-20 h-4 w-4 -translate-y-1/2 text-slate-500" />
+    </div>
+  );
+}
+
+export function AdminSearchableSelect<T extends string | number>({
+  options,
+  value,
+  onChange,
+  placeholder = "Search and select...",
+  className,
+}: {
+  options: { label: string; value: T }[];
+  value: T;
+  onChange: (value: T) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filtered = options.filter((opt) =>
+    opt.label.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
+  return (
+    <div className={cn("relative z-[60]", className)}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-[#050811] px-4 py-3 text-sm text-slate-50 shadow-lg outline-none transition-all focus:border-primary-blue/60 focus:ring-2 focus:ring-primary-blue/15"
+      >
+        <span className={cn("truncate", !selectedOption && "text-slate-500")}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronDown className={cn("h-4 w-4 text-slate-500 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-[70] mt-2 w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0d1525] shadow-2xl backdrop-blur-3xl">
+          <div className="flex items-center gap-2 border-b border-white/5 p-3">
+            <Search className="h-4 w-4 text-slate-500" />
+            <input
+              autoFocus
+              className="w-full bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-600"
+              placeholder="Type to filter..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto p-1">
+            {filtered.length > 0 ? (
+              filtered.map((opt) => (
+                <button
+                  key={String(opt.value)}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-all hover:bg-white/5",
+                    value === opt.value ? "bg-primary-blue/10 text-primary-blue" : "text-slate-300"
+                  )}
+                >
+                  <span className="truncate">{opt.label}</span>
+                  {value === opt.value && <Check className="h-4 w-4" />}
+                </button>
+              ))
+            ) : (
+              <p className="px-4 py-8 text-center text-sm text-slate-500">No results found.</p>
+            )}
+          </div>
+        </div>
       )}
-    />
+
+      {open && (
+        <div
+          className="fixed inset-0 z-[-1]"
+          onClick={() => setOpen(false)}
+        />
+      )}
+    </div>
   );
 }
 

@@ -15,6 +15,7 @@ export const PLATFORM_SUBSCRIPTION_PLANS = [
     name: "Free",
     description: "Free Plan - all free courses + certificates",
     price: 0,
+    yearlyPrice: null,
     currency: "USD",
     features: [
       "All free courses",
@@ -30,6 +31,7 @@ export const PLATFORM_SUBSCRIPTION_PLANS = [
     name: "Pro",
     description: "Access to ALL courses + priority support + early access",
     price: 79,
+    yearlyPrice: 790,
     currency: "USD",
     features: [
       "Access to ALL courses",
@@ -45,6 +47,7 @@ export const PLATFORM_SUBSCRIPTION_PLANS = [
     name: "Teams",
     description: "Everything in Pro + admin dashboard & progress tracking",
     price: 199,
+    yearlyPrice: 1990,
     currency: "USD",
     features: [
       "Everything in Pro",
@@ -101,7 +104,7 @@ export async function ensurePlatformSubscriptionPlans() {
           name: plan.name,
           description: plan.description,
           price: plan.price,
-          yearlyPrice: null,
+          yearlyPrice: plan.yearlyPrice ?? null,
           currency: plan.currency,
           features: [...plan.features],
           coursesIncluded: [...plan.coursesIncluded],
@@ -113,7 +116,7 @@ export async function ensurePlatformSubscriptionPlans() {
           slug: plan.slug,
           description: plan.description,
           price: plan.price,
-          yearlyPrice: null,
+          yearlyPrice: plan.yearlyPrice ?? null,
           currency: plan.currency,
           features: [...plan.features],
           coursesIncluded: [...plan.coursesIncluded],

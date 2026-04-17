@@ -1,10 +1,12 @@
 // src/app/pricing/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { Check, X, HelpCircle } from "lucide-react";
 import { getSubscriptionPlans } from "@/lib/data";
+import { buildSiteMetadata } from "@/lib/site-server";
 
 const comparison = [
   { feature: "Course access", free: "All free courses", pro: "All courses", teams: "All courses + team access" },
@@ -19,6 +21,14 @@ function FeatureCell({ val }: { val: boolean | string }) {
   if (val === true) return <Check className="mx-auto h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
   if (val === false) return <X className="mx-auto h-4 w-4 text-slate-300 dark:text-slate-600" />;
   return <span className="text-xs text-foreground">{val}</span>;
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  return buildSiteMetadata("/pricing", {
+    title: "Pricing",
+    description:
+      "Compare AI GENIUS LAB monthly and yearly plans for individual learners, teams, and organizations.",
+  });
 }
 
 export default async function PricingPage() {

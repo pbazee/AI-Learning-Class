@@ -22,6 +22,7 @@ import {
   AdminInput,
   AdminModal,
   AdminPageIntro,
+  AdminSearchableSelect,
   AdminSelect,
   AdminStatCard,
   AdminStatGrid,
@@ -335,20 +336,17 @@ export function OrdersManager({ orders }: { orders: AdminOrderRecord[] }) {
 
           <div>
             <FieldLabel>Course / Plan</FieldLabel>
-            <AdminSelect
+            <AdminSearchableSelect
               value={itemFilter}
-              onChange={(event) => {
-                setItemFilter(event.target.value);
+              onChange={(value) => {
+                setItemFilter(value);
                 setPage(1);
               }}
-            >
-              <option value="all">All items</option>
-              {itemOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </AdminSelect>
+              options={[
+                { label: "All items", value: "all" },
+                ...itemOptions.map((item) => ({ label: item, value: item })),
+              ]}
+            />
           </div>
 
           <div>

@@ -117,7 +117,7 @@ export async function ensureOwnerTeamWorkspace(
     (await db.teamWorkspace.create({
       data: {
         ownerUserId: userId,
-        name: name?.trim() || "AI Learning Class Team",
+        name: name?.trim() || "AI GENIUS LAB Team",
         inviteCode: createInviteCode(),
         seatLimit: 10,
       },
@@ -207,7 +207,7 @@ async function getOwnedTeamWorkspaceAdminContext(
   const workspace = await ensureOwnerTeamWorkspace(
     db,
     userId,
-    "AI Learning Class Team"
+    "AI GENIUS LAB Team"
   );
 
   return {
@@ -964,3 +964,4 @@ export async function getUserTeamWorkspaceSummary(userId: string) {
     planEndsAt: context.planEndsAt?.toISOString() ?? null,
   };
 }
+

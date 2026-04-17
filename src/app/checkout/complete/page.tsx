@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, ShieldAlert } from "lucide-react";
-import { Navbar } from "@/components/layout/Navbar";
+import { NavbarClient } from "@/components/layout/NavbarClient";
 
 export default function CheckoutCompletePage() {
   const router = useRouter();
@@ -97,7 +97,7 @@ export default function CheckoutCompletePage() {
 
   return (
     <div className="site-shell">
-      <Navbar />
+      <NavbarClient />
       <div className="flex min-h-[calc(100vh-var(--navbar-height))] items-center justify-center px-4 py-16">
         <div className="surface-card w-full max-w-lg p-8 text-center">
           {error ? (

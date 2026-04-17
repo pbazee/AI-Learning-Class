@@ -32,9 +32,11 @@ function shouldHideMobileNav(pathname: string) {
 export function MobileBottomNav() {
   const pathname = usePathname();
   const cartCount = useCartStore((state) => state.itemCount)();
+  const [mounted, setMounted] = useState(false);
   const [accountHref, setAccountHref] = useState("/login");
 
   useEffect(() => {
+    setMounted(true);
     const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
       setAccountHref(data.user ? "/dashboard" : "/login");
@@ -49,7 +51,7 @@ export function MobileBottomNav() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (shouldHideMobileNav(pathname)) {
+  if (!mounted || shouldHideMobileNav(pathname)) {
     return null;
   }
 
@@ -82,7 +84,7 @@ export function MobileBottomNav() {
               >
                 <div className="relative">
                   <Icon className="h-[18px] w-[18px]" />
-                  {label === "Cart" && cartCount > 0 ? (
+                  {label === "Cart" && mounted && cartCount > 0 ? (
                     <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary-blue px-1 text-[9px] font-bold text-white">
                       {cartCount}
                     </span>

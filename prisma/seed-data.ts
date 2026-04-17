@@ -559,7 +559,7 @@ export const seedHeroSlides = [
   {
     id: "slide-1",
     title: "Learn AI. Build the Future.",
-    subtitle: "The World's Most Advanced AI Learning Platform",
+    subtitle: "The World's Most Advanced AI Education Platform",
     description: "Join 500,000+ learners mastering Machine Learning, LLMs, and AI Engineering with hands-on projects and personalized AI coaching.",
     imageUrl: "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1400&h=600&fit=crop",
     ctaText: "Start Free Today",
@@ -699,7 +699,7 @@ export const seedSubscriptionPlans = [
     slug: "pro",
     description: "Access to ALL courses + priority support + early access",
     price: 79,
-    yearlyPrice: null,
+    yearlyPrice: 790,
     currency: "USD",
     features: [
       "Access to ALL courses",
@@ -716,7 +716,7 @@ export const seedSubscriptionPlans = [
     slug: "teams",
     description: "Everything in Pro + admin dashboard & progress tracking",
     price: 199,
-    yearlyPrice: null,
+    yearlyPrice: 1990,
     currency: "USD",
     features: [
       "Everything in Pro",

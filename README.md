@@ -1,8 +1,8 @@
-# 🧠 AI Learning Class
+# 🧠 AI GENIUS LAB
 
 > The world's most advanced AI education platform — built with Next.js 15, Supabase, Stripe/PayPal/Paystack, and a cyber-futuristic UI.
 
-![AI Learning Class](https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200&h=400&fit=crop)
+![AI GENIUS LAB](https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200&h=400&fit=crop)
 
 ---
 

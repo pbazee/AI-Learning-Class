@@ -1,14 +1,14 @@
-// src/app/layout.tsx
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
-import { ThemeProvider } from "@/components/shared/ThemeProvider";
-import { ToastProvider } from "@/components/ui/ToastProvider";
 import { AnnouncementBarWrapper } from "@/components/landing/AnnouncementBarWrapper";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { RouteScrollReset } from "@/components/layout/RouteScrollReset";
+import { ThemeProvider } from "@/components/shared/ThemeProvider";
+import { ToastProvider } from "@/components/ui/ToastProvider";
+import { buildSiteMetadata } from "@/lib/site-server";
 
 const PopupCampaigns = dynamic(
   () =>
@@ -23,24 +23,18 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "AI Learning Class — Master AI & Machine Learning",
-    template: "%s | AI Learning Class",
-  },
-  description:
-    "The world's most advanced AI education platform. Learn Machine Learning, Deep Learning, LLM Engineering, and more with AI-powered personalized coaching.",
-  keywords: ["AI courses", "machine learning", "deep learning", "LLM", "ChatGPT", "Python AI"],
-  authors: [{ name: "AI Learning Class" }],
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: process.env.NEXT_PUBLIC_APP_URL,
-    siteName: "AI Learning Class",
-    title: "AI Learning Class — Master AI & Machine Learning",
-    description: "The world's most advanced AI education platform.",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const metadata = await buildSiteMetadata("/");
+
+  return {
+    ...metadata,
+    title: {
+      default: String(metadata.title || "AI GENIUS LAB"),
+      template: `%s | ${metadata.applicationName || "AI GENIUS LAB"}`,
+    },
+    keywords: ["AI courses", "machine learning", "deep learning", "LLM", "ChatGPT", "Python AI"],
+  };
+}
 
 export default function RootLayout({
   children,

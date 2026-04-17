@@ -1,4 +1,6 @@
 "use client";
+
+import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { Star, Quote } from "lucide-react";
@@ -8,6 +10,9 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
   if (testimonials.length === 0) {
     return null;
   }
+
+  const featuredTestimonials = testimonials.slice(0, 4);
+  const hasMoreTestimonials = testimonials.length > featuredTestimonials.length;
 
   return (
     <section className="section-shell relative overflow-hidden bg-primary-blue text-white dark:bg-primary-blue dark:text-white">
@@ -24,12 +29,12 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
             Career outcomes with a <span className="text-white/90">clear learning path</span>
           </h2>
           <p className="mx-auto max-w-2xl text-base text-white/[0.85]">
-            Learners use AI Learning Class to gain practical skills, ship projects, and move into stronger roles.
+            Learners use AI Genius Lab to gain practical skills, ship projects, and move into stronger roles.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-          {testimonials.map((t, i) => (
+          {featuredTestimonials.map((t, i) => (
             <motion.div
               key={t.id}
               initial={{ opacity: 0, y: 20 }}
@@ -48,11 +53,11 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
 
               <p className="flex-1 text-sm leading-7 text-white/[0.88]">"{t.text}"</p>
 
-              {t.courseCompleted && (
+              {t.courseCompleted ? (
                 <div className="inline-flex w-fit rounded-full border border-white/[0.15] bg-white px-3 py-1.5 text-xs font-semibold text-primary-blue shadow-sm">
                   Completed: {t.courseCompleted}
                 </div>
-              )}
+              ) : null}
 
               <div className="flex items-center gap-3 border-t border-white/[0.12] pt-4">
                 {t.avatar && (
@@ -75,9 +80,12 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
         </div>
 
         <div className="mt-10 text-center">
-          <button className="rounded-full border border-white/[0.18] bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/[0.16]">
-            View more reviews
-          </button>
+          <Link
+            href="/reviews"
+            className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-bold text-primary-blue shadow-lg transition-transform hover:scale-105"
+          >
+            View More Reviews
+          </Link>
         </div>
       </div>
     </section>

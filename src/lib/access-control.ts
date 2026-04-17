@@ -33,6 +33,12 @@ export type ResolvedCourseAccess = {
   teamWorkspaceId: string | null;
 };
 
+export type ExpiredTimedCourseAccess = {
+  expiredAt: Date | null;
+  planSlug: string | null;
+  billingCycle: "monthly" | "yearly" | null;
+};
+
 function normalizePlanSource(planSlug?: string | null): ResolvedCourseAccessSource {
   return planSlug?.toLowerCase() === "teams" ? "team" : "subscription";
 }
@@ -320,7 +326,7 @@ export async function revokeCatalogEntitlements(
       ...(teamWorkspaceId ? { teamWorkspaceId } : {}),
     },
     data: {
-      status: EntitlementStatus.REVOKED,
+      status: EntitlementStatus.EXPIRED,
       endsAt: at,
     },
   });
@@ -338,6 +344,58 @@ export async function revokeCatalogEntitlements(
       expiresAt: at,
     },
   });
+}
+
+export async function getExpiredTimedCourseAccess(
+  userId: string,
+  courseId: string,
+  db: DbClient = prisma
+): Promise<ExpiredTimedCourseAccess | null> {
+  const now = new Date();
+  const [expiredEnrollment, expiredSubscription] = await Promise.all([
+    db.enrollment.findFirst({
+      where: {
+        userId,
+        courseId,
+        expiresAt: { lt: now },
+      },
+      orderBy: [{ expiresAt: "desc" }, { enrolledAt: "desc" }],
+      select: {
+        expiresAt: true,
+      },
+    }),
+    db.userSubscription.findFirst({
+      where: {
+        userId,
+        currentPeriodEnd: { lt: now },
+      },
+      orderBy: [{ currentPeriodEnd: "desc" }, { createdAt: "desc" }],
+      select: {
+        currentPeriodEnd: true,
+        billingCycle: true,
+        plan: {
+          select: {
+            slug: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  if (!expiredEnrollment && !expiredSubscription) {
+    return null;
+  }
+
+  return {
+    expiredAt: expiredEnrollment?.expiresAt ?? expiredSubscription?.currentPeriodEnd ?? null,
+    planSlug: expiredSubscription?.plan.slug ?? null,
+    billingCycle:
+      expiredSubscription?.billingCycle?.toLowerCase() === "yearly"
+        ? "yearly"
+        : expiredSubscription
+          ? "monthly"
+          : null,
+  };
 }
 
 export function isTimedCourseAccess(access?: { source?: ResolvedCourseAccessSource | null }) {

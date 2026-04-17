@@ -1,13 +1,17 @@
+import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { HeroCarousel } from "@/components/landing/HeroCarousel";
 import { CourseSection } from "@/components/landing/CourseSection";
 import { TrustedLogosMarquee } from "@/components/landing/TrustedLogosMarquee";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { StorefrontPersonalizationProvider } from "@/components/storefront/StorefrontPersonalizationProvider";
 import {
   getPublicHomepageData,
 } from "@/lib/data";
+import { buildHomepageJsonLd } from "@/lib/seo";
+import { buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 
 const CategoriesGrid = dynamic(() =>
   import("@/components/landing/CategoriesGrid").then((module) => ({
@@ -42,6 +46,14 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 
 export const revalidate = 300;
 
+export async function generateMetadata(): Promise<Metadata> {
+  return buildSiteMetadata("/", {
+    title: "AI GENIUS LAB | Practical AI Courses, Projects, and Mentorship",
+    description:
+      "Learn practical AI with guided courses, LLM engineering projects, and real-world machine learning tracks built for modern teams and ambitious learners.",
+  });
+}
+
 export default async function HomePage() {
   const {
     affiliateCommissionRate,
@@ -55,6 +67,7 @@ export default async function HomePage() {
     totalLoggedInUsers,
     trustedLogos,
   } = await getPublicHomepageData();
+  const branding = await getSiteBranding();
 
   const featured = courses.filter((course) => course.isFeatured);
   const trending = courses.filter((course) => course.isTrending);
@@ -79,10 +92,17 @@ export default async function HomePage() {
     { value: weightedRating > 0 ? weightedRating.toFixed(1) : "New", label: "Rating" },
     { value: compactNumberFormatter.format(courses.length), label: "Courses" },
   ];
+  const homepageJsonLd = buildHomepageJsonLd({
+    siteName: branding.siteName,
+    logoUrl: branding.logoUrl,
+    totalCourses: courses.length,
+    totalLearners: totalLoggedInUsers,
+  });
 
   return (
     <div className="min-h-screen">
-      <Navbar />
+      <JsonLd data={homepageJsonLd} />
+      <Navbar branding={branding} />
       <HeroCarousel slides={slides} stats={heroStats} />
       <TrustedLogosMarquee logos={trustedLogos} />
       <StorefrontPersonalizationProvider

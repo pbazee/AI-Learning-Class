@@ -1,13 +1,21 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Mail, MapPin, Phone } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
-import {
-  DEFAULT_ABOUT_CONTENT,
-} from "@/lib/site-settings";
 import { getPublicAboutPageData } from "@/lib/data";
+import { buildSiteMetadata } from "@/lib/site-server";
+import { DEFAULT_ABOUT_CONTENT } from "@/lib/site-settings";
 
 export const revalidate = 300;
+
+export async function generateMetadata(): Promise<Metadata> {
+  return buildSiteMetadata("/about", {
+    title: "About AI Genius Lab",
+    description:
+      "Learn how AI Genius Lab helps learners and teams build practical machine learning and LLM engineering skills.",
+  });
+}
 
 export default async function AboutPage() {
   const {
@@ -51,7 +59,10 @@ export default async function AboutPage() {
                   Explore courses
                   <ArrowRight className="h-4 w-4" />
                 </Link>
-                <Link href="/pricing" className="action-secondary border-white/20 bg-white/5 text-white hover:bg-white/10">
+                <Link
+                  href="/pricing"
+                  className="action-secondary border-white/20 bg-white/5 text-white hover:bg-white/10"
+                >
                   View pricing
                 </Link>
               </div>
@@ -112,7 +123,7 @@ export default async function AboutPage() {
             <div className="mt-6 space-y-4 text-sm text-muted-foreground">
               <div className="flex items-start gap-3">
                 <Mail className="mt-0.5 h-4 w-4 shrink-0 text-primary-blue" />
-                <span>{supportEmail || "support@ailearningclass.com"}</span>
+                <span>{supportEmail || "support@aigeniuslab.com"}</span>
               </div>
               <div className="flex items-start gap-3">
                 <Phone className="mt-0.5 h-4 w-4 shrink-0 text-primary-blue" />
@@ -127,7 +138,8 @@ export default async function AboutPage() {
             <div className="mt-6 rounded-[24px] border border-border bg-muted/40 p-5">
               <p className="text-sm font-semibold text-foreground">Admin-managed content</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                The copy on this page is controlled from the admin settings panel, so your team can update it without changing code.
+                The copy on this page is controlled from the admin settings panel, so your team can
+                update it without changing code.
               </p>
             </div>
           </aside>

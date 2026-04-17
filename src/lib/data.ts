@@ -38,6 +38,7 @@ import {
   BASE_CHECKOUT_CURRENCY,
   convertCheckoutAmount,
 } from "@/lib/checkout-currency";
+import { normalizeSiteName } from "@/lib/site";
 import { getCourseEnrollmentCounts } from "@/lib/course-metrics";
 import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
 import {
@@ -394,7 +395,7 @@ const EMPTY_PUBLIC_COURSE_CATALOG_DATA: PublicCourseCatalogData = {
 };
 
 const EMPTY_PUBLIC_ABOUT_PAGE_DATA: PublicAboutPageData = {
-  siteName: "AI Learning Class",
+  siteName: "AI GENIUS LAB",
   supportEmail: "",
   supportPhone: "",
   supportAddress: "",
@@ -539,7 +540,7 @@ function mapCourse(
       ...mappedCourse,
       reviews: course.reviews.map((review) => ({
         id: review.id,
-        name: review.user.name || "AI Learning Class student",
+        name: review.user.name || "AI GENIUS LAB student",
         avatarUrl: review.user.avatarUrl ?? undefined,
         rating: review.rating,
         title: review.title ?? undefined,
@@ -629,7 +630,7 @@ function mapTestimonialRecord(review: {
 }): Testimonial {
   return {
     id: review.id,
-    name: review.user.name || "AI Learning Class student",
+    name: review.user.name || "AI GENIUS LAB student",
     role: formatRole(review.user.role),
     avatar: review.user.avatarUrl ?? undefined,
     rating: review.rating,
@@ -869,7 +870,7 @@ const getCachedPublicAboutPageData = unstable_cache(
       const socialLinks = normalizeSiteSettingsSocialLinks(settings?.socialLinks);
 
       return {
-        siteName: settings?.siteName || "AI Learning Class",
+        siteName: normalizeSiteName(settings?.siteName),
         supportEmail: settings?.supportEmail || "",
         supportPhone: settings?.supportPhone || "",
         supportAddress: settings?.supportAddress || "",
@@ -1017,17 +1018,39 @@ async function computeUserCourseAccess(
 
   return courses.map<CourseAccessComputation>((course) => {
     const orderedLessons = course.modules.flatMap((module) => module.lessons);
+    const orderedLessonIds = new Set(orderedLessons.map((lesson) => lesson.id));
     const courseProgress = progressByCourse.get(course.id) ?? [];
+    const progressByLessonId = new Map(
+      courseProgress.map((row) => [row.lessonId, row])
+    );
     const completedLessonIds = new Set(
-      courseProgress.filter((row) => row.isCompleted).map((row) => row.lessonId)
+      courseProgress
+        .filter(
+          (row) =>
+            orderedLessonIds.has(row.lessonId) &&
+            (row.isCompleted || (row.progressPercent ?? 0) >= 100)
+        )
+        .map((row) => row.lessonId)
     );
     const completedLessons = orderedLessons.filter((lesson) => completedLessonIds.has(lesson.id)).length;
     const totalLessons = orderedLessons.length || course.totalLessons;
-    const latestProgress = courseProgress[0];
+    const latestProgress = courseProgress.find((row) => orderedLessonIds.has(row.lessonId));
     const firstIncompleteLesson =
       orderedLessons.find((lesson) => !completedLessonIds.has(lesson.id)) ?? orderedLessons[0];
     const resumeLessonId = latestProgress?.lessonId ?? firstIncompleteLesson?.id;
-    const progress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+    const progress =
+      totalLessons > 0
+        ? Math.round(
+            orderedLessons.reduce((sum, lesson) => {
+              const lessonProgress = progressByLessonId.get(lesson.id);
+              const lessonPercent = lessonProgress?.isCompleted
+                ? 100
+                : Math.max(0, Math.min(100, Math.round(lessonProgress?.progressPercent ?? 0)));
+
+              return sum + lessonPercent;
+            }, 0) / totalLessons
+          )
+        : 0;
 
     return {
       courseId: course.id,
@@ -1542,7 +1565,7 @@ async function getBlogAuthorMap(authorIds: string[]) {
   });
 
   return new Map(
-    authors.map((author) => [author.id, author.name || author.email || "AI Learning Class"])
+    authors.map((author) => [author.id, author.name || author.email || "AI GENIUS LAB"])
   );
 }
 
@@ -1559,9 +1582,10 @@ function mapBlogPost(
     coverImage: post.coverImage ?? undefined,
     categoryName: post.category?.name ?? undefined,
     status: (post.status as BlogPost["status"]) ?? undefined,
-    authorName: authorMap.get(post.authorId) ?? "AI Learning Class",
+    authorName: authorMap.get(post.authorId) ?? "AI GENIUS LAB",
     tags: post.tags,
     publishedAt: formatDate(post.publishedAt ?? post.createdAt),
+    publishedAtIso: (post.publishedAt ?? post.createdAt).toISOString(),
     readTime: estimateReadTime(post.content),
   };
 }
@@ -1635,7 +1659,7 @@ export async function getTestimonials(limit = 4): Promise<Testimonial[]> {
 
     return reviews.map((review) => ({
       id: review.id,
-      name: review.user.name || "AI Learning Class student",
+      name: review.user.name || "AI GENIUS LAB student",
       role: formatRole(review.user.role),
       avatar: review.user.avatarUrl ?? undefined,
       rating: review.rating,
@@ -2140,6 +2164,7 @@ export async function getUserEnrollments(userId: string): Promise<DashboardEnrol
         0
       );
       const orderedLessons = enrollment.course.modules.flatMap((module) => module.lessons);
+      const firstLessonId = orderedLessons[0]?.id;
       const completedLessonIds = new Set(courseAccess?.completedLessonIds ?? []);
       const completedDurationSeconds = orderedLessons.reduce((sum, lesson) => {
         if (completedLessonIds.has(lesson.id)) {
@@ -2160,7 +2185,11 @@ export async function getUserEnrollments(userId: string): Promise<DashboardEnrol
         completedLessons,
         totalLessons,
         lastLessonTitle: courseAccess?.lastLessonTitle,
-        lessonHref: courseAccess?.lessonHref ?? `/courses/${enrollment.course.slug}`,
+        lessonHref:
+          courseAccess?.lessonHref ??
+          (firstLessonId
+            ? `/learn/${enrollment.course.slug}/${firstLessonId}`
+            : `/courses/${enrollment.course.slug}`),
         actionLabel: courseAccess?.actionLabel ?? "Go to Classroom",
         remainingMinutes,
         course: mapCourse(enrollment.course, instructorMap),
@@ -2211,7 +2240,6 @@ function calculateStreak(dates: Date[]) {
 
   return streak;
 }
-
 export async function getLeaderboard(limit = 10) {
   return safeDatabaseRead("getLeaderboard", EMPTY_LEADERBOARD, async () => {
     const users = await prisma.user.findMany({
@@ -2220,12 +2248,20 @@ export async function getLeaderboard(limit = 10) {
           { enrollments: { some: {} } },
           { progress: { some: { isCompleted: true } } },
           { certificates: { some: {} } },
+          { user_courses: { some: { completed: true } } },
         ],
       },
       include: {
         enrollments: {
           select: {
+            courseId: true,
             status: true,
+          },
+        },
+        user_courses: {
+          select: {
+            course_id: true,
+            completed: true,
           },
         },
         progress: {
@@ -2245,7 +2281,14 @@ export async function getLeaderboard(limit = 10) {
 
     const entries = users
       .map((user) => {
-        const completedCourses = user.enrollments.filter((enrollment) => enrollment.status === "COMPLETED").length;
+        const completedCourseIds = new Set<string>();
+        user.enrollments?.forEach((e) => {
+          if (e.status === "COMPLETED") completedCourseIds.add(e.courseId);
+        });
+        user.user_courses?.forEach((uc) => {
+          if (uc.completed) completedCourseIds.add(uc.course_id);
+        });
+        const completedCourses = completedCourseIds.size;
         const completedLessons = user.progress.length;
         const streak = calculateStreak(
           user.progress.map((row) => row.completedAt ?? row.updatedAt)
@@ -2280,11 +2323,16 @@ export async function getLeaderboard(limit = 10) {
       stats: {
         activeLearners: formatNumberCompact(users.length),
         coursesCompleted: formatNumberCompact(
-          users.reduce(
-            (sum, user) =>
-              sum + user.enrollments.filter((enrollment) => enrollment.status === "COMPLETED").length,
-            0
-          )
+          users.reduce((sum, user) => {
+            const completedCourseIds = new Set<string>();
+            user.enrollments?.forEach((e) => {
+              if (e.status === "COMPLETED") completedCourseIds.add(e.courseId);
+            });
+            user.user_courses?.forEach((uc) => {
+              if (uc.completed) completedCourseIds.add(uc.course_id);
+            });
+            return sum + completedCourseIds.size;
+          }, 0)
         ),
         avgStreak: `${averageStreak} days`,
       } satisfies LeaderboardStats,

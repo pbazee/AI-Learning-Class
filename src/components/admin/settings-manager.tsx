@@ -3,6 +3,8 @@
 import { startTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteFaqAction, saveFaqAction, saveSiteSettingsAction } from "@/app/admin/actions";
+import { MediaUploader } from "@/components/admin/media-uploader";
+import { SiteLogo } from "@/components/layout/SiteLogo";
 import {
   AdminButton,
   AdminCard,
@@ -19,6 +21,10 @@ import { useToast } from "@/components/ui/ToastProvider";
 
 type SettingsState = {
   siteName: string;
+  logoUrl: string;
+  logoPath: string;
+  faviconUrl: string;
+  faviconPath: string;
   supportEmail: string;
   supportPhone: string;
   adminEmail: string;
@@ -204,9 +210,136 @@ export function SettingsManager({
 
       {tab === "general" ? (
         <AdminCard className="grid gap-5 p-6 md:grid-cols-2">
-          <div>
+          <div className="md:col-span-2">
             <FieldLabel>Platform Name</FieldLabel>
             <AdminInput value={settings.siteName} onChange={(event) => setSettings((current) => ({ ...current, siteName: event.target.value }))} />
+          </div>
+          <div>
+            <MediaUploader
+              label="Official Logo"
+              hint="Upload a transparent SVG/PNG wordmark or symbol. The live header now caps logo space so navigation and the brand name stay readable."
+              folder="branding"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              value={{
+                url: settings.logoUrl || undefined,
+                path: settings.logoPath || undefined,
+                fileName:
+                  settings.logoPath.split("/").pop() ||
+                  settings.logoUrl.split("/").pop() ||
+                  "logo",
+                mimeType: settings.logoUrl.endsWith(".svg") ? "image/svg+xml" : "image/*",
+              }}
+              onUploaded={(file) =>
+                setSettings((current) => ({
+                  ...current,
+                  logoUrl: file.url,
+                  logoPath: file.path,
+                  socialLinks: {
+                    ...current.socialLinks,
+                    brandLogoPath: file.path,
+                  },
+                }))
+              }
+              onRemoved={() =>
+                setSettings((current) => ({
+                  ...current,
+                  logoUrl: "",
+                  logoPath: "",
+                  socialLinks: {
+                    ...current.socialLinks,
+                    brandLogoPath: "",
+                  },
+                }))
+              }
+            />
+          </div>
+          <div>
+            <MediaUploader
+              label="Favicon / Site Icon"
+              hint="Upload a square icon for tabs, bookmarks, and metadata. Browsers usually render favicons at 16x16 or 32x32, so simple artwork works best."
+              folder="branding"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon"
+              value={{
+                url: settings.faviconUrl || undefined,
+                path: settings.faviconPath || undefined,
+                fileName:
+                  settings.faviconPath.split("/").pop() ||
+                  settings.faviconUrl.split("/").pop() ||
+                  "favicon",
+                mimeType: settings.faviconUrl.endsWith(".svg") ? "image/svg+xml" : "image/*",
+              }}
+              onUploaded={(file) =>
+                setSettings((current) => ({
+                  ...current,
+                  faviconUrl: file.url,
+                  faviconPath: file.path,
+                  socialLinks: {
+                    ...current.socialLinks,
+                    brandFaviconPath: file.path,
+                  },
+                }))
+              }
+              onRemoved={() =>
+                setSettings((current) => ({
+                  ...current,
+                  faviconUrl: "",
+                  faviconPath: "",
+                  socialLinks: {
+                    ...current.socialLinks,
+                    brandFaviconPath: "",
+                  },
+                }))
+              }
+            />
+          </div>
+          <div className="md:col-span-2">
+            <AdminCard className="grid gap-5 border border-blue-500/20 bg-blue-500/5 p-5 md:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Brand asset preview</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Strong product platforms keep header branding compact so the logo never swallows navigation or hides the site name. This preview shows the capped storefront treatment and a browser-tab favicon sample.
+                </p>
+                <div className="mt-4 rounded-3xl border border-white/10 bg-[#050811] p-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.9)]">
+                  <div className="flex min-h-[76px] items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/95 px-4 text-slate-950 shadow-[0_18px_44px_-36px_rgba(15,23,42,0.45)]">
+                    <SiteLogo
+                      siteName={settings.siteName || "AI GENIUS LAB"}
+                      logoUrl={settings.logoUrl || undefined}
+                      textClassName="text-[14px] text-slate-950"
+                    />
+                    <div className="hidden text-xs font-semibold uppercase tracking-[0.16em] text-slate-400 sm:block">
+                      Header preview
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Tab icon preview</p>
+                <div className="mt-4 rounded-[24px] border border-white/10 bg-[#02050b] p-4 text-white shadow-[0_24px_60px_-44px_rgba(15,23,42,0.9)]">
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-3 py-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white">
+                      {settings.faviconUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={settings.faviconUrl}
+                          alt="Favicon preview"
+                          className="h-full w-full scale-110 object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs font-black text-slate-900">AI</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">
+                        {settings.siteName || "AI GENIUS LAB"} | Practical AI Education
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Square favicons stay sharp in tabs, bookmarks, and pinned shortcuts.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </AdminCard>
           </div>
           <div>
             <FieldLabel>Support Email</FieldLabel>
@@ -291,7 +424,7 @@ export function SettingsManager({
             <AdminInput
               value={readSocial("aboutEyebrow")}
               onChange={(event) => updateSocial("aboutEyebrow", event.target.value)}
-              placeholder="About AI Learning Class"
+              placeholder="About AI GENIUS LAB"
             />
           </div>
           <div>
@@ -401,7 +534,7 @@ export function SettingsManager({
             <AdminInput
               value={settings.supportEmail}
               onChange={(event) => setSettings((current) => ({ ...current, supportEmail: event.target.value }))}
-              placeholder="support@ailearningclass.com"
+              placeholder="support@aigeniuslab.com"
             />
           </div>
           <div>
@@ -537,3 +670,4 @@ export function SettingsManager({
     </div>
   );
 }
+

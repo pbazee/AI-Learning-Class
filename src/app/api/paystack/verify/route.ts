@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       orderId: payload?.data?.metadata?.order_id,
       providerReference: payload.data.reference,
       planSlug: payload?.data?.metadata?.plan_slug,
+      billingCycle: payload?.data?.metadata?.billing_cycle,
       couponCode: payload?.data?.metadata?.applied_coupon,
       affiliateCode: payload?.data?.metadata?.aff_code,
       customerEmail: payload?.data?.customer?.email ?? null,

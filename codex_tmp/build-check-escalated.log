@@ -1,0 +1,184 @@
+
+> ai-learning-class@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.14
+   - Environments: .env.local, .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 77s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/76) ...
+   Generating static pages (19/76) 
+   Generating static pages (38/76) 
+prisma:error 
+Invalid `prisma.category.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:6543`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:6543`.
+[prisma] Category.findMany failed on attempt 1. Retrying in 350ms. Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.category.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:6543`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:6543`.
+    at async p (C:\Projects\ai-learning-class\.next\server\chunks\6212.js:1:25206)
+    at async Array.$allOperations (C:\Projects\ai-learning-class\.next\server\chunks\6212.js:1:26881)
+    at async h (C:\Projects\ai-learning-class\.next\server\app\admin\blogs\page.js:2:8220) {
+  code: 'P1001',
+  clientVersion: '5.22.0',
+  meta: [Object]
+}
+[prisma] SiteSettings.findUnique failed on attempt 1. Retrying in 350ms. Error [PrismaClientKnownRequestError]: 
+Invalid `prisma.siteSettings.findUnique()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:6543`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:6543`.
+    at async p (C:\Projects\ai-learning-class\.next\server\chunks\6212.js:1:25206)
+    at async Array.$allOperations (C:\Projects\ai-learning-class\.next\server\chunks\6212.js:1:26881)
+    at async h (C:\Projects\ai-learning-class\.next\server\chunks\6212.js:1:545)
+    at async k (C:\Projects\ai-learning-class\.next\server\chunks\6212.js:1:1151)
+    at async Module.p (C:\Projects\ai-learning-class\.next\server\chunks\6212.js:1:11573) {
+  code: 'P1001',
+  clientVersion: '5.22.0',
+  meta: [Object]
+}
+prisma:error 
+Invalid `prisma.siteSettings.findUnique()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:6543`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:6543`.
+   Generating static pages (57/76) 
+ ✓ Generating static pages (76/76)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                    Size  First Load JS  Revalidate  Expire
+┌ ○ /                                       11.7 kB         251 kB          5m      1y
+├ ○ /_not-found                               278 B         103 kB
+├ ○ /about                                  1.34 kB         236 kB          5m      1y
+├ ƒ /admin                                  18.1 kB         236 kB
+├ ƒ /admin/affiliates                         10 kB         155 kB
+├ ƒ /admin/analytics                          278 B         103 kB
+├ ○ /admin/announcements                    5.29 kB         155 kB
+├ ○ /admin/ask-ai                           4.09 kB         153 kB
+├ ○ /admin/blogs                            5.14 kB         217 kB
+├ ○ /admin/categories                       5.32 kB         218 kB
+├ ○ /admin/coupons                          5.28 kB         155 kB
+├ ○ /admin/courses                          13.2 kB         225 kB
+├ ○ /admin/hero                               278 B         103 kB
+├ ○ /admin/hero-slides                      5.01 kB         217 kB
+├ ○ /admin/messages                         5.78 kB         158 kB
+├ ○ /admin/orders                           7.61 kB         157 kB
+├ ○ /admin/paragraphs                       4.16 kB         153 kB
+├ ○ /admin/popups                           4.53 kB         217 kB
+├ ○ /admin/referrals                         7.8 kB         153 kB
+├ ○ /admin/reviews                          5.25 kB         154 kB
+├ ○ /admin/settings                         5.39 kB         218 kB
+├ ○ /admin/subscribers                      5.72 kB         155 kB
+├ ○ /admin/subscriptions                    5.51 kB         155 kB
+├ ○ /admin/trusted-logos                    4.62 kB         217 kB
+├ ○ /admin/user-subscriptions               9.85 kB         155 kB
+├ ○ /admin/users                            5.76 kB         155 kB
+├ ƒ /affiliate                              3.79 kB         239 kB
+├ ƒ /affiliate/dashboard                    11.5 kB         353 kB
+├ ƒ /api/account/profile                      278 B         103 kB
+├ ƒ /api/admin/affiliate-conversions          278 B         103 kB
+├ ƒ /api/admin/affiliate-payouts              278 B         103 kB
+├ ƒ /api/admin/affiliate-payouts/[id]         278 B         103 kB
+├ ƒ /api/admin/affiliate-program              278 B         103 kB
+├ ƒ /api/admin/affiliates                     278 B         103 kB
+├ ƒ /api/admin/affiliates/[id]/status         278 B         103 kB
+├ ƒ /api/admin/referral-program               278 B         103 kB
+├ ƒ /api/admin/referrals                      278 B         103 kB
+├ ƒ /api/admin/settings                       278 B         103 kB
+├ ƒ /api/admin/upload                         278 B         103 kB
+├ ƒ /api/admin/upload/sign                    278 B         103 kB
+├ ƒ /api/admin/user-subscriptions/email       278 B         103 kB
+├ ƒ /api/affiliate/apply                      278 B         103 kB
+├ ƒ /api/affiliate/dashboard                  278 B         103 kB
+├ ƒ /api/affiliate/payout-request             278 B         103 kB
+├ ƒ /api/affiliate/track                      278 B         103 kB
+├ ƒ /api/announcements                        278 B         103 kB
+├ ƒ /api/ask-ai                               278 B         103 kB
+├ ƒ /api/auth/login                           278 B         103 kB
+├ ƒ /api/auth/sync-user                       278 B         103 kB
+├ ƒ /api/certificate/generate                 278 B         103 kB
+├ ƒ /api/certificates/[code]/pdf              278 B         103 kB
+├ ƒ /api/checkout/quote                       278 B         103 kB
+├ ƒ /api/checkout/session                     278 B         103 kB
+├ ƒ /api/contact/messages                     278 B         103 kB
+├ ƒ /api/copilot                              278 B         103 kB
+├ ƒ /api/courses/[courseId]/enroll            278 B         103 kB
+├ ƒ /api/courses/[courseId]/reviews           278 B         103 kB
+├ ƒ /api/email/send                           278 B         103 kB
+├ ƒ /api/learn/lessons/[lessonId]/notes       278 B         103 kB
+├ ƒ /api/learn/lessons/[lessonId]/progress    278 B         103 kB
+├ ƒ /api/newsletter/subscribe                 278 B         103 kB
+├ ƒ /api/paypal/capture                       278 B         103 kB
+├ ƒ /api/paypal/webhook                       278 B         103 kB
+├ ƒ /api/paystack/verify                      278 B         103 kB
+├ ƒ /api/paystack/webhook                     278 B         103 kB
+├ ƒ /api/popups/active                        278 B         103 kB
+├ ƒ /api/referrals/apply                      278 B         103 kB
+├ ƒ /api/referrals/stats                      278 B         103 kB
+├ ƒ /api/search/courses                       278 B         103 kB
+├ ƒ /api/settings                             278 B         103 kB
+├ ƒ /api/storefront/personalization           278 B         103 kB
+├ ƒ /api/stripe/confirm                       278 B         103 kB
+├ ƒ /api/stripe/webhook                       278 B         103 kB
+├ ƒ /api/team/workspace                       278 B         103 kB
+├ ƒ /api/team/workspace/export                278 B         103 kB
+├ ƒ /api/wishlist/[courseId]                  278 B         103 kB
+├ ƒ /auth/callback                            278 B         103 kB
+├ ○ /blog                                   1.34 kB         236 kB
+├ ƒ /blog/[slug]                            1.34 kB         236 kB
+├ ○ /cart                                   3.21 kB         238 kB
+├ ○ /categories                             4.29 kB         239 kB
+├ ƒ /certificates                            3.4 kB         238 kB
+├ ƒ /certificates/[code]                    1.34 kB         236 kB
+├ ○ /checkout                               6.43 kB         239 kB
+├ ○ /checkout/complete                      1.57 kB         234 kB
+├ ○ /checkout/success                       2.27 kB         234 kB
+├ ƒ /contact                                4.15 kB         239 kB
+├ ○ /courses                                4.69 kB         244 kB          5m      1y
+├ ƒ /courses/[slug]                         15.9 kB         379 kB
+├ ƒ /dashboard                              2.84 kB         238 kB
+├ ○ /dashboard/certificates                   278 B         103 kB
+├ ƒ /dashboard/referrals                    6.09 kB         241 kB
+├ ○ /dashboard/settings                       278 B         103 kB
+├ ƒ /dashboard/teams                        6.56 kB         241 kB
+├ ○ /forgot-password                        4.29 kB         239 kB
+├ ○ /leaderboard                            1.32 kB         236 kB
+├ ƒ /learn/[slug]/[lessonId]                13.5 kB         297 kB
+├ ○ /login                                  5.76 kB         215 kB
+├ ○ /paths                                    278 B         103 kB
+├ ○ /pricing                                 3.3 kB         238 kB
+├ ○ /reviews                                2.99 kB         238 kB
+├ ƒ /settings                               5.84 kB         241 kB
+├ ○ /sign-in                                  278 B         103 kB
+├ ƒ /sign-up                                  278 B         103 kB
+├ ○ /signin                                   278 B         103 kB
+├ ○ /signup                                 8.85 kB         218 kB
+├ ○ /sitemap.xml                              278 B         103 kB          5m      1y
+├ ƒ /team/join/[token]                      3.54 kB         238 kB
+└ ƒ /wishlist                               1.64 kB         241 kB
++ First Load JS shared by all                102 kB
+  ├ chunks/1255-f8a8fe852c7e1df2.js         45.7 kB
+  ├ chunks/4bd1b696-100b9d70ed4e49c1.js     54.2 kB
+  └ other shared chunks (total)             2.54 kB
+
+
+ƒ Middleware                                83.2 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import { Heart, Loader2, Star } from "lucide-react";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { resolveMediaUrl } from "@/lib/media";
 import {
   buildFreeCourseLoginPath,
@@ -45,7 +46,7 @@ export function CourseCard({
   const heroImage = resolveMediaUrl({
     url: course.imageUrl || course.thumbnailUrl,
     path: course.imagePath,
-    fallback: "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200&h=1600&fit=crop",
+    fallback: "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1280&h=720&fit=crop",
   });
   const displayLevel = levelLabel(course.level).toUpperCase();
   const filledStars = Math.max(0, Math.min(5, Math.round(course.rating)));
@@ -188,14 +189,16 @@ export function CourseCard({
           aria-label={`Open ${course.title}`}
           className="absolute inset-0 z-10 rounded-[30px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-blue/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070b]"
         />
-        <div className="pointer-events-none relative z-20 flex h-full min-h-[540px] flex-col sm:min-h-[510px]">
-          <div className="relative basis-[54%] overflow-hidden sm:basis-[50%] lg:basis-[55%]">
+        <div className="pointer-events-none relative z-20 flex h-full min-h-[448px] flex-col sm:min-h-[500px]">
+          <div className="relative basis-[47%] overflow-hidden sm:basis-[48%] lg:basis-[52%]">
             <Image
               src={heroImage}
               alt={course.title}
               fill
-              quality={100}
-              sizes="(min-width: 1536px) 22vw, (min-width: 1280px) 25vw, (min-width: 1024px) 32vw, (min-width: 640px) 46vw, 84vw"
+              quality={75}
+              placeholder="blur"
+              blurDataURL={IMAGE_BLUR_DATA_URL}
+              sizes="(min-width: 1536px) 22vw, (min-width: 1280px) 25vw, (min-width: 1024px) 30vw, (min-width: 640px) 42vw, 72vw"
               className="object-cover object-center brightness-[0.94] contrast-[1.08] saturate-[1.08] transition duration-700 ease-out group-hover:scale-[1.04] group-hover:brightness-[1.05] group-hover:saturate-[1.16]"
             />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_12%,rgba(255,255,255,0.18),transparent_32%)]" />
@@ -224,7 +227,7 @@ export function CourseCard({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col bg-[#070a0f] px-5 pb-5 pt-5 text-white sm:px-6 sm:pb-6 sm:pt-5">
+          <div className="flex min-h-0 flex-1 flex-col bg-[#070a0f] px-[18px] pb-[18px] pt-[18px] text-white sm:px-6 sm:pb-6 sm:pt-5">
             {hasAccess ? (
               <div className="mb-3 inline-flex items-center self-start rounded-full border border-primary-blue/25 bg-primary-blue/14 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-blue">
                 {courseAccess?.statusLabel ?? "Enrolled"}

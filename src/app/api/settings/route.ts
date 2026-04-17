@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { appendMediaVersion, resolveMediaUrl } from "@/lib/media";
+import { normalizeSiteName } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
-const KEY_MAPPERS: Record<string, (input: { supportEmail?: string | null; supportPhone?: string | null; supportAddress?: string | null; socialLinks?: Record<string, string> }) => string> = {
+type SettingsKeyInput = {
+  siteName?: string | null;
+  supportEmail?: string | null;
+  supportPhone?: string | null;
+  supportAddress?: string | null;
+  assetVersion?: number | null;
+  socialLinks?: Record<string, string>;
+};
+
+const KEY_MAPPERS: Record<string, (input: SettingsKeyInput) => string> = {
   supportEmail: (input) => input.supportEmail || "",
   supportPhone: (input) => input.supportPhone || "",
   whatsappNumber: (input) => input.socialLinks?.whatsapp || "",
@@ -14,6 +25,25 @@ const KEY_MAPPERS: Record<string, (input: { supportEmail?: string | null; suppor
   linkedInUrl: (input) => input.socialLinks?.linkedin || "",
   youtubeUrl: (input) => input.socialLinks?.youtube || "",
   tiktokUrl: (input) => input.socialLinks?.tiktok || "",
+  siteName: (input) => normalizeSiteName(input.siteName || input.socialLinks?.siteName),
+  logoUrl: (input) =>
+    appendMediaVersion(
+      resolveMediaUrl({
+        url: input.socialLinks?.logoUrl,
+        path: input.socialLinks?.brandLogoPath,
+        fallback: "",
+      }),
+      input.assetVersion
+    ) || "",
+  faviconUrl: (input) =>
+    appendMediaVersion(
+      resolveMediaUrl({
+        url: input.socialLinks?.faviconUrl,
+        path: input.socialLinks?.brandFaviconPath,
+        fallback: "",
+      }),
+      input.assetVersion
+    ) || "",
 };
 
 export async function GET(request: NextRequest) {
@@ -25,9 +55,24 @@ export async function GET(request: NextRequest) {
       settings.socialLinks && typeof settings.socialLinks === "object" && !Array.isArray(settings.socialLinks)
         ? Object.fromEntries(Object.entries(settings.socialLinks).map(([key, value]) => [key, String(value)]))
         : {};
+    const assetVersion = settings.updatedAt?.getTime?.() ?? null;
 
     const fullPayload = {
-      siteName: settings.siteName,
+      siteName: normalizeSiteName(settings.siteName),
+      logoUrl: KEY_MAPPERS.logoUrl({
+        assetVersion,
+        socialLinks: {
+          ...socialLinks,
+          logoUrl: settings.logoUrl || "",
+        },
+      }),
+      faviconUrl: KEY_MAPPERS.faviconUrl({
+        assetVersion,
+        socialLinks: {
+          ...socialLinks,
+          faviconUrl: settings.faviconUrl || "",
+        },
+      }),
       supportEmail: settings.supportEmail,
       supportPhone: settings.supportPhone,
       supportAddress: settings.supportAddress,
@@ -56,10 +101,17 @@ export async function GET(request: NextRequest) {
       const resolver = KEY_MAPPERS[key];
       if (resolver) {
         acc[key] = resolver({
+          assetVersion,
+          siteName: settings.siteName,
           supportEmail: settings.supportEmail,
           supportPhone: settings.supportPhone,
           supportAddress: settings.supportAddress,
-          socialLinks,
+          socialLinks: {
+            ...socialLinks,
+            siteName: normalizeSiteName(settings.siteName),
+            logoUrl: settings.logoUrl || "",
+            faviconUrl: settings.faviconUrl || "",
+          },
         });
       }
       return acc;

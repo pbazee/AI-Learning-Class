@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { DollarSign, ArrowRight, Share2, TrendingUp } from "lucide-react";
@@ -34,7 +34,7 @@ export function AffiliateSection({
                 Earn While You Learn
               </h2>
               <p className="mt-4 text-base text-white/88 sm:text-lg">
-                Share AI Learning Class with your network and earn <span className="font-bold text-[#ffffff]">{commissionRate}% commission</span>{" "}
+                Share AI Genius Lab with your network and earn <span className="font-bold text-[#ffffff]">{commissionRate}% commission</span>{" "}
                 on every sale. Join thousands of affiliates earning passive income while spreading world-class AI education.
               </p>
 
@@ -72,3 +72,4 @@ export function AffiliateSection({
     </section>
   );
 }
+

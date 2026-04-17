@@ -188,7 +188,7 @@ export function CourseSection({
           {displayed.map((course, index) => (
             <div
               key={course.id}
-              className="min-w-0 shrink-0 snap-start basis-[84vw] sm:basis-[22rem] lg:basis-[calc((100%-3.75rem)/4)]"
+              className="min-w-0 shrink-0 snap-start basis-[72vw] sm:basis-[20.5rem] lg:basis-[calc((100%-3.75rem)/4)]"
             >
               <CourseCard
                 course={course}

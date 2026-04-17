@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import {
   buildCheckoutQuote,
@@ -6,6 +6,7 @@ import {
   type CheckoutGateway,
   type CheckoutItemInput,
 } from "@/lib/checkout";
+import type { BillingCycle } from "@/lib/site";
 import {
   getPaystackChannels,
   getPaystackMinimumAmount,
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
       ? (body.items as CheckoutItemInput[])
       : [];
     const planSlug = typeof body.planSlug === "string" ? body.planSlug : null;
+    const billingCycle =
+      body.billingCycle === "yearly" ? ("yearly" as BillingCycle) : ("monthly" as BillingCycle);
     const customerEmail =
       typeof body.customerEmail === "string" ? body.customerEmail.trim() : "";
     const customerName =
@@ -67,6 +70,7 @@ export async function POST(request: NextRequest) {
       request,
       items,
       planSlug,
+      billingCycle,
       gateway: method,
       country,
       couponCode,
@@ -106,9 +110,9 @@ export async function POST(request: NextRequest) {
     const checkoutLabel =
       quote.items.length === 1
         ? quote.items[0].title
-        : `AI Learning Class Order (${quote.items.length} items)`;
+        : `AI Genius Lab Order (${quote.items.length} items)`;
     const cancelUrl = quote.planSlug
-      ? `${origin}/checkout?plan=${quote.planSlug}`
+      ? `${origin}/checkout?plan=${quote.planSlug}&billing=${quote.billingCycle ?? "monthly"}`
       : `${origin}/checkout`;
     const affiliateCode = request.cookies.get("aff_code")?.value ?? null;
     const pendingOrder = await createPendingCheckoutOrder({
@@ -119,6 +123,7 @@ export async function POST(request: NextRequest) {
     const providerState = encodeProviderState({
       orderId: pendingOrder.id,
       planSlug: quote.planSlug,
+      billingCycle: quote.billingCycle,
       couponCode: quote.appliedCouponCode,
       affiliateCode,
     });
@@ -146,7 +151,7 @@ export async function POST(request: NextRequest) {
                       name: checkoutLabel,
                     },
                     recurring: {
-                      interval: "month",
+                      interval: quote.billingCycle === "yearly" ? "year" : "month",
                     },
                     unit_amount: Math.round(quote.total * 100),
                   },
@@ -170,22 +175,24 @@ export async function POST(request: NextRequest) {
           success_url: `${origin}/checkout/complete?gateway=stripe&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: cancelUrl,
           metadata: {
-            source: "ai-learning-class",
+            source: "ai-genius-lab",
             gateway: "stripe",
             customer_name: customerName,
             order_id: pendingOrder.id,
             plan_slug: quote.planSlug ?? "",
+            billing_cycle: quote.billingCycle ?? "",
             applied_coupon: quote.appliedCouponCode ?? "",
             ...(affiliateCode ? { aff_code: affiliateCode } : {}),
           },
           subscription_data: isPlanCheckout
             ? {
                 metadata: {
-                  source: "ai-learning-class",
+                  source: "ai-genius-lab",
                   gateway: "stripe",
                   customer_name: customerName,
                   order_id: pendingOrder.id,
                   plan_slug: quote.planSlug ?? "",
+                  billing_cycle: quote.billingCycle ?? "",
                   applied_coupon: quote.appliedCouponCode ?? "",
                   ...(affiliateCode ? { aff_code: affiliateCode } : {}),
                 },
@@ -238,7 +245,7 @@ export async function POST(request: NextRequest) {
             ],
             payer: customerEmail ? { email_address: customerEmail } : undefined,
             application_context: {
-              brand_name: "AI Learning Class",
+              brand_name: "AI Genius Lab",
               user_action: "PAY_NOW",
               return_url: `${origin}/checkout/complete?gateway=paypal`,
               cancel_url: cancelUrl,
@@ -303,11 +310,12 @@ export async function POST(request: NextRequest) {
               currency: quote.currency,
             }),
             metadata: {
-              source: "ai-learning-class",
+              source: "ai-genius-lab",
               customer_name: customerName,
               country,
               order_id: pendingOrder.id,
               plan_slug: quote.planSlug ?? undefined,
+              billing_cycle: quote.billingCycle ?? undefined,
               applied_coupon: quote.appliedCouponCode ?? undefined,
               ...(affiliateCode ? { aff_code: affiliateCode } : {}),
             },
@@ -363,3 +371,4 @@ export async function POST(request: NextRequest) {
     }
   });
 }
+

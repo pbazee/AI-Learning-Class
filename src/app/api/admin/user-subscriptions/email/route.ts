@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createAuditLog } from "@/lib/audit-log";
@@ -56,7 +56,7 @@ function buildEmailTemplate(template: TemplateKey, subscription: {
               <p style="color:#cbd5e1; line-height:1.7;">Hi ${subscription.name}, your <strong>${subscription.planName}</strong> subscription renews on <strong>${formattedRenewalDate}</strong>.</p>
               <div style="margin:24px 0; border-radius:20px; background:#111827; padding:20px;">
                 <p style="margin:0; color:#94a3b8;">Plan</p>
-                <p style="margin:6px 0 0; font-size:20px; font-weight:700; color:#fff;">${subscription.planName} • ${subscription.billingCycle}</p>
+                <p style="margin:6px 0 0; font-size:20px; font-weight:700; color:#fff;">${subscription.planName} | ${subscription.billingCycle}</p>
                 <p style="margin:6px 0 0; color:#f8fafc;">${formatPrice(subscription.revenue, subscription.currency)}</p>
               </div>
               <a href="${appUrl}/pricing" style="display:inline-block; background:#f97316; color:#fff; text-decoration:none; padding:14px 20px; border-radius:999px; font-weight:700;">Review My Plan</a>
@@ -66,7 +66,7 @@ function buildEmailTemplate(template: TemplateKey, subscription: {
       };
     case "inactive_reactivation":
       return {
-        subject: `Pick up where you left off in AI Learning Class`,
+        subject: `Pick up where you left off in AI Genius Lab`,
         html: `
           <div style="font-family: Inter, Arial, sans-serif; background:#060814; color:#f8fafc; padding:40px 20px;">
             <div style="max-width:640px; margin:0 auto; background:#0f172a; border:1px solid rgba(148,163,184,0.18); border-radius:24px; padding:32px;">
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
         });
 
         return resend.emails.send({
-          from: process.env.RESEND_FROM_EMAIL || "noreply@ailearning.com",
+          from: process.env.RESEND_FROM_EMAIL || "noreply@aigeniuslab.com",
           to: subscription.user.email,
           subject,
           html,
@@ -197,3 +197,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
