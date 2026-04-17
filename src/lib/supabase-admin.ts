@@ -15,9 +15,12 @@ export function getSupabaseAdminClient() {
   }
 
   if (!globalForSupabaseAdmin.supabaseAdmin) {
+    const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
     globalForSupabaseAdmin.supabaseAdmin = createClient(
-      env.NEXT_PUBLIC_SUPABASE_URL,
-      env.SUPABASE_SERVICE_ROLE_KEY,
+      supabaseUrl,
+      serviceRoleKey,
       {
         auth: {
           autoRefreshToken: false,

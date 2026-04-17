@@ -3,7 +3,7 @@
 import { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import ReactPlayer from "react-player";
 import { AskAI } from "@/components/courses/AskAI";
 import {
@@ -30,9 +30,10 @@ import type { Course } from "@/types";
 /**
  * PDF Viewer Integration
  * Strictly Dynamic to avoid SSR issues with pdfjs-dist.
+ * Using a completely isolated component to prevent any build-time evaluation.
  */
-const LessonPdfViewer = dynamic(
-  () => import("./LessonPdfViewer").then((mod) => mod.LessonPdfViewer),
+const LessonPdfViewerWrapper = dynamic(
+  () => import("./LessonPdfViewerLazy").then((mod) => mod.LazyPdfViewer),
   { 
     ssr: false, 
     loading: () => (
@@ -325,6 +326,12 @@ export function LessonPlayerClient({
   );
   const [notesPanelOpen, setNotesPanelOpen] = useState(false);
   const initialProgress = normalizeLessonProgressEntry(initialLessonProgressMap[initialLessonId]);
+
+  // --- Note States ---
+  const [noteContent, setNoteContent] = useState(initialNoteContent);
+  const [noteEditMode, setNoteEditMode] = useState<"edit" | "preview">("edit");
+  const [isNoteSaving, setIsNoteSaving] = useState(false);
+  const [lastSavedContent, setLastSavedContent] = useState(initialNoteContent);
 
   // --- PDF & Media States ---
   const [previewPdfPage, setPreviewPdfPage] = useState(initialProgress.lastPdfPage ?? 1);
@@ -696,11 +703,40 @@ export function LessonPlayerClient({
       return;
     }
 
-    const handlePageHide = () => flushPendingLessonProgress(currentLesson.id);
+    const handlePageHide = () => {
+      flushPendingLessonProgress(currentLesson.id);
+    };
     window.addEventListener("pagehide", handlePageHide);
 
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, [currentLesson.id, flushPendingLessonProgress, isMounted]);
+
+  // --- Notes Autosave Logic ---
+  useEffect(() => {
+    if (!isMounted || !viewerId || noteContent === lastSavedContent) return;
+
+    const timer = setTimeout(async () => {
+      if (!noteContent.trim() || noteContent === lastSavedContent) return;
+
+      setIsNoteSaving(true);
+      try {
+        const res = await fetch(`/api/learn/lessons/${currentLesson.id}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: noteContent }),
+        });
+        if (res.ok) {
+          setLastSavedContent(noteContent);
+        }
+      } catch (err) {
+        console.error("Failed to autosave note", err);
+      } finally {
+        setIsNoteSaving(false);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [noteContent, currentLesson.id, viewerId, isMounted, lastSavedContent]);
 
   // --- Render Guard (The Hydration Fix) ---
   if (!isMounted) {
@@ -770,6 +806,123 @@ export function LessonPlayerClient({
       </header>
 
       <div className="flex flex-1 overflow-hidden">
+        {/* Navigation Sidebar */}
+        <AnimatePresence initial={false}>
+          {sidebarOpen && (
+            <motion.aside
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="relative hidden h-full shrink-0 flex-col border-r border-white/5 bg-[#04070d]/50 backdrop-blur-xl lg:flex"
+            >
+              <div className="flex h-full flex-col overflow-hidden">
+                {/* Course Progress Card */}
+                <div className="p-6">
+                  <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-primary-blue/20 to-transparent p-5">
+                    <div className="relative z-10">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-primary-blue/80">Course Completion</p>
+                      <div className="mt-2 flex items-end gap-2">
+                        <span className="text-3xl font-black text-white">
+                          {Math.round(
+                            (Object.values(lessonProgressMap).filter(p => p.isCompleted).length / 
+                            (allLessons.length || 1)) * 100
+                          )}%
+                        </span>
+                        <span className="mb-1 text-xs font-medium text-slate-400">of all lessons</span>
+                      </div>
+                      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                        <motion.div 
+                          className="h-full bg-primary-blue shadow-[0_0_12px_rgba(0,86,210,0.5)]"
+                          initial={{ width: 0 }}
+                          animate={{ 
+                            width: `${(Object.values(lessonProgressMap).filter(p => p.isCompleted).length / (allLessons.length || 1)) * 100}%` 
+                          }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                        />
+                      </div>
+                    </div>
+                    {/* Decorative Background */}
+                    <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-primary-blue/10 blur-2xl" />
+                  </div>
+                </div>
+
+                {/* Lesson List */}
+                <div className="flex-1 overflow-y-auto px-4 pb-8 custom-scrollbar">
+                  <div className="space-y-6">
+                    {modules.map((module, mIdx) => (
+                      <div key={module.id} className="space-y-2">
+                        <h3 className="px-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                          {mIdx + 1}. {module.title}
+                        </h3>
+                        <div className="grid gap-1">
+                          {module.lessons.map((lesson) => {
+                            const isSelected = lesson.id === currentLesson.id;
+                            const isLocked = !isLessonUnlocked(lesson);
+                            const progress = lessonProgressMap[lesson.id];
+                            const isCompleted = progress?.isCompleted;
+                            
+                            return (
+                              <Link
+                                key={lesson.id}
+                                href={isLocked ? "#" : `/learn/${course.slug}/${lesson.id}`}
+                                className={cn(
+                                  "group relative flex items-center justify-between rounded-xl p-3 transition-all duration-200",
+                                  isSelected ? "bg-white/5 text-white" : "text-slate-400 hover:bg-white/[0.03] hover:text-slate-200",
+                                  isLocked && "cursor-not-allowed opacity-50"
+                                )}
+                              >
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center">
+                                    {isLocked ? (
+                                      <Lock className="h-4 w-4 text-slate-600" />
+                                    ) : isCompleted ? (
+                                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500">
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                      </div>
+                                    ) : (
+                                      <div className="relative h-5 w-5 rounded-full border-2 border-slate-700">
+                                        {progress && progress.progressPercent > 0 && (
+                                          <svg className="absolute -left-0.5 -top-0.5 h-6 w-6 -rotate-90">
+                                            <circle
+                                              cx="12"
+                                              cy="12"
+                                              r="10"
+                                              fill="transparent"
+                                              stroke="currentColor"
+                                              strokeWidth="2"
+                                              strokeDasharray={2 * Math.PI * 10}
+                                              strokeDashoffset={2 * Math.PI * 10 * (1 - progress.progressPercent / 100)}
+                                              className="text-primary-blue transition-all duration-500"
+                                            />
+                                          </svg>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="truncate text-xs font-bold leading-tight">
+                                    {lesson.title}
+                                  </span>
+                                </div>
+                                {isSelected && (
+                                  <motion.div 
+                                    layoutId="active-indicator"
+                                    className="absolute left-0 h-4 w-1 rounded-r-full bg-primary-blue" 
+                                  />
+                                )}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
         {/* Main Content Area */}
         <main className="relative flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -777,7 +930,7 @@ export function LessonPlayerClient({
               {/* Asset Viewer */}
               <div ref={pdfViewportRef} className={assetShellClassName}>
                 {resolvedLessonRenderer.kind === "pdf" && primaryAssetUrl ? (
-                  <LessonPdfViewer
+                  <LessonPdfViewerWrapper
                     key={currentLesson.id}
                     file={primaryAssetUrl}
                     lessonId={currentLesson.id}
@@ -960,6 +1113,90 @@ export function LessonPlayerClient({
               assistantLabel={askAiAssistantLabel}
               onClose={() => setAskAiOpen(false)}
             />
+          )}
+        </AnimatePresence>
+
+        {/* Floating Notes Panel */}
+        <AnimatePresence>
+          {notesPanelOpen && (
+            <motion.aside
+              initial={{ x: 400, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 400, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="absolute bottom-6 right-6 top-24 z-30 w-[calc(100%-3rem)] overflow-hidden rounded-[32px] border border-white/10 bg-[#04070d]/60 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)] backdrop-blur-3xl sm:w-96"
+            >
+              <div className="flex h-full flex-col">
+                <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <NotebookText className="h-4 w-4 text-primary-blue" />
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-white">Lesson Notes</h3>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isNoteSaving && (
+                      <div className="mr-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Saving...
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setNotesPanelOpen(false)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Editor Tabs */}
+                <div className="flex border-b border-white/5 px-4 pt-1">
+                  <button
+                    onClick={() => setNoteEditMode("edit")}
+                    className={cn(
+                      "px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                      noteEditMode === "edit" ? "border-b-2 border-primary-blue text-white" : "text-slate-500 hover:text-slate-300"
+                    )}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setNoteEditMode("preview")}
+                    className={cn(
+                      "px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                      noteEditMode === "preview" ? "border-b-2 border-primary-blue text-white" : "text-slate-500 hover:text-slate-300"
+                    )}
+                  >
+                    Preview
+                  </button>
+                </div>
+
+                {/* Editor Content */}
+                <div className="flex-1 overflow-hidden p-6">
+                  {noteEditMode === "edit" ? (
+                    <textarea
+                      value={noteContent}
+                      onChange={(e) => setNoteContent(e.target.value)}
+                      placeholder="Take a note for this lesson. Use Markdown for formatting..."
+                      className="h-full w-full resize-none border-none bg-transparent text-sm leading-relaxed text-slate-300 outline-none placeholder:text-slate-700 custom-scrollbar"
+                    />
+                  ) : (
+                    <div className="h-full w-full overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-slate-300 custom-scrollbar">
+                      {noteContent || <span className="italic text-slate-600">Nothing to preview yet. Start typing!</span>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-6 py-3">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                    <Sparkles className="h-3 w-3 text-primary-blue" />
+                    Lesson Specific
+                  </div>
+                  <span className="text-[10px] font-medium text-slate-600">
+                    {noteContent.length} characters
+                  </span>
+                </div>
+              </div>
+            </motion.aside>
           )}
         </AnimatePresence>
       </div>

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import {
   buildCheckoutQuote,
@@ -24,6 +24,7 @@ import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import { prisma } from "@/lib/prisma";
 
 import { env } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 function getAppOrigin(request: NextRequest) {
   return env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;

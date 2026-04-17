@@ -1,7 +1,6 @@
 "use client";
 
 import "@/lib/promise-polyfill";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,8 +15,8 @@ interface ReactPdfModule {
   Page: React.ComponentType<PageProps & { pageNumber?: number }>;
 }
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-interface LessonPdfViewerProps {
+// Types
+interface LessonPdfViewerWrapperProps {
   file: string;
   lessonId: string;
   viewportWidth: number;
@@ -27,12 +26,12 @@ interface LessonPdfViewerProps {
   maxPages?: number;
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+// Constants
 const MIN_PAGE_WIDTH = 320;
 const PAGE_HORIZONTAL_PADDING = 48;
 
-// ── Main Component ─────────────────────────────────────────────────────────────
-export function LessonPdfViewer({
+// Main Wrapper Component
+export function LessonPdfViewerWrapper({
   file,
   lessonId,
   viewportWidth,
@@ -40,19 +39,21 @@ export function LessonPdfViewer({
   onLoad,
   initialPage = 1,
   maxPages,
-}: LessonPdfViewerProps) {
+}: LessonPdfViewerWrapperProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<number>(Math.max(1, initialPage));
+  const [pdfjsLoaded, setPdfjsLoaded] = useState(false);
   const [pdfModule, setPdfModule] = useState<ReactPdfModule | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const initialScrollDone = useRef(false);
   const lastReportedPage = useRef<number>(Math.max(1, initialPage));
+  const setupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Derived values ─────────────────────────────────────────────────────────
+  // Derived values
   const renderedPageCount =
     numPages == null ? 0 : maxPages ? Math.min(numPages, maxPages) : numPages;
 
@@ -83,23 +84,41 @@ export function LessonPdfViewer({
 
         const { pdfjs, Document, Page } = await import("react-pdf");
         
-        if (!cancelled && pdfjs?.GlobalWorkerOptions) {
-          pdfjs.GlobalWorkerOptions.workerSrc = `/pdfjs/pdf.worker.min.mjs`;
-        }
-        
-        // Store the Document and Page components for rendering
         if (!cancelled) {
+          // Set up the PDF.js worker
+          if (pdfjs?.GlobalWorkerOptions) {
+            pdfjs.GlobalWorkerOptions.workerSrc = `/pdfjs/pdf.worker.min.mjs`;
+          }
+          setPdfjsLoaded(true);
+          
+          // Store the Document and Page components for rendering
           setPdfModule({ Document, Page });
         }
       } catch (err) {
-        console.error("[lesson-pdf-viewer] Failed to configure PDF viewer:", err);
+        console.error("[lesson-pdf-viewer-wrapper] Failed to configure PDF viewer:", err);
+        if (!cancelled) {
+          setError("Failed to initialize PDF viewer. Please refresh the page.");
+        }
       }
     };
+
     setup();
-    return () => { cancelled = true; };
+
+    // Timeout guard: if setup stalls, surface a useful error instead of spinning forever
+    setupTimerRef.current = setTimeout(() => {
+      if (!cancelled && !pdfjsLoaded) {
+        setError("PDF viewer setup is taking too long. Please refresh the page or try again later.");
+      }
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      if (setupTimerRef.current) clearTimeout(setupTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Progress reporting ─────────────────────────────────────────────────────
+  // Progress reporting
   const reportProgress = useCallback(
     (page: number, total: number) => {
       if (page === lastReportedPage.current) return;
@@ -110,7 +129,7 @@ export function LessonPdfViewer({
     [onProgress]
   );
 
-  // ── react-pdf callbacks ────────────────────────────────────────────────────
+  // react-pdf callbacks
   const handleDocumentLoadSuccess = useCallback(
     (pdf: { numPages: number }) => {
       const totalPages = pdf.numPages;
@@ -131,7 +150,7 @@ export function LessonPdfViewer({
   );
 
   const handleDocumentLoadError = useCallback((loadError: Error) => {
-    console.error("[lesson-pdf-viewer] Failed to load PDF document.", loadError);
+    console.error("[lesson-pdf-viewer-wrapper] Failed to load PDF document.", loadError);
     setNumPages(null);
     setError(
       `Unable to load this PDF right now. The viewer has been reset and you can retry below.\n\nTechnical details: ${loadError.message}`
@@ -139,7 +158,7 @@ export function LessonPdfViewer({
     setIsLoading(false);
   }, []);
 
-  // ── Intersection Observer for scroll-based progress tracking ───────────────
+  // Intersection Observer for scroll-based progress tracking
   useEffect(() => {
     if (!numPages || !containerRef.current || renderedPageCount === 0) return;
 
@@ -178,7 +197,7 @@ export function LessonPdfViewer({
     return () => observer.disconnect();
   }, [activePage, numPages, renderedPageCount, reportProgress]);
 
-  // ── Scroll to initial page on first load ───────────────────────────────────
+  // Scroll to initial page on first load
   useEffect(() => {
     if (!numPages || initialScrollDone.current) return;
 
@@ -196,7 +215,7 @@ export function LessonPdfViewer({
     return () => window.clearTimeout(timer);
   }, [initialPage, maxPages, numPages]);
 
-  // ── Reset refs when file/lesson changes ────────────────────────────────────
+  // Reset refs when file/lesson changes
   useEffect(() => {
     pageRefs.current.clear();
     initialScrollDone.current = false;
@@ -207,12 +226,25 @@ export function LessonPdfViewer({
     setActivePage(Math.max(1, initialPage));
   }, [file, lessonId, initialPage]);
 
-  // ── Guard ──────────────────────────────────────────────────────────────────
+  // Guard
   if (typeof window === "undefined" || !file) {
     return null;
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // Show loading while PDF.js worker is being set up
+  if (!pdfjsLoaded && !error) {
+    return (
+      <div className="flex h-full min-h-[500px] w-full flex-col items-center justify-center gap-4 bg-[#02040a] text-slate-400">
+        <Loader2 className="h-8 w-8 animate-spin text-primary-blue" />
+        <div className="text-center">
+          <p className="text-sm font-medium">Loading PDF viewer...</p>
+          <p className="text-xs text-slate-500 mt-1">This should only take a moment</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Render
   return (
     <div className="relative flex h-full min-h-[500px] w-full flex-col overflow-hidden bg-[#02040a]">
       {/* Loading overlay */}

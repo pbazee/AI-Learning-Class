@@ -49,6 +49,6 @@ prisma/migrations/
 # Local temp / build logs
 codex_tmp/
 codex_build.log
-codex_tmp\
+codex_tmp/
 build-*.log
 *.log

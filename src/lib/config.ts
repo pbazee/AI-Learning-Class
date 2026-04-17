@@ -32,7 +32,6 @@ const EnvSchema = z.object({
 
   // Emails / third-party
   RESEND_API_KEY: z.string().optional(),
-  RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().email().optional(),
 
   // Revalidation / caching
@@ -55,6 +54,7 @@ const EnvSchema = z.object({
   PRISMA_RETRY_DELAY_MS: z.string().optional(),
   PRISMA_TRANSACTION_MAX_WAIT_MS: z.string().optional(),
   PRISMA_TRANSACTION_TIMEOUT_MS: z.string().optional(),
+  PRISMA_LOG_COOLDOWN_MS: z.string().optional(),
 });
 
 const raw = {
@@ -88,6 +88,7 @@ const raw = {
   PRISMA_RETRY_DELAY_MS: process.env.PRISMA_RETRY_DELAY_MS,
   PRISMA_TRANSACTION_MAX_WAIT_MS: process.env.PRISMA_TRANSACTION_MAX_WAIT_MS,
   PRISMA_TRANSACTION_TIMEOUT_MS: process.env.PRISMA_TRANSACTION_TIMEOUT_MS,
+  PRISMA_LOG_COOLDOWN_MS: process.env.PRISMA_LOG_COOLDOWN_MS,
 };
 
 export const env = EnvSchema.parse(raw);
