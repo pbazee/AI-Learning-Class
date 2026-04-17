@@ -183,12 +183,12 @@ export function CourseSection({
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="relative z-10 hide-scrollbar -mx-4 flex snap-x snap-mandatory gap-5 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-0 lg:px-0"
+          className="relative z-10 hide-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto pl-4 pr-5 pb-2 sm:-mx-6 sm:gap-5 sm:px-6 lg:-mx-0 lg:px-0"
         >
           {displayed.map((course, index) => (
             <div
               key={course.id}
-              className="min-w-0 shrink-0 snap-start basis-[72vw] sm:basis-[20.5rem] lg:basis-[calc((100%-3.75rem)/4)]"
+              className="min-w-0 shrink-0 snap-start basis-[84vw] sm:basis-[20.5rem] lg:basis-[calc((100%-3.75rem)/4)]"
             >
               <CourseCard
                 course={course}

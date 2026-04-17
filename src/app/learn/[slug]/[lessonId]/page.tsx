@@ -82,6 +82,7 @@ export default async function LessonPlayerPage({
 
   return (
     <LessonPlayerClient
+      key={lessonId}
       course={course}
       initialLessonId={lessonId}
       viewerId={viewer?.id ?? null}
