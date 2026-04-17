@@ -14,7 +14,7 @@
 - Learner dashboard with progress tracking, skill radar, and streak counter
 - Certificate generation (PDF + optional blockchain hash)
 - AI co-pilot chat inside every course (powered by Claude)
-
+why did you leave me soledad
 ### 🤖 AI Features
 - **Personalized onboarding quiz** — generates custom learning roadmap on signup
 - **AI Copilot** — in-course assistant for questions, exercises, and explanations
