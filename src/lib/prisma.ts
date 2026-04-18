@@ -1,18 +1,20 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { recordDatabaseQueryTiming } from "@/lib/server-performance";
+import { env, prismaConfig, assertProductionReady } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 const TRANSIENT_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2028", "P2034"]);
 const SCHEMA_MISMATCH_PRISMA_CODES = new Set(["P2021", "P2022"]);
-const DEFAULT_MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.PRISMA_MAX_ATTEMPTS ?? "3", 10));
-const DEFAULT_RETRY_DELAY_MS = Math.max(150, Number.parseInt(process.env.PRISMA_RETRY_DELAY_MS ?? "350", 10));
-const DEFAULT_LOG_COOLDOWN_MS = Math.max(1_000, Number.parseInt(process.env.PRISMA_LOG_COOLDOWN_MS ?? "60000", 10));
+const DEFAULT_MAX_ATTEMPTS = Math.max(1, Number.parseInt(env.PRISMA_MAX_ATTEMPTS ?? "3", 10));
+const DEFAULT_RETRY_DELAY_MS = Math.max(150, Number.parseInt(env.PRISMA_RETRY_DELAY_MS ?? "350", 10));
+const DEFAULT_LOG_COOLDOWN_MS = Math.max(1_000, Number.parseInt(env.PRISMA_LOG_COOLDOWN_MS ?? "60000", 10));
 const DEFAULT_TRANSACTION_MAX_WAIT_MS = Math.max(
   5_000,
-  Number.parseInt(process.env.PRISMA_TRANSACTION_MAX_WAIT_MS ?? "20000", 10)
+  Number.parseInt(env.PRISMA_TRANSACTION_MAX_WAIT_MS ?? "20000", 10)
 );
 const DEFAULT_TRANSACTION_TIMEOUT_MS = Math.max(
   DEFAULT_TRANSACTION_MAX_WAIT_MS,
-  Number.parseInt(process.env.PRISMA_TRANSACTION_TIMEOUT_MS ?? "45000", 10)
+  Number.parseInt(env.PRISMA_TRANSACTION_TIMEOUT_MS ?? "45000", 10)
 );
 
 type PrismaLikeClient = PrismaClient & {
@@ -203,19 +205,21 @@ export function isPrismaSchemaMismatchError(error: unknown) {
   );
 }
 
-const databaseUrl = normalizePoolerUrl(process.env.DATABASE_URL);
-const directUrl = normalizeDirectUrl(process.env.DIRECT_URL);
-
-if (databaseUrl) {
-  process.env.DATABASE_URL = databaseUrl;
+// Validate production-critical environment variables (throws in production if missing)
+try {
+  assertProductionReady();
+} catch (err) {
+  // Fail fast in server startup if production env is misconfigured
+  logger.error(err);
+  throw err;
 }
 
-if (directUrl) {
-  process.env.DIRECT_URL = directUrl;
-}
+const databaseUrl = normalizePoolerUrl(env.DATABASE_URL);
+const directUrl = normalizeDirectUrl(env.DIRECT_URL);
+
 
 const prismaOptions: Prisma.PrismaClientOptions = {
-  log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+  log: env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   transactionOptions: {
     maxWait: DEFAULT_TRANSACTION_MAX_WAIT_MS,
     timeout: DEFAULT_TRANSACTION_TIMEOUT_MS,
@@ -282,7 +286,7 @@ const prismaClient = shouldCreateClient ? createPrismaClient() : globalForPrisma
 
 export const prisma: PrismaClient = prismaClient;
 
-if (process.env.NODE_ENV !== "production") {
+if (env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prismaClient;
   globalForPrisma.prismaUrl = databaseUrl;
   globalForPrisma.directUrl = directUrl;

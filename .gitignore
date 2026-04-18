@@ -45,3 +45,10 @@ prisma/migrations/
 .vscode/
 .idea/
 *.swp
+
+# Local temp / build logs
+codex_tmp/
+codex_build.log
+codex_tmp/
+build-*.log
+*.log

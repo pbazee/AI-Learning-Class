@@ -227,7 +227,7 @@ export function CourseCard({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col bg-[#070a0f] px-[18px] pb-[18px] pt-[18px] text-white sm:px-6 sm:pb-6 sm:pt-5">
+          <div className="flex min-h-0 flex-1 flex-col bg-[#070a0f] px-[18px] pb-5 pt-[18px] text-white sm:px-6 sm:pb-7 sm:pt-5">
             {hasAccess ? (
               <div className="mb-3 inline-flex items-center self-start rounded-full border border-primary-blue/25 bg-primary-blue/14 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-blue">
                 {courseAccess?.statusLabel ?? "Enrolled"}
@@ -273,7 +273,7 @@ export function CourseCard({
             </div>
 
             {hasAccess && (courseAccess?.progress ?? 0) > 0 ? (
-              <div className="mt-3">
+              <div className="mt-4">
                 <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-medium text-white/68">
                   <span>{courseAccess?.actionLabel ?? "Continue Learning"}</span>
                   <span className="text-white">{courseAccess?.progress ?? 0}%</span>
@@ -292,7 +292,7 @@ export function CourseCard({
               onClick={hasAccess ? handleResumeLearning : handlePrimaryAction}
               disabled={enrolling && !hasAccess}
               className={cn(
-                "pointer-events-auto mt-auto inline-flex w-full items-center justify-center rounded-[16px] px-4 py-2.5 text-sm font-semibold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                "pointer-events-auto mt-auto inline-flex w-full items-center justify-center rounded-[16px] px-4 py-3 text-[13px] font-bold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                 buttonClassName
               )}
             >

@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { env } from "@/lib/config";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/email/send`, {
+    await fetch(`${env.NEXT_PUBLIC_APP_URL}/api/email/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

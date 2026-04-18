@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth-redirect";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { createClient } from "@/lib/supabase";
+import { logger } from "@/lib/logger";
 
 const quizQuestions = [
   {
@@ -140,7 +141,7 @@ export default function SignupPage() {
     setLoading(true);
     const supabase = createClient();
     await syncNewsletterPreference(email, name);
-    console.log("[signup] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
+    logger.debug("[signup] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -166,7 +167,7 @@ export default function SignupPage() {
 
     setLoading(true);
     const supabase = createClient();
-    console.log("[signup] Creating account for:", email);
+    logger.info("[signup] Creating account for:", email);
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -184,19 +185,19 @@ export default function SignupPage() {
       return;
     }
 
-    console.log("[signup] signUp response — user:", data.user?.id, "session:", !!data.session);
+    logger.debug("[signup] signUp response — user:", { userId: data.user?.id, hasSession: !!data.session });
 
     // If Supabase email confirmation is enabled, no session yet → show confirm message
     if (data.user && !data.session) {
       void syncNewsletterPreference(email, name);
-      console.log("[signup] Email confirmation required, check inbox");
+      logger.info("[signup] Email confirmation required, check inbox");
       setEmailConfirmSent(true);
       setLoading(false);
       return;
     }
 
     // Auto-confirmed (email confirmation disabled in Supabase) → proceed to quiz
-    console.log("[signup] Account created and auto-confirmed");
+    logger.info("[signup] Account created and auto-confirmed");
     if (referralCode) {
       fetch("/api/referrals/apply", {
         method: "POST",

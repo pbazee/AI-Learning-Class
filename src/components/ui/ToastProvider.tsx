@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from "lucide-react";
+import { logger } from "@/lib/logger";
 
 type ToastType = "success" | "error" | "warning" | "info";
 
@@ -50,7 +51,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const enqueue = useCallback(
     (message: string, type: ToastType) => {
-      console.log(`[toast.${type}]`, message);
+      logger.debug(`[toast.${type}]`, message);
       const id = createToastId();
       const nextToast: ToastItem = { id, message, type, visible: true };
       setToasts((current) => [...current, nextToast]);

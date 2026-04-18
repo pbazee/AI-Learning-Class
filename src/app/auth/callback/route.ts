@@ -6,6 +6,7 @@ import {
   resolvePostAuthDestination,
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
+import { env } from "@/lib/config";
 
 type CookieToSet = {
   name: string;
@@ -22,9 +23,16 @@ export async function GET(request: NextRequest) {
 
   const cookieStore = await cookies();
 
+  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {

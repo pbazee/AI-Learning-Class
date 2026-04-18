@@ -1,3 +1,5 @@
+import { env } from "@/lib/config";
+
 export const BASE_CHECKOUT_CURRENCY = "USD" as const;
 
 export const SUPPORTED_CHECKOUT_CURRENCIES = [
@@ -55,7 +57,7 @@ function getUsdConversionRate(targetCurrency: SupportedCheckoutCurrency) {
   }
 
   const envKey = `CHECKOUT_RATE_USD_TO_${targetCurrency}`;
-  const rawValue = process.env[envKey]?.trim();
+  const rawValue = (env as any)[envKey]?.trim();
   const parsedValue = rawValue ? Number(rawValue) : NaN;
 
   if (!Number.isFinite(parsedValue) || parsedValue <= 0) {

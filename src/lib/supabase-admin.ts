@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
+import { env } from "@/lib/config";
 
-export const ADMIN_STORAGE_BUCKET =
-  process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "admin-assets";
+export const ADMIN_STORAGE_BUCKET = env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "admin-assets";
 
 type SupabaseAdminClient = ReturnType<typeof createClient>;
 
@@ -10,14 +10,17 @@ const globalForSupabaseAdmin = globalThis as unknown as {
 };
 
 export function getSupabaseAdminClient() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("Supabase storage is not configured for admin uploads.");
   }
 
   if (!globalForSupabaseAdmin.supabaseAdmin) {
+    const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
     globalForSupabaseAdmin.supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      supabaseUrl,
+      serviceRoleKey,
       {
         auth: {
           autoRefreshToken: false,

@@ -21,6 +21,7 @@ import {
   upsertTeamMemberEntitlement,
 } from "@/lib/access-control";
 import { prisma } from "@/lib/prisma";
+import { env } from "@/lib/config";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
 
@@ -82,7 +83,7 @@ export type TeamWorkspaceDashboardData = {
 };
 
 function getAppOrigin() {
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
 function buildInviteLink(token: string) {

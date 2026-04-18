@@ -1,5 +1,7 @@
 ﻿// src/app/api/email/send/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { env } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 type EmailType = "enrollment" | "certificate" | "welcome" | "admin_alert";
 
@@ -27,7 +29,7 @@ function buildEmailHTML(type: EmailType, data: Record<string, string>): { subjec
             <p style="color: #9ca3af; line-height: 1.6; margin-bottom: 24px;">
               You've joined 500,000+ AI learners worldwide. Your personalized learning path is ready.
             </p>
-            <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard" style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #00d4ff, #7c3aed); color: white; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px;">
+            <a href="${env.NEXT_PUBLIC_APP_URL}/dashboard" style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #00d4ff, #7c3aed); color: white; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px;">
               Start Learning
             </a>
           </div>
@@ -45,7 +47,7 @@ function buildEmailHTML(type: EmailType, data: Record<string, string>): { subjec
               You now have lifetime access to <strong style="color: white;">${data.courseTitle}</strong>. 
               Start learning at your own pace, anytime, anywhere.
             </p>
-            <a href="${process.env.NEXT_PUBLIC_APP_URL}/courses/${data.courseSlug}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #00d4ff, #7c3aed); color: white; text-decoration: none; border-radius: 12px; font-weight: 700;">
+            <a href="${env.NEXT_PUBLIC_APP_URL}/courses/${data.courseSlug}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #00d4ff, #7c3aed); color: white; text-decoration: none; border-radius: 12px; font-weight: 700;">
               Go to Course
             </a>
             <p style="color: #6b7280; font-size: 12px; margin-top: 32px;">
@@ -68,7 +70,7 @@ function buildEmailHTML(type: EmailType, data: Record<string, string>): { subjec
               <p style="color: #9ca3af; font-size: 14px; margin-bottom: 8px;">Certificate Code</p>
               <p style="color: #00d4ff; font-family: monospace; font-size: 18px; font-weight: 700;">${data.certificateCode}</p>
             </div>
-            <a href="${process.env.NEXT_PUBLIC_APP_URL}/certificates/${data.certificateCode}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; text-decoration: none; border-radius: 12px; font-weight: 700;">
+            <a href="${env.NEXT_PUBLIC_APP_URL}/certificates/${data.certificateCode}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; text-decoration: none; border-radius: 12px; font-weight: 700;">
               Download Certificate
             </a>
           </div>
@@ -95,18 +97,19 @@ export async function POST(req: NextRequest) {
   try {
     const payload: EmailPayload = await req.json();
 
-    if (!process.env.RESEND_API_KEY) {
-      console.log("[email] Would send:", payload.type, "to", payload.to);
+    if (!env.RESEND_API_KEY) {
+      // Resend is not configured in this environment; log a safe preview.
+      logger.info("[email] RESEND_API_KEY not configured; previewing email send", { type: payload.type, to: payload.to });
       return NextResponse.json({ sent: false, reason: "RESEND_API_KEY not configured" });
     }
 
     const { Resend } = await import("resend");
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const resend = new Resend(env.RESEND_API_KEY);
 
     const { subject, html } = buildEmailHTML(payload.type, payload.data);
 
     const result = await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || "noreply@aigeniuslab.com",
+      from: env.RESEND_FROM_EMAIL || "noreply@aigeniuslab.com",
       to: payload.to,
       subject,
       html,
@@ -114,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ sent: true, id: result.data?.id });
   } catch (error: any) {
-    console.error("Email send error:", error);
+    logger.error("Email send error:", error);
     return NextResponse.json({ sent: false, error: error.message }, { status: 500 });
   }
 }

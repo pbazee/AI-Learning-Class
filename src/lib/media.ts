@@ -1,5 +1,6 @@
-const DEFAULT_STORAGE_BUCKET =
-  process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "admin-assets";
+import { env } from "@/lib/config";
+
+const DEFAULT_STORAGE_BUCKET = env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "admin-assets";
 
 function normalizeValue(value?: string | null) {
   const trimmed = value?.trim();
@@ -23,7 +24,7 @@ export function resolveSupabaseStorageUrl(
     return normalizedPath;
   }
 
-  const supabaseUrl = normalizeValue(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const supabaseUrl = normalizeValue(env.NEXT_PUBLIC_SUPABASE_URL);
   if (!supabaseUrl) {
     return normalizedPath;
   }

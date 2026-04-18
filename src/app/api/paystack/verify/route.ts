@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { finalizeCheckoutOrder } from "@/lib/payments";
+import { env } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,14 +12,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing Paystack reference." }, { status: 400 });
     }
 
-    if (!process.env.PAYSTACK_SECRET_KEY) {
+    if (!env.PAYSTACK_SECRET_KEY) {
       return NextResponse.json({ error: "Paystack is not configured." }, { status: 400 });
     }
 
     const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}`,
       },
     });
     const payload = await response.json();

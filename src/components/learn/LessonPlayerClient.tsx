@@ -32,13 +32,14 @@ import { LessonNotesPanel } from "./LessonNotesPanel";
 /**
  * PDF Viewer Integration
  * Strictly Dynamic to avoid SSR issues with pdfjs-dist.
+ * Using a completely isolated component to prevent any build-time evaluation.
  */
-const LessonPdfViewer = dynamic(
-  () => import("./LessonPdfViewer").then((mod) => mod.LessonPdfViewer),
+const LessonPdfViewerWrapper = dynamic(
+  () => import("./LessonPdfViewerLazy").then((mod) => mod.LazyPdfViewer),
   { 
     ssr: false, 
     loading: () => (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[#02040a] text-slate-400">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-white text-slate-600 dark:bg-slate-950 dark:text-slate-400">
         <Loader2 className="h-6 w-6 animate-spin text-primary-blue" />
         <p className="text-xs font-medium animate-pulse">Initializing PDF environment...</p>
       </div>
@@ -190,13 +191,13 @@ function LessonAssetFallback({
   title: string;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center text-slate-300">
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center text-slate-700 dark:text-slate-300">
       <div className="rounded-full bg-rose-500/10 p-4">
         <AlertCircle className="h-8 w-8 text-rose-400" />
       </div>
       <div className="max-w-lg space-y-2">
-        <p className="text-base font-semibold text-white">{title}</p>
-        <p className="text-sm leading-6 text-slate-400">{message}</p>
+        <p className="text-base font-semibold text-slate-900 dark:text-white">{title}</p>
+        <p className="text-sm leading-6 text-slate-600 dark:text-slate-400">{message}</p>
       </div>
     </div>
   );
@@ -334,6 +335,12 @@ export function LessonPlayerClient({
   );
   const [notesPanelOpen, setNotesPanelOpen] = useState(false);
   const initialProgress = normalizeLessonProgressEntry(initialLessonProgressMap[initialLessonId]);
+
+  // --- Note States ---
+  const [noteContent, setNoteContent] = useState(initialNoteContent);
+  const [noteEditMode, setNoteEditMode] = useState<"edit" | "preview">("edit");
+  const [isNoteSaving, setIsNoteSaving] = useState(false);
+  const [lastSavedContent, setLastSavedContent] = useState(initialNoteContent);
 
   // --- PDF & Media States ---
   const [previewPdfPage, setPreviewPdfPage] = useState(initialProgress.lastPdfPage ?? 1);
@@ -830,22 +837,53 @@ export function LessonPlayerClient({
       return;
     }
 
-    const handlePageHide = () => flushPendingLessonProgress(currentLesson.id);
+    const handlePageHide = () => {
+      flushPendingLessonProgress(currentLesson.id);
+    };
     window.addEventListener("pagehide", handlePageHide);
 
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, [currentLesson.id, flushPendingLessonProgress, isMounted]);
 
+<<<<<<< HEAD
   useEffect(() => {
     return () => {
       clearProgressFeedbackTimeout();
     };
   }, [clearProgressFeedbackTimeout]);
+=======
+  // --- Notes Autosave Logic ---
+  useEffect(() => {
+    if (!isMounted || !viewerId || noteContent === lastSavedContent) return;
+
+    const timer = setTimeout(async () => {
+      if (!noteContent.trim() || noteContent === lastSavedContent) return;
+
+      setIsNoteSaving(true);
+      try {
+        const res = await fetch(`/api/learn/lessons/${currentLesson.id}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: noteContent }),
+        });
+        if (res.ok) {
+          setLastSavedContent(noteContent);
+        }
+      } catch (err) {
+        console.error("Failed to autosave note", err);
+      } finally {
+        setIsNoteSaving(false);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [noteContent, currentLesson.id, viewerId, isMounted, lastSavedContent]);
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
 
   // --- Render Guard (The Hydration Fix) ---
   if (!isMounted) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#04070d]">
+      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-slate-950">
         <Loader2 className="h-8 w-8 animate-spin text-primary-blue" />
       </div>
     );
@@ -881,8 +919,9 @@ export function LessonPlayerClient({
   );
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-[#04070d] text-slate-100">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       {/* Header */}
+<<<<<<< HEAD
       <header className="relative z-40 flex h-20 shrink-0 items-center justify-between border-b border-white/10 bg-gradient-to-r from-[#04070d] via-[#0a0f1a] to-[#04070d] px-4 backdrop-blur-xl sm:px-6">
         <div className="flex items-center gap-4">
           <button
@@ -905,6 +944,19 @@ export function LessonPlayerClient({
               <Sparkles className="h-4 w-4 text-primary-blue" />
             </div>
             <h1 className="max-w-[120px] truncate text-sm font-bold text-white transition-colors group-hover:text-primary-blue sm:max-w-xs">
+=======
+      <header className="z-40 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-4 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/80 sm:px-6">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+          <div className="hidden h-6 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+          <Link href={`/courses/${course.slug}`} className="group flex items-center gap-2">
+            <h1 className="max-w-[120px] truncate text-sm font-bold text-slate-900 transition-colors group-hover:text-primary-blue dark:text-white sm:max-w-xs">
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
               {course.title}
             </h1>
           </Link>
@@ -920,15 +972,24 @@ export function LessonPlayerClient({
               <span className="hidden sm:inline">Ask AI</span>
             </button>
           )}
+<<<<<<< HEAD
           <div className="hidden h-8 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent sm:block" />
+=======
+          <div className="hidden h-6 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
           <div className="flex items-center gap-1">
             <button
               onClick={() => setNotesPanelOpen(!notesPanelOpen)}
               className={cn(
+<<<<<<< HEAD
                 "rounded-xl p-3 transition-all duration-200",
                 notesPanelOpen 
                   ? "bg-primary-blue/20 text-primary-blue border border-primary-blue/30" 
                   : "text-slate-400 hover:bg-white/10 hover:text-white border border-transparent"
+=======
+                "rounded-lg p-2 transition-colors",
+                notesPanelOpen ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
               )}
             >
               <NotebookText className="h-5 w-5" />
@@ -973,6 +1034,7 @@ export function LessonPlayerClient({
       </div>
 
       <div className="flex flex-1 overflow-hidden">
+<<<<<<< HEAD
         {/* Curriculum Sidebar */}
         <aside
           className={cn(
@@ -1055,6 +1117,124 @@ export function LessonPlayerClient({
             ))}
           </div>
         </aside>
+=======
+        {/* Navigation Sidebar */}
+        <AnimatePresence initial={false}>
+          {sidebarOpen && (
+            <motion.aside
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="relative hidden h-full shrink-0 flex-col border-r border-slate-200 bg-white/50 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/50 lg:flex"
+            >
+              <div className="flex h-full flex-col overflow-hidden">
+                {/* Course Progress Card */}
+                <div className="p-6">
+                  <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-primary-blue/20 to-transparent p-5">
+                    <div className="relative z-10">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-primary-blue/80">Course Completion</p>
+                      <div className="mt-2 flex items-end gap-2">
+                        <span className="text-3xl font-black text-slate-900 dark:text-white">
+                          {Math.round(
+                            (Object.values(lessonProgressMap).filter(p => p.isCompleted).length /
+                            (allLessons.length || 1)) * 100
+                          )}%
+                        </span>
+                        <span className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">of all lessons</span>
+                      </div>
+                      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                        <motion.div 
+                          className="h-full bg-primary-blue shadow-[0_0_12px_rgba(0,86,210,0.5)]"
+                          initial={{ width: 0 }}
+                          animate={{ 
+                            width: `${(Object.values(lessonProgressMap).filter(p => p.isCompleted).length / (allLessons.length || 1)) * 100}%` 
+                          }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                        />
+                      </div>
+                    </div>
+                    {/* Decorative Background */}
+                    <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-primary-blue/10 blur-2xl" />
+                  </div>
+                </div>
+
+                {/* Lesson List */}
+                <div className="flex-1 overflow-y-auto px-4 pb-8 custom-scrollbar">
+                  <div className="space-y-6">
+                    {modules.map((module, mIdx) => (
+                      <div key={module.id} className="space-y-2">
+                        <h3 className="px-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                          {mIdx + 1}. {module.title}
+                        </h3>
+                        <div className="grid gap-1">
+                          {module.lessons.map((lesson) => {
+                            const isSelected = lesson.id === currentLesson.id;
+                            const isLocked = !isLessonUnlocked(lesson);
+                            const progress = lessonProgressMap[lesson.id];
+                            const isCompleted = progress?.isCompleted;
+                            
+                            return (
+                              <Link
+                                key={lesson.id}
+                                href={isLocked ? "#" : `/learn/${course.slug}/${lesson.id}`}
+                                className={cn(
+                                  "group relative flex items-center justify-between rounded-xl p-3 transition-all duration-200",
+                                  isSelected ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200",
+                                  isLocked && "cursor-not-allowed opacity-50"
+                                )}
+                              >
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center">
+                                    {isLocked ? (
+                                      <Lock className="h-4 w-4 text-slate-600" />
+                                    ) : isCompleted ? (
+                                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500">
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                      </div>
+                                    ) : (
+                                      <div className="relative h-5 w-5 rounded-full border-2 border-slate-700">
+                                        {progress && progress.progressPercent > 0 && (
+                                          <svg className="absolute -left-0.5 -top-0.5 h-6 w-6 -rotate-90">
+                                            <circle
+                                              cx="12"
+                                              cy="12"
+                                              r="10"
+                                              fill="transparent"
+                                              stroke="currentColor"
+                                              strokeWidth="2"
+                                              strokeDasharray={2 * Math.PI * 10}
+                                              strokeDashoffset={2 * Math.PI * 10 * (1 - progress.progressPercent / 100)}
+                                              className="text-primary-blue transition-all duration-500"
+                                            />
+                                          </svg>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="truncate text-xs font-bold leading-tight">
+                                    {lesson.title}
+                                  </span>
+                                </div>
+                                {isSelected && (
+                                  <motion.div 
+                                    layoutId="active-indicator"
+                                    className="absolute left-0 h-4 w-1 rounded-r-full bg-primary-blue" 
+                                  />
+                                )}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
 
         {/* Main Content Area */}
         <main className="relative flex flex-1 flex-col overflow-hidden">
@@ -1062,8 +1242,13 @@ export function LessonPlayerClient({
             <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8">
               {/* Asset Viewer */}
               <div ref={pdfViewportRef} className={assetShellClassName}>
+<<<<<<< HEAD
                 {resolvedLessonRenderer.kind === "pdf" && classroomPdfUrl ? (
                   <LessonPdfViewer
+=======
+                {resolvedLessonRenderer.kind === "pdf" && primaryAssetUrl ? (
+                  <LessonPdfViewerWrapper
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
                     key={currentLesson.id}
                     file={classroomPdfUrl}
                     lessonId={currentLesson.id}
@@ -1073,8 +1258,13 @@ export function LessonPlayerClient({
                     maxPages={hasPdfPreviewLimit ? previewPagesLimit : undefined}
                   />
                 ) : resolvedLessonRenderer.kind === "video" && primaryAssetUrl ? (
+<<<<<<< HEAD
                   <div className="relative h-full w-full bg-black">
                     <video
+=======
+                  <div className="relative h-full w-full bg-black dark:bg-black">
+                    <ReactPlayer
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
                       key={currentLesson.id}
                       ref={mediaElementRef}
                       src={primaryAssetUrl}
@@ -1097,26 +1287,31 @@ export function LessonPlayerClient({
                       style={{ backgroundColor: "#000" }}
                     />
 
-                    <div className="pointer-events-none absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/82 backdrop-blur-md">
+                    <div className="pointer-events-none absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/82 backdrop-blur-md dark:bg-black/55">
                       <PlayCircle className="h-3.5 w-3.5 text-primary-blue" />
                       Video Lesson
                     </div>
                   </div>
                 ) : resolvedLessonRenderer.kind === "audio" && primaryAssetUrl ? (
-                  <div className="flex h-full flex-col justify-center bg-[radial-gradient(circle_at_top,#10325d_0%,#05070b_48%,#02040a_100%)] px-5 py-8 sm:px-10">
+                  <div className="flex h-full flex-col justify-center bg-gradient-to-b from-slate-50 to-white px-5 py-8 dark:from-slate-900 dark:to-slate-950 sm:px-10">
                     <div className="mb-8 max-w-2xl">
-                      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/82">
+                      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-300 bg-slate-100 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         <Volume2 className="h-3.5 w-3.5 text-primary-blue" />
                         Audio Lesson
                       </div>
-                      <h3 className="text-2xl font-bold text-white sm:text-3xl">{currentLesson.title}</h3>
-                      <p className="mt-3 text-sm leading-6 text-slate-300">
+                       <h3 className="text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">{currentLesson.title}</h3>
+                       <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
                         Listen to this lesson directly in the player and keep your learning progress in sync.
                       </p>
                     </div>
 
+<<<<<<< HEAD
                     <div className="rounded-[28px] border border-white/10 bg-black/30 p-4 shadow-[0_28px_80px_-48px_rgba(2,6,23,0.95)] backdrop-blur-sm sm:p-6">
                       <audio
+=======
+                    <div className="rounded-[28px] border border-slate-300 bg-white/50 p-4 shadow-[0_28px_80px_-48px_rgba(0,0,0,0.1)] backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/50 sm:p-6">
+                      <ReactPlayer
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
                         key={currentLesson.id}
                         ref={mediaElementRef as React.RefObject<HTMLAudioElement>}
                         src={primaryAssetUrl}
@@ -1146,13 +1341,13 @@ export function LessonPlayerClient({
                 )}
 
                 {mediaRendererError ? (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/82 px-6 backdrop-blur-sm">
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/82 px-6 backdrop-blur-sm dark:bg-black/82">
                     <LessonAssetFallback title="Playback failed" message={mediaRendererError} />
                   </div>
                 ) : null}
 
                 {pdfPreviewMaxed && (
-                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 p-8 text-center backdrop-blur-sm">
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 p-8 text-center backdrop-blur-sm dark:bg-black/80">
                     <Lock className="mb-4 h-12 w-12 text-primary-blue" />
                     <h3 className="mb-2 text-xl font-bold">Preview Limit Reached</h3>
                     <p className="mb-6 max-w-md text-sm text-slate-400">
@@ -1166,7 +1361,7 @@ export function LessonPlayerClient({
                 )}
 
                 {mediaPreviewMaxed && (
-                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/82 p-8 text-center backdrop-blur-sm">
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/82 p-8 text-center backdrop-blur-sm dark:bg-black/82">
                     <Lock className="mb-4 h-12 w-12 text-primary-blue" />
                     <h3 className="mb-2 text-xl font-bold">Preview Limit Reached</h3>
                     <p className="mb-6 max-w-md text-sm text-slate-400">
@@ -1198,6 +1393,7 @@ export function LessonPlayerClient({
                     </>
                   )}
                 </div>
+<<<<<<< HEAD
 
                 <h2 className="mb-6 text-3xl font-black leading-tight text-white sm:text-4xl">
                   {currentLesson.title}
@@ -1249,25 +1445,54 @@ export function LessonPlayerClient({
                       </span>
                     </button>
                   ) : null}
+=======
+                <h2 className="mb-6 text-3xl font-extrabold text-slate-900 dark:text-white sm:text-4xl">
+                  {currentLesson.title}
+                </h2>
+                <div className="flex flex-wrap gap-4 border-y border-slate-200 dark:border-slate-700 py-6">
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                    <Clock3 className="h-4 w-4" />
+                    <span className="text-xs font-medium">{currentLesson.duration || "5m read"}</span>
+                  </div>
+                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                     <FileText className="h-4 w-4" />
+                     <span className="text-xs font-medium">{resolvedLessonRenderer.assetTypeLabel} Content</span>
+                   </div>
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
                 </div>
               </div>
             </div>
           </div>
           
           {/* Navigation Bar */}
+<<<<<<< HEAD
           <div className="border-t border-white/10 bg-gradient-to-r from-[#04070d] via-[#0a0f1a] to-[#04070d] p-6 backdrop-blur-xl">
             <div className="mx-auto flex max-w-5xl items-center justify-between">
               {prevLesson ? (
                 <Link href={`/learn/${course.slug}/${prevLesson.id}`} className="group flex items-center gap-3 rounded-2xl border border-white/10 px-6 py-3 text-sm font-bold text-slate-300 transition-all hover:bg-white/5 hover:border-white/20">
                   <ChevronLeft className="h-5 w-5" />
                   <span>Previous Lesson</span>
+=======
+          <div className="border-t border-slate-200 bg-white/60 p-4 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/60">
+            <div className="mx-auto flex max-w-5xl items-center justify-between">
+              {prevLesson ? (
+                <Link href={`/learn/${course.slug}/${prevLesson.id}`} className="flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+                  <ChevronLeft className="h-4 w-4" />
+                  Prev
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
                 </Link>
               ) : <div />}
               
               {nextLesson ? (
+<<<<<<< HEAD
                 <Link href={`/learn/${course.slug}/${nextLesson.id}`} className="group flex items-center gap-3 rounded-2xl bg-gradient-to-r from-primary-blue to-primary-blue/90 px-6 py-3 text-sm font-bold text-white transition-all hover:from-primary-blue/90 hover:to-primary-blue shadow-lg hover:shadow-xl">
                   <span>Next Lesson</span>
                   <ChevronRight className="h-5 w-5" />
+=======
+                <Link href={`/learn/${course.slug}/${nextLesson.id}`} className="flex items-center gap-2 rounded-xl bg-primary-blue px-5 py-2 text-sm font-bold text-white hover:bg-primary-blue/90">
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
                 </Link>
               ) : (
                 <div className="flex items-center gap-3 text-emerald-400">
@@ -1292,6 +1517,7 @@ export function LessonPlayerClient({
           )}
         </AnimatePresence>
 
+<<<<<<< HEAD
         {/* Notes Panel */}
         <LessonNotesPanel
           lessonId={currentLesson.id}
@@ -1300,6 +1526,91 @@ export function LessonPlayerClient({
           isOpen={notesPanelOpen}
           onClose={() => setNotesPanelOpen(false)}
         />
+=======
+        {/* Floating Notes Panel */}
+        <AnimatePresence>
+          {notesPanelOpen && (
+            <motion.aside
+              initial={{ x: 400, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 400, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="absolute bottom-6 right-6 top-24 z-30 w-[calc(100%-3rem)] overflow-hidden rounded-[32px] border border-slate-300 bg-white/60 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] backdrop-blur-3xl dark:border-slate-700 dark:bg-slate-950/60 dark:shadow-[0_32px_64px_-16px_rgba(0,0,0,0.6)] sm:w-96"
+            >
+              <div className="flex h-full flex-col">
+                <div className="flex items-center justify-between border-b border-white/5 px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <NotebookText className="h-4 w-4 text-primary-blue" />
+                     <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900 dark:text-white">Lesson Notes</h3>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isNoteSaving && (
+                      <div className="mr-2 flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Saving...
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setNotesPanelOpen(false)}
+                      className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Editor Tabs */}
+                <div className="flex border-b border-slate-200 dark:border-slate-700 px-4 pt-1">
+                  <button
+                    onClick={() => setNoteEditMode("edit")}
+                    className={cn(
+                      "px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                      noteEditMode === "edit" ? "border-b-2 border-primary-blue text-slate-900 dark:text-white" : "text-slate-600 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-300"
+                    )}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setNoteEditMode("preview")}
+                    className={cn(
+                      "px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                      noteEditMode === "preview" ? "border-b-2 border-primary-blue text-slate-900 dark:text-white" : "text-slate-600 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-300"
+                    )}
+                  >
+                    Preview
+                  </button>
+                </div>
+
+                {/* Editor Content */}
+                <div className="flex-1 overflow-hidden p-6">
+                  {noteEditMode === "edit" ? (
+                    <textarea
+                      value={noteContent}
+                      onChange={(e) => setNoteContent(e.target.value)}
+                      placeholder="Take a note for this lesson. Use Markdown for formatting..."
+                      className="h-full w-full resize-none border-none bg-transparent text-sm leading-relaxed text-slate-300 outline-none placeholder:text-slate-700 custom-scrollbar"
+                    />
+                  ) : (
+                    <div className="h-full w-full overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-slate-300 custom-scrollbar">
+                      {noteContent || <span className="italic text-slate-600">Nothing to preview yet. Start typing!</span>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/50 px-6 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                    <Sparkles className="h-3 w-3 text-primary-blue" />
+                    Lesson Specific
+                  </div>
+                  <span className="text-[10px] font-medium text-slate-600">
+                    {noteContent.length} characters
+                  </span>
+                </div>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+>>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
       </div>
     </div>
   );

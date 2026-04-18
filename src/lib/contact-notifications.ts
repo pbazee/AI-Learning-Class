@@ -2,6 +2,8 @@ import "server-only";
 
 import { getPrimaryAdminEmail, normalizeEmail } from "@/lib/admin-email";
 import { prisma } from "@/lib/prisma";
+import { env } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 function escapeHtml(value: string) {
   return value
@@ -24,8 +26,8 @@ async function getNotificationContext() {
 
   const siteName = settings?.siteName?.trim() || "AI GENIUS LAB";
   const adminEmail = normalizeEmail(settings?.adminEmail) || getPrimaryAdminEmail();
-  const supportEmail = normalizeEmail(settings?.supportEmail) || normalizeEmail(process.env.RESEND_FROM_EMAIL);
-  const fromAddress = process.env.RESEND_FROM_EMAIL || settings?.supportEmail || "noreply@aigeniuslab.com";
+  const supportEmail = normalizeEmail(settings?.supportEmail) || normalizeEmail(env.RESEND_FROM_EMAIL);
+  const fromAddress = env.RESEND_FROM_EMAIL || settings?.supportEmail || "noreply@aigeniuslab.com";
 
   return {
     siteName,
@@ -36,12 +38,12 @@ async function getNotificationContext() {
 }
 
 async function getResendClient() {
-  if (!process.env.RESEND_API_KEY) {
+  if (!env.RESEND_API_KEY) {
     return null;
   }
 
   const { Resend } = await import("resend");
-  return new Resend(process.env.RESEND_API_KEY);
+  return new Resend(env.RESEND_API_KEY);
 }
 
 export async function notifyAdminOfContactMessage(input: {
@@ -88,7 +90,7 @@ export async function notifyAdminOfContactMessage(input: {
 
     return { sent: true };
   } catch (error) {
-    console.error("[contact] Failed to notify admin.", error);
+    logger.error("[contact] Failed to notify admin.", error);
     return { sent: false };
   }
 }
@@ -133,7 +135,7 @@ export async function notifyContactReply(input: {
 
     return { sent: true };
   } catch (error) {
-    console.error("[contact] Failed to send reply email.", error);
+    logger.error("[contact] Failed to send reply email.", error);
     return { sent: false };
   }
 }

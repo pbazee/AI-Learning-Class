@@ -1,3 +1,5 @@
+import { env } from "@/lib/config";
+
 const DEFAULT_AFTER_AUTH = "/dashboard";
 
 export function sanitizeAuthRedirectPath(path: string | null | undefined) {
@@ -12,7 +14,7 @@ export function buildAuthCallbackUrl(nextPath: string = DEFAULT_AFTER_AUTH) {
   const appUrl =
     typeof window !== "undefined"
       ? window.location.origin
-      : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      : env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const redirectUrl = new URL("/auth/callback", appUrl);
 
   redirectUrl.searchParams.set("next", sanitizeAuthRedirectPath(nextPath));

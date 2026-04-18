@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import {
   buildCheckoutQuote,
@@ -23,8 +23,11 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import { prisma } from "@/lib/prisma";
 
+import { env } from "@/lib/config";
+import { logger } from "@/lib/logger";
+
 function getAppOrigin(request: NextRequest) {
-  return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  return env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 }
 
 export async function POST(request: NextRequest) {
@@ -129,7 +132,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (method === "stripe") {
-      if (!process.env.STRIPE_SECRET_KEY) {
+      if (!env.STRIPE_SECRET_KEY) {
         return NextResponse.json(
           { error: "Stripe is not configured." },
           { status: 400 }
@@ -137,7 +140,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+        const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
           apiVersion: "2024-06-20",
         });
         const session = await stripe.checkout.sessions.create({
@@ -285,7 +288,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!process.env.PAYSTACK_SECRET_KEY) {
+    if (!env.PAYSTACK_SECRET_KEY) {
       return NextResponse.json(
         { error: "Paystack is not configured." },
         { status: 400 }
@@ -298,7 +301,7 @@ export async function POST(request: NextRequest) {
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+            Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -358,7 +361,7 @@ export async function POST(request: NextRequest) {
       throw error;
     }
     } catch (error) {
-      console.error("[checkout.session] Unable to create checkout session.", error);
+      logger.error("[checkout.session] Unable to create checkout session.", error);
       const message =
         error instanceof CheckoutQuoteError
           ? error.message

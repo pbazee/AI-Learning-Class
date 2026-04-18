@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { finalizeCheckoutOrder } from "@/lib/payments";
+import { logger } from "@/lib/logger";
+import { env } from "@/lib/config";
 
 async function getStripeReceiptUrl(
   stripe: Stripe,
@@ -20,7 +22,7 @@ async function getStripeReceiptUrl(
       return latestCharge.receipt_url ?? null;
     }
   } catch (error) {
-    console.warn("[stripe.confirm] Unable to load Stripe receipt URL.", error);
+    logger.warn("[stripe.confirm] Unable to load Stripe receipt URL.", error);
   }
 
   return null;
@@ -39,14 +41,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!process.env.STRIPE_SECRET_KEY) {
+    if (!env.STRIPE_SECRET_KEY) {
       return NextResponse.json(
         { error: "Stripe is not configured." },
         { status: 400 }
       );
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
       apiVersion: "2024-06-20",
     });
     const session = await stripe.checkout.sessions.retrieve(sessionId);
@@ -100,7 +102,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, sessionId: session.id });
   } catch (error) {
-    console.error("[stripe.confirm] Unable to confirm Stripe checkout.", error);
+    logger.error("[stripe.confirm] Unable to confirm Stripe checkout.", error);
     return NextResponse.json(
       { error: "Unable to confirm Stripe payment." },
       { status: 500 }

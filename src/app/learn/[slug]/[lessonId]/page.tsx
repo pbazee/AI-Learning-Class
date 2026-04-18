@@ -59,7 +59,7 @@ export default async function LessonPlayerPage({
   if (!hasFullCourseAccess && !requestedLesson.isPreview) {
     if (expiredAccess) {
       return (
-        <div className="min-h-screen bg-[#04070d] px-4 py-16 sm:px-6">
+        <div className="min-h-screen bg-white px-4 py-16 dark:bg-slate-950 sm:px-6">
           <ExpiredSubscriptionNotice
             renewHref={`/checkout?plan=${expiredAccess.planSlug === "teams" ? "teams" : "pro"}&billing=${expiredAccess.billingCycle ?? "monthly"}`}
           />

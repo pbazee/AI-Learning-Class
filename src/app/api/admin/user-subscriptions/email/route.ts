@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createAuditLog } from "@/lib/audit-log";
 import { formatPrice } from "@/lib/utils";
+import { env } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 type TemplateKey = "renewal_reminder" | "inactive_reactivation" | "expiry_warning";
 
@@ -37,7 +39,7 @@ function buildEmailTemplate(template: TemplateKey, subscription: {
   revenue: number;
   currency: string;
 }) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const formattedRenewalDate = new Intl.DateTimeFormat("en-US", {
     month: "long",
     day: "numeric",
@@ -126,8 +128,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No matching subscriptions found." }, { status: 404 });
     }
 
-    if (!process.env.RESEND_API_KEY) {
-      console.log("[bulk-email] Would send", template, "to", subscriptions.map((row) => row.user.email));
+    if (!env.RESEND_API_KEY) {
+      logger.info("[bulk-email] RESEND_API_KEY not configured; previewing recipients", { template, recipients: subscriptions.map((row) => row.user.email) });
 
       await createAuditLog({
         actorId: adminUser.id,
@@ -148,7 +150,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { Resend } = await import("resend");
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const resend = new Resend(env.RESEND_API_KEY);
 
     await Promise.all(
       subscriptions.map(async (subscription) => {
@@ -166,7 +168,7 @@ export async function POST(req: NextRequest) {
         });
 
         return resend.emails.send({
-          from: process.env.RESEND_FROM_EMAIL || "noreply@aigeniuslab.com",
+          from: env.RESEND_FROM_EMAIL || "noreply@aigeniuslab.com",
           to: subscription.user.email,
           subject,
           html,
@@ -190,7 +192,7 @@ export async function POST(req: NextRequest) {
       message: `Sent ${subscriptions.length} ${template.replace(/_/g, " ")} email(s).`,
     });
   } catch (error) {
-    console.error("[bulk-email] Failed to send subscription email batch.", error);
+    logger.error("[bulk-email] Failed to send subscription email batch.", error);
     return NextResponse.json(
       { error: "Unable to send the selected subscription emails right now." },
       { status: 500 }

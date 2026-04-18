@@ -4,6 +4,8 @@ import {
   finalizeCheckoutOrder,
   syncManagedStripeSubscription,
 } from "@/lib/payments";
+import { logger } from "@/lib/logger";
+import { env } from "@/lib/config";
 
 async function getStripeReceiptUrl(
   stripe: import("stripe").default,
@@ -33,19 +35,19 @@ export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature")!;
 
-  if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
+  if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) {
     return NextResponse.json({ error: "Stripe not configured" }, { status: 400 });
   }
 
   try {
     const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    const stripe = new Stripe(env.STRIPE_SECRET_KEY!, {
       apiVersion: "2024-06-20",
     });
     const event = stripe.webhooks.constructEvent(
       body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      env.STRIPE_WEBHOOK_SECRET!
     );
 
     switch (event.type) {
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
           receiptUrl,
         });
 
-        console.log("[stripe.webhook] Payment completed for:", session.customer_email);
+        logger.info("[stripe.webhook] Payment completed for:", session.customer_email);
         break;
       }
 
@@ -119,7 +121,7 @@ export async function POST(req: NextRequest) {
 
       case "invoice.payment_failed": {
         const invoice = event.data.object as { id?: string };
-        console.log("[stripe.webhook] Payment failed for invoice:", invoice.id);
+        logger.warn("[stripe.webhook] Payment failed for invoice:", invoice.id);
         break;
       }
 
@@ -138,14 +140,14 @@ export async function POST(req: NextRequest) {
               : "monthly",
         });
 
-        console.log("[stripe.webhook] Subscription cancelled");
+        logger.info("[stripe.webhook] Subscription cancelled");
         break;
       }
     }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
-    console.error("[stripe.webhook] Webhook error:", error);
+    logger.error("[stripe.webhook] Webhook error:", error);
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 }
