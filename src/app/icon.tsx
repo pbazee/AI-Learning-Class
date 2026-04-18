@@ -57,8 +57,7 @@ export default async function Icon() {
                 width: "100%",
                 height: "100%",
                 objectFit: "contain",
-                padding: "11%",
-                transform: "scale(1.32)",
+                padding: "4%",
                 filter: "drop-shadow(0 18px 32px rgba(15,23,42,0.18))",
               }}
             />

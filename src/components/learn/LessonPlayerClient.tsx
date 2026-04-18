@@ -1,10 +1,10 @@
 "use client";
 
-import { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { AnimatePresence } from "framer-motion";
-import ReactPlayer from "react-player";
+
 import { AskAI } from "@/components/courses/AskAI";
 import {
   AlertCircle,
@@ -22,10 +22,12 @@ import {
   PlayCircle,
   Volume2,
 } from "lucide-react";
-import { resolveMediaUrl } from "@/lib/media";
-import { DEFAULT_ASK_AI_NAME, clampPercentage } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { clampPercentage, DEFAULT_ASK_AI_NAME } from "@/lib/site";
 import type { Course } from "@/types";
+import { resolveMediaUrl } from "@/lib/media";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { LessonNotesPanel } from "./LessonNotesPanel";
 
 /**
  * PDF Viewer Integration
@@ -75,6 +77,9 @@ const NOTES_PANEL_OPEN_KEY = "ai-genius-lab:lesson-notes-panel-open";
 const DESKTOP_BREAKPOINT = 1024;
 const PROGRESS_SYNC_DEBOUNCE_MS = 1200;
 const LESSON_COMPLETE_THRESHOLD = 99;
+const SAVED_PROGRESS_FEEDBACK_MS = 2500;
+
+type ManualCompletionState = "COMPLETE" | "INCOMPLETE";
 
 function inferLessonRendererFromUrl(url?: string | null): LessonRendererKind | null {
   const normalizedUrl = url?.trim();
@@ -316,6 +321,10 @@ export function LessonPlayerClient({
     currentLesson.previewMinutes > 0
       ? currentLesson.previewMinutes * 60
       : 0;
+  const classroomPdfUrl =
+    resolvedLessonRenderer.kind === "pdf"
+      ? `/api/learn/lessons/${currentLesson.id}/pdf`
+      : null;
 
   // --- Preferences & Layout States (Initialized with Defaults) ---
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -332,12 +341,15 @@ export function LessonPlayerClient({
   const [mediaPlaybackSeconds, setMediaPlaybackSeconds] = useState(initialProgress.watchedSeconds);
   const [mediaRendererError, setMediaRendererError] = useState<string | null>(null);
   const [timedMediaPreviewLocked, setTimedMediaPreviewLocked] = useState(false);
+  const [manualCompletionPending, setManualCompletionPending] = useState(false);
+  const [progressSyncState, setProgressSyncState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const currentLessonProgress = normalizeLessonProgressEntry(lessonProgressMap[currentLesson.id]);
 
   // --- Refs ---
   const pdfViewportRef = useRef<HTMLDivElement | null>(null);
   const mediaElementRef = useRef<HTMLVideoElement | null>(null);
   const progressSyncTimeoutRef = useRef<number | null>(null);
+  const progressFeedbackTimeoutRef = useRef<number | null>(null);
   const queuedProgressRef = useRef<LessonProgressState | null>(null);
   const lastSyncedProgressRef = useRef<LessonProgressState>(initialProgress);
   const initialMediaSeekAppliedRef = useRef(false);
@@ -367,18 +379,42 @@ export function LessonPlayerClient({
     window.localStorage.setItem(NOTES_PANEL_OPEN_KEY, String(notesPanelOpen));
   }, [notesPanelOpen, isMounted]);
 
+  const clearProgressFeedbackTimeout = useCallback(() => {
+    if (progressFeedbackTimeoutRef.current) {
+      window.clearTimeout(progressFeedbackTimeoutRef.current);
+      progressFeedbackTimeoutRef.current = null;
+    }
+  }, []);
+
+  const markProgressSaved = useCallback(() => {
+    clearProgressFeedbackTimeout();
+    setProgressSyncState("saved");
+    progressFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setProgressSyncState((current) => (current === "saved" ? "idle" : current));
+      progressFeedbackTimeoutRef.current = null;
+    }, SAVED_PROGRESS_FEEDBACK_MS);
+  }, [clearProgressFeedbackTimeout]);
+
+  const markProgressSyncError = useCallback(() => {
+    clearProgressFeedbackTimeout();
+    setProgressSyncState("error");
+  }, [clearProgressFeedbackTimeout]);
+
   useEffect(() => {
     const nextPreviewPage = currentLessonProgress.lastPdfPage ?? 1;
     setPreviewPdfPage(nextPreviewPage);
     setMediaPlaybackSeconds(currentLessonProgress.watchedSeconds);
     setMediaRendererError(null);
     setTimedMediaPreviewLocked(false);
+    setManualCompletionPending(false);
+    setProgressSyncState("idle");
+    clearProgressFeedbackTimeout();
     queuedProgressRef.current = null;
     lastSyncedProgressRef.current = currentLessonProgress;
     mediaElementRef.current = null;
     initialMediaSeekAppliedRef.current = false;
     lastReportedMediaSecondRef.current = currentLessonProgress.watchedSeconds;
-  }, [currentLesson.id]);
+  }, [clearProgressFeedbackTimeout, currentLesson.id]);
 
   useEffect(() => {
     if (!isMounted || resolvedLessonRenderer.kind !== "pdf" || !pdfViewportRef.current) {
@@ -491,6 +527,8 @@ export function LessonPlayerClient({
     }
 
     queuedProgressRef.current = snapshot;
+    clearProgressFeedbackTimeout();
+    setProgressSyncState("saving");
 
     progressSyncTimeoutRef.current = window.setTimeout(async () => {
       const toSync = queuedProgressRef.current;
@@ -507,10 +545,22 @@ export function LessonPlayerClient({
         if (res.ok) {
           lastSyncedProgressRef.current = toSync;
           queuedProgressRef.current = null;
+          markProgressSaved();
+          return;
         }
-      } catch {}
+        markProgressSyncError();
+      } catch {
+        markProgressSyncError();
+      }
     }, PROGRESS_SYNC_DEBOUNCE_MS);
-  }, [currentLesson.id, hasFullCourseAccess, viewerId]);
+  }, [
+    clearProgressFeedbackTimeout,
+    currentLesson.id,
+    hasFullCourseAccess,
+    markProgressSaved,
+    markProgressSyncError,
+    viewerId,
+  ]);
 
   const updateCurrentLessonProgress = useCallback(
     (updates: Partial<LessonProgressState>) => {
@@ -527,6 +577,70 @@ export function LessonPlayerClient({
       queueLessonProgressSync(normalized);
     },
     [currentLesson.id, hasFullCourseAccess, lessonProgressMap, queueLessonProgressSync, viewerId]
+  );
+
+  const syncCurrentLessonCompletionState = useCallback(
+    async (nextCompletionState: ManualCompletionState) => {
+      if (!hasFullCourseAccess || !viewerId) {
+        return;
+      }
+
+      const currentSnapshot = normalizeLessonProgressEntry(lessonProgressMap[currentLesson.id]);
+      const nextSnapshot = normalizeLessonProgressEntry({
+        ...currentSnapshot,
+        progressPercent:
+          nextCompletionState === "COMPLETE"
+            ? 100
+            : Math.min(currentSnapshot.progressPercent, LESSON_COMPLETE_THRESHOLD - 1),
+        isCompleted: nextCompletionState === "COMPLETE",
+      });
+
+      if (progressSyncTimeoutRef.current) {
+        window.clearTimeout(progressSyncTimeoutRef.current);
+        progressSyncTimeoutRef.current = null;
+      }
+
+      setLessonProgressMap((current) => ({ ...current, [currentLesson.id]: nextSnapshot }));
+      queuedProgressRef.current = nextSnapshot;
+      clearProgressFeedbackTimeout();
+      setProgressSyncState("saving");
+      setManualCompletionPending(true);
+
+      try {
+        const response = await fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            manualCompletionState: nextCompletionState,
+            isCompleted: nextSnapshot.isCompleted,
+            progressPercent: nextSnapshot.progressPercent,
+            watchedSeconds: nextSnapshot.watchedSeconds,
+            lastPdfPage: nextSnapshot.lastPdfPage ?? undefined,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to sync completion state.");
+        }
+
+        lastSyncedProgressRef.current = nextSnapshot;
+        queuedProgressRef.current = null;
+        markProgressSaved();
+      } catch {
+        markProgressSyncError();
+      } finally {
+        setManualCompletionPending(false);
+      }
+    },
+    [
+      clearProgressFeedbackTimeout,
+      currentLesson.id,
+      hasFullCourseAccess,
+      lessonProgressMap,
+      markProgressSaved,
+      markProgressSyncError,
+      viewerId,
+    ]
   );
 
   const handlePdfProgressUpdate = useCallback((percent: number, page: number) => {
@@ -590,17 +704,15 @@ export function LessonPlayerClient({
 
   const handleMediaProgressUpdate = useCallback(
     (watchedSeconds: number, durationSeconds: number, forceComplete = false) => {
-      const nextWatchedSeconds = Math.max(
-        lessonProgressMap[currentLesson.id]?.watchedSeconds ?? 0,
-        Math.max(0, Math.round(watchedSeconds))
-      );
+      const nextWatchedSeconds = Math.max(0, Math.round(watchedSeconds));
       const safeDurationSeconds =
         Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+      const baseProgressPercent = lessonProgressMap[currentLesson.id]?.progressPercent ?? 0;
       const rawProgressPercent = forceComplete
         ? 100
         : safeDurationSeconds > 0
-          ? (nextWatchedSeconds / safeDurationSeconds) * 100
-          : lessonProgressMap[currentLesson.id]?.progressPercent ?? 0;
+          ? Math.max(baseProgressPercent, (nextWatchedSeconds / safeDurationSeconds) * 100)
+          : baseProgressPercent;
       const progressPercent = rawProgressPercent >= LESSON_COMPLETE_THRESHOLD ? 100 : rawProgressPercent;
 
       updateCurrentLessonProgress({
@@ -631,6 +743,28 @@ export function LessonPlayerClient({
       if (roundedSeconds === lastReportedMediaSecondRef.current) {
         return;
       }
+
+      lastReportedMediaSecondRef.current = roundedSeconds;
+      handleMediaProgressUpdate(roundedSeconds, durationSeconds);
+    },
+    [clampMediaPreview, handleMediaProgressUpdate, syncMediaResumePosition]
+  );
+
+  const handleMediaPause = useCallback(
+    (event: SyntheticEvent<HTMLVideoElement>) => {
+      mediaElementRef.current = event.currentTarget;
+
+      if (!initialMediaSeekAppliedRef.current) {
+        syncMediaResumePosition();
+        return;
+      }
+
+      const durationSeconds =
+        Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration > 0
+          ? event.currentTarget.duration
+          : 0;
+      const clampedTime = clampMediaPreview(event.currentTarget.currentTime);
+      const roundedSeconds = Math.max(0, Math.floor(clampedTime));
 
       lastReportedMediaSecondRef.current = roundedSeconds;
       handleMediaProgressUpdate(roundedSeconds, durationSeconds);
@@ -702,6 +836,12 @@ export function LessonPlayerClient({
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, [currentLesson.id, flushPendingLessonProgress, isMounted]);
 
+  useEffect(() => {
+    return () => {
+      clearProgressFeedbackTimeout();
+    };
+  }, [clearProgressFeedbackTimeout]);
+
   // --- Render Guard (The Hydration Fix) ---
   if (!isMounted) {
     return (
@@ -718,26 +858,52 @@ export function LessonPlayerClient({
       previewMinutesLimitSeconds > 0 &&
       (timedMediaPreviewLocked || mediaPlaybackSeconds >= previewMinutesLimitSeconds)
   );
+  // PDF needs an unconstrained tall container — NOT aspect-video (which causes black screen).
+  // Audio needs a shorter fixed height. Video uses the 16:9 aspect ratio.
+  const progressSyncLabel =
+    manualCompletionPending
+      ? "Updating completion..."
+      : progressSyncState === "saving"
+        ? "Saving progress..."
+        : progressSyncState === "saved"
+          ? "Progress saved"
+          : progressSyncState === "error"
+            ? "Sync issue. We will retry."
+            : null;
   const assetShellClassName = cn(
-    "relative mb-12 overflow-hidden rounded-3xl border border-white/5 bg-black/40 shadow-2xl",
-    resolvedLessonRenderer.kind === "audio"
-      ? "min-h-[320px]"
-      : "aspect-video min-h-[360px] sm:min-h-[500px]"
+    "relative mb-12 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-black/60 via-[#02040a] to-black/60 shadow-2xl backdrop-blur-sm",
+    "before:absolute before:inset-0 before:rounded-3xl before:bg-gradient-to-br before:from-white/[0.02] before:to-transparent before:pointer-events-none",
+    resolvedLessonRenderer.kind === "pdf"
+      ? "min-h-[700px]"
+      : resolvedLessonRenderer.kind === "audio"
+        ? "min-h-[320px]"
+        : "aspect-video min-h-[360px] sm:min-h-[500px]"
   );
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#04070d] text-slate-100">
       {/* Header */}
-      <header className="z-40 flex h-16 shrink-0 items-center justify-between border-b border-white/5 bg-[#04070d]/80 px-4 backdrop-blur-md sm:px-6">
+      <header className="relative z-40 flex h-20 shrink-0 items-center justify-between border-b border-white/10 bg-gradient-to-r from-[#04070d] via-[#0a0f1a] to-[#04070d] px-4 backdrop-blur-xl sm:px-6">
         <div className="flex items-center gap-4">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+            className="rounded-xl p-3 text-slate-400 hover:bg-white/10 hover:text-white transition-all duration-200"
           >
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
-          <div className="hidden h-6 w-px bg-white/10 sm:block" />
-          <Link href={`/courses/${course.slug}`} className="group flex items-center gap-2">
+          <div className="hidden h-8 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent sm:block" />
+          <Link
+            href="/courses"
+            className="hidden sm:flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-400 hover:bg-white/10 hover:text-white transition-all duration-200 border border-transparent hover:border-white/10"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Courses
+          </Link>
+          <div className="hidden h-8 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent sm:block" />
+          <Link href={`/courses/${course.slug}`} className="group flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-primary-blue/20 flex items-center justify-center">
+              <Sparkles className="h-4 w-4 text-primary-blue" />
+            </div>
             <h1 className="max-w-[120px] truncate text-sm font-bold text-white transition-colors group-hover:text-primary-blue sm:max-w-xs">
               {course.title}
             </h1>
@@ -748,19 +914,21 @@ export function LessonPlayerClient({
           {askAiEnabled && (
             <button
               onClick={() => setAskAiOpen(true)}
-              className="flex items-center gap-2 rounded-xl bg-primary-blue/10 px-4 py-2 text-xs font-bold text-primary-blue transition-all hover:bg-primary-blue/20"
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary-blue/10 to-primary-blue/5 border border-primary-blue/20 px-4 py-2.5 text-xs font-bold text-primary-blue transition-all hover:from-primary-blue/20 hover:to-primary-blue/10 hover:border-primary-blue/30"
             >
               <Sparkles className="h-4 w-4" />
               <span className="hidden sm:inline">Ask AI</span>
             </button>
           )}
-          <div className="hidden h-6 w-px bg-white/10 sm:block" />
+          <div className="hidden h-8 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent sm:block" />
           <div className="flex items-center gap-1">
             <button
               onClick={() => setNotesPanelOpen(!notesPanelOpen)}
               className={cn(
-                "rounded-lg p-2 transition-colors",
-                notesPanelOpen ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                "rounded-xl p-3 transition-all duration-200",
+                notesPanelOpen 
+                  ? "bg-primary-blue/20 text-primary-blue border border-primary-blue/30" 
+                  : "text-slate-400 hover:bg-white/10 hover:text-white border border-transparent"
               )}
             >
               <NotebookText className="h-5 w-5" />
@@ -769,17 +937,135 @@ export function LessonPlayerClient({
         </div>
       </header>
 
+      {/* Progress Bar */}
+      <div className="border-b border-white/5 bg-[#04070d]/90 px-4 py-4 backdrop-blur-md sm:px-6">
+        <div className="mx-auto flex max-w-5xl items-center gap-6">
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-slate-300">Lesson Progress</span>
+              <span className="font-bold text-primary-blue">{Math.round(currentLessonProgress.progressPercent)}%</span>
+            </div>
+            <ProgressBar
+              progress={currentLessonProgress.progressPercent}
+              size="md"
+            />
+          </div>
+          <div className="text-right text-xs font-medium">
+            <div className="text-slate-400">
+              Lesson {currentIndex + 1} of {allLessons.length}
+            </div>
+            {progressSyncLabel ? (
+              <div
+                className={cn(
+                  "mt-1 text-[11px]",
+                  progressSyncState === "error"
+                    ? "text-amber-300"
+                    : progressSyncState === "saved"
+                      ? "text-emerald-400"
+                      : "text-slate-400"
+                )}
+              >
+                {progressSyncLabel}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-1 overflow-hidden">
+        {/* Curriculum Sidebar */}
+        <aside
+          className={cn(
+            "hidden lg:flex flex-col shrink-0 w-80 xl:w-88 border-r border-white/[0.06] bg-gradient-to-b from-[#04070d] to-[#060a14] overflow-hidden transition-all duration-300",
+            sidebarOpen ? "lg:flex" : "lg:hidden"
+          )}
+        >
+          {/* Sidebar header */}
+          <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
+            <div className="h-1.5 w-1.5 rounded-full bg-primary-blue animate-pulse" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Course Curriculum</span>
+          </div>
+
+          {/* Module & lesson list */}
+          <div className="flex-1 overflow-y-auto py-3 custom-scrollbar">
+            {modules.map((module, moduleIndex) => (
+              <div key={module.id} className="mb-1">
+                {/* Module header */}
+                <div className="flex items-center gap-2.5 px-5 py-3">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white/5 text-[9px] font-bold text-slate-400">
+                    {moduleIndex + 1}
+                  </span>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 leading-tight">
+                    {module.title}
+                  </p>
+                </div>
+
+                {/* Lessons */}
+                {module.lessons.map((lesson) => {
+                  const isActive = lesson.id === currentLesson.id;
+                  const lessonProgress = normalizeLessonProgressEntry(lessonProgressMap[lesson.id]);
+                  const isUnlocked = isLessonUnlocked(lesson);
+                  const isDone = lessonProgress.isCompleted;
+                  const hasStarted =
+                    !isDone &&
+                    (lessonProgress.progressPercent > 0 ||
+                      lessonProgress.watchedSeconds > 0 ||
+                      lessonProgress.lastPdfPage !== null);
+
+                  return (
+                    <div key={lesson.id} className="relative">
+                      {isActive && (
+                        <div className="absolute inset-y-0 left-0 w-0.5 rounded-r-full bg-primary-blue" />
+                      )}
+                      {isUnlocked ? (
+                        <Link
+                          href={`/learn/${course.slug}/${lesson.id}`}
+                          className={cn(
+                            "flex items-start gap-3 px-5 py-3 transition-all duration-150",
+                            isActive
+                              ? "bg-primary-blue/10 text-white"
+                              : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+                          )}
+                        >
+                          <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                            {isDone ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                            ) : hasStarted ? (
+                              <div className="h-2.5 w-2.5 rounded-full border border-amber-400/80 bg-amber-400/20" />
+                            ) : isActive ? (
+                              <div className="h-2 w-2 rounded-full bg-primary-blue ring-2 ring-primary-blue/30" />
+                            ) : (
+                              <div className="h-1.5 w-1.5 rounded-full bg-slate-600" />
+                            )}
+                          </div>
+                          <span className={cn("text-xs leading-5", isActive ? "font-semibold" : "font-medium")}>
+                            {lesson.title}
+                          </span>
+                        </Link>
+                      ) : (
+                        <div className="flex items-start gap-3 px-5 py-3 opacity-40 cursor-not-allowed">
+                          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                          <span className="text-xs font-medium leading-5 text-slate-500">{lesson.title}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </aside>
+
         {/* Main Content Area */}
         <main className="relative flex flex-1 flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8">
               {/* Asset Viewer */}
               <div ref={pdfViewportRef} className={assetShellClassName}>
-                {resolvedLessonRenderer.kind === "pdf" && primaryAssetUrl ? (
+                {resolvedLessonRenderer.kind === "pdf" && classroomPdfUrl ? (
                   <LessonPdfViewer
                     key={currentLesson.id}
-                    file={primaryAssetUrl}
+                    file={classroomPdfUrl}
                     lessonId={currentLesson.id}
                     viewportWidth={pdfViewportWidth || 800}
                     initialPage={currentLessonProgress.lastPdfPage || 1}
@@ -788,20 +1074,19 @@ export function LessonPlayerClient({
                   />
                 ) : resolvedLessonRenderer.kind === "video" && primaryAssetUrl ? (
                   <div className="relative h-full w-full bg-black">
-                    <ReactPlayer
+                    <video
                       key={currentLesson.id}
                       ref={mediaElementRef}
                       src={primaryAssetUrl}
                       controls
-                      width="100%"
-                      height="100%"
                       playsInline
-                      onReady={syncMediaResumePosition}
+                      className="h-full w-full object-contain"
                       onLoadedMetadata={(event) => {
                         mediaElementRef.current = event.currentTarget;
                         syncMediaResumePosition();
                       }}
                       onTimeUpdate={handleMediaTimeUpdate}
+                      onPause={handleMediaPause}
                       onSeeking={handleMediaSeeking}
                       onEnded={handleMediaEnded}
                       onError={() =>
@@ -831,28 +1116,25 @@ export function LessonPlayerClient({
                     </div>
 
                     <div className="rounded-[28px] border border-white/10 bg-black/30 p-4 shadow-[0_28px_80px_-48px_rgba(2,6,23,0.95)] backdrop-blur-sm sm:p-6">
-                      <ReactPlayer
+                      <audio
                         key={currentLesson.id}
-                        ref={mediaElementRef}
+                        ref={mediaElementRef as React.RefObject<HTMLAudioElement>}
                         src={primaryAssetUrl}
                         controls
-                        width="100%"
-                        height="56px"
-                        playsInline
-                        onReady={syncMediaResumePosition}
+                        className="w-full"
                         onLoadedMetadata={(event) => {
-                          mediaElementRef.current = event.currentTarget;
+                          mediaElementRef.current = event.currentTarget as unknown as HTMLVideoElement;
                           syncMediaResumePosition();
                         }}
-                        onTimeUpdate={handleMediaTimeUpdate}
-                        onSeeking={handleMediaSeeking}
+                        onTimeUpdate={(event) => handleMediaTimeUpdate(event as unknown as SyntheticEvent<HTMLVideoElement>)}
+                        onPause={(event) => handleMediaPause(event as unknown as SyntheticEvent<HTMLVideoElement>)}
+                        onSeeking={(event) => handleMediaSeeking(event as unknown as SyntheticEvent<HTMLVideoElement>)}
                         onEnded={handleMediaEnded}
                         onError={() =>
                           setMediaRendererError(
                             "We couldn't start this audio lesson. Please verify the uploaded asset URL or storage file and try again."
                           )
                         }
-                        style={{ backgroundColor: "transparent" }}
                       />
                     </div>
                   </div>
@@ -900,52 +1182,99 @@ export function LessonPlayerClient({
               </div>
 
               {/* Lesson Info */}
-              <div className="mb-12">
-                <div className="mb-4 flex items-center gap-3">
-                  <span className="rounded-full bg-primary-blue/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary-blue">
-                    Lesson {currentIndex + 1}
+              <div className="mb-12 rounded-3xl border border-white/[0.06] bg-gradient-to-br from-white/[0.03] to-transparent p-8">
+                {/* Breadcrumb */}
+                <div className="mb-6 flex items-center gap-3 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-blue/25 bg-primary-blue/10 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-primary-blue">
+                    <Sparkles className="h-3 w-3" />
+                    Lesson {currentIndex + 1} of {allLessons.length}
                   </span>
-                  <div className="h-1 w-1 rounded-full bg-slate-700" />
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                    {currentModule?.title}
-                  </span>
+                  {currentModule && (
+                    <>
+                      <div className="h-px w-6 bg-white/20" />
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                        {currentModule.title}
+                      </span>
+                    </>
+                  )}
                 </div>
-                <h2 className="mb-6 text-3xl font-extrabold text-white sm:text-4xl">
+
+                <h2 className="mb-6 text-3xl font-black leading-tight text-white sm:text-4xl">
                   {currentLesson.title}
                 </h2>
-                <div className="flex flex-wrap gap-4 border-y border-white/5 py-6">
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <Clock3 className="h-4 w-4" />
-                    <span className="text-xs font-medium">{currentLesson.duration || "5m read"}</span>
+
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-4 py-2">
+                    <Clock3 className="h-4 w-4 text-primary-blue" />
+                    <span className="text-xs font-semibold text-slate-300">{currentLesson.duration || "5 min"}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <FileText className="h-4 w-4" />
-                    <span className="text-xs font-medium">{resolvedLessonRenderer.assetTypeLabel} Content</span>
+                  <div className="flex items-center gap-2.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-4 py-2">
+                    <FileText className="h-4 w-4 text-primary-blue" />
+                    <span className="text-xs font-semibold text-slate-300">{resolvedLessonRenderer.assetTypeLabel} Content</span>
                   </div>
+                  {currentLessonProgress.isCompleted && (
+                    <div className="flex items-center gap-2.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-4 py-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      <span className="text-xs font-bold text-emerald-400">Completed</span>
+                    </div>
+                  )}
+                  {hasFullCourseAccess && viewerId ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void syncCurrentLessonCompletionState(
+                          currentLessonProgress.isCompleted ? "INCOMPLETE" : "COMPLETE"
+                        )
+                      }
+                      disabled={manualCompletionPending}
+                      className={cn(
+                        "inline-flex items-center gap-2.5 rounded-full border px-4 py-2 text-xs font-semibold transition-all",
+                        currentLessonProgress.isCompleted
+                          ? "border-white/10 bg-white/[0.04] text-slate-200 hover:border-amber-400/40 hover:text-white"
+                          : "border-primary-blue/30 bg-primary-blue/10 text-primary-blue hover:border-primary-blue/50 hover:bg-primary-blue/15",
+                        manualCompletionPending && "cursor-not-allowed opacity-70"
+                      )}
+                    >
+                      {manualCompletionPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : currentLessonProgress.isCompleted ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      ) : (
+                        <Clock3 className="h-4 w-4" />
+                      )}
+                      <span>
+                        {currentLessonProgress.isCompleted
+                          ? "Mark lesson incomplete"
+                          : "Mark lesson complete"}
+                      </span>
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
           </div>
           
           {/* Navigation Bar */}
-          <div className="border-t border-white/5 bg-[#04070d]/60 p-4 backdrop-blur-md">
+          <div className="border-t border-white/10 bg-gradient-to-r from-[#04070d] via-[#0a0f1a] to-[#04070d] p-6 backdrop-blur-xl">
             <div className="mx-auto flex max-w-5xl items-center justify-between">
               {prevLesson ? (
-                <Link href={`/learn/${course.slug}/${prevLesson.id}`} className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/5">
-                  <ChevronLeft className="h-4 w-4" />
-                  Prev
+                <Link href={`/learn/${course.slug}/${prevLesson.id}`} className="group flex items-center gap-3 rounded-2xl border border-white/10 px-6 py-3 text-sm font-bold text-slate-300 transition-all hover:bg-white/5 hover:border-white/20">
+                  <ChevronLeft className="h-5 w-5" />
+                  <span>Previous Lesson</span>
                 </Link>
               ) : <div />}
               
               {nextLesson ? (
-                <Link href={`/learn/${course.slug}/${nextLesson.id}`} className="flex items-center gap-2 rounded-xl bg-white px-5 py-2 text-sm font-bold text-black hover:bg-slate-200">
-                  Next
-                  <ChevronRight className="h-4 w-4" />
+                <Link href={`/learn/${course.slug}/${nextLesson.id}`} className="group flex items-center gap-3 rounded-2xl bg-gradient-to-r from-primary-blue to-primary-blue/90 px-6 py-3 text-sm font-bold text-white transition-all hover:from-primary-blue/90 hover:to-primary-blue shadow-lg hover:shadow-xl">
+                  <span>Next Lesson</span>
+                  <ChevronRight className="h-5 w-5" />
                 </Link>
               ) : (
-                <div className="flex items-center gap-2 text-slate-500">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  <span className="text-xs font-bold uppercase tracking-widest">Course Complete</span>
+                <div className="flex items-center gap-3 text-emerald-400">
+                  <div className="rounded-full bg-emerald-500/20 p-2">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <span className="text-sm font-bold uppercase tracking-widest">Course Complete</span>
                 </div>
               )}
             </div>
@@ -962,6 +1291,15 @@ export function LessonPlayerClient({
             />
           )}
         </AnimatePresence>
+
+        {/* Notes Panel */}
+        <LessonNotesPanel
+          lessonId={currentLesson.id}
+          viewerId={viewerId}
+          initialContent={initialNoteContent}
+          isOpen={notesPanelOpen}
+          onClose={() => setNotesPanelOpen(false)}
+        />
       </div>
     </div>
   );

@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { Document, Page, pdfjs } from "react-pdf";
 import { cn } from "@/lib/utils";
 
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-// ── Worker Setup (react-pdf v10 + pdfjs-dist v5) ──────────────────────────────
-// Use the CDN-hosted worker so Next.js/webpack never needs to bundle it.
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
 
-// ── Types ──────────────────────────────────────────────────────────────────────
 interface LessonPdfViewerProps {
   file: string;
   lessonId: string;
@@ -23,11 +23,9 @@ interface LessonPdfViewerProps {
   maxPages?: number;
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
 const MIN_PAGE_WIDTH = 320;
 const PAGE_HORIZONTAL_PADDING = 48;
 
-// ── Main Component ─────────────────────────────────────────────────────────────
 export function LessonPdfViewer({
   file,
   lessonId,
@@ -38,16 +36,17 @@ export function LessonPdfViewer({
   maxPages,
 }: LessonPdfViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
+  const [isDocumentReady, setIsDocumentReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<number>(Math.max(1, initialPage));
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const initialScrollDone = useRef(false);
   const lastReportedPage = useRef<number>(Math.max(1, initialPage));
+  const docKeyRef = useRef(0);
 
-  // ── Derived values ─────────────────────────────────────────────────────────
   const renderedPageCount =
     numPages == null ? 0 : maxPages ? Math.min(numPages, maxPages) : numPages;
 
@@ -56,10 +55,22 @@ export function LessonPdfViewer({
     MIN_PAGE_WIDTH
   );
 
-  // ── Progress reporting ─────────────────────────────────────────────────────
+  useEffect(() => {
+    docKeyRef.current += 1;
+    pageRefs.current.clear();
+    initialScrollDone.current = false;
+    lastReportedPage.current = Math.max(1, initialPage);
+    setIsLoading(true);
+    setIsDocumentReady(false);
+    setDocError(null);
+    setNumPages(null);
+    setActivePage(Math.max(1, initialPage));
+  }, [file, lessonId, initialPage]);
+
   const reportProgress = useCallback(
-    (page: number, total: number) => {
-      if (page === lastReportedPage.current) return;
+    (page: number, total: number, force = false) => {
+      if (page === lastReportedPage.current && !force) return;
+
       const percent = page >= total ? 100 : Math.round((page / total) * 100);
       lastReportedPage.current = page;
       onProgress(percent, page);
@@ -67,167 +78,215 @@ export function LessonPdfViewer({
     [onProgress]
   );
 
-  // ── react-pdf callbacks ────────────────────────────────────────────────────
+  const reportScrollProgress = useCallback(
+    (container: HTMLElement, total: number) => {
+      if (total === 0) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const maxScroll = scrollHeight - clientHeight;
+
+      if (maxScroll <= 0 || scrollTop >= maxScroll - 4) {
+        reportProgress(total, total, true);
+        return;
+      }
+
+      const scrollFraction = scrollTop / maxScroll;
+      const estimatedPage = Math.max(
+        1,
+        Math.min(total, Math.ceil(scrollFraction * total))
+      );
+
+      reportProgress(estimatedPage, total);
+    },
+    [reportProgress]
+  );
+
   const handleDocumentLoadSuccess = useCallback(
     (pdf: { numPages: number }) => {
+      const capturedKey = docKeyRef.current;
       const totalPages = pdf.numPages;
       const visiblePages = maxPages
         ? Math.min(totalPages, maxPages)
         : totalPages;
-      const clampedInitialPage = Math.min(
+      const clampedPage = Math.min(
         Math.max(1, initialPage),
         Math.max(1, visiblePages)
       );
 
+      if (capturedKey !== docKeyRef.current) {
+        return;
+      }
+
       setNumPages(totalPages);
-      setActivePage(clampedInitialPage);
-      lastReportedPage.current = clampedInitialPage;
-      setError(null);
+      setActivePage(clampedPage);
+      lastReportedPage.current = clampedPage;
+      setDocError(null);
       setIsLoading(false);
+      setIsDocumentReady(true);
       onLoad?.({ numPages: totalPages });
+
+      Promise.resolve().then(() =>
+        reportProgress(clampedPage, visiblePages, true)
+      );
     },
-    [initialPage, maxPages, onLoad]
+    [initialPage, maxPages, onLoad, reportProgress]
   );
 
   const handleDocumentLoadError = useCallback((loadError: Error) => {
-    console.error(
-      "[lesson-pdf-viewer] Failed to load PDF document.",
-      loadError
-    );
+    console.error("[lesson-pdf-viewer] Document load failed", loadError);
     setNumPages(null);
-    setError(
-      `Unable to load this PDF right now. The viewer has been reset and you can retry below.\n\nTechnical details: ${loadError.message}`
+    setIsDocumentReady(false);
+    setDocError(
+      `Unable to load this PDF in the classroom.\n\nDetails: ${loadError.message}`
     );
     setIsLoading(false);
   }, []);
 
-  // ── Intersection Observer for scroll-based progress tracking ───────────────
   useEffect(() => {
-    if (!numPages || !containerRef.current || renderedPageCount === 0) return;
+    if (!isDocumentReady || !numPages || !containerRef.current || renderedPageCount === 0) {
+      return;
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
         let nextPage = activePage;
-        let largestIntersection = 0;
+        let largestRatio = 0;
 
         entries.forEach((entry) => {
-          const pageNumber = Number(
-            entry.target.getAttribute("data-page-id")
-          );
+          const pageNumber = Number(entry.target.getAttribute("data-page-id"));
 
           if (
             pageNumber &&
             entry.isIntersecting &&
-            entry.intersectionRatio > 0.35 &&
-            entry.intersectionRatio > largestIntersection
+            entry.intersectionRatio > largestRatio
           ) {
+            largestRatio = entry.intersectionRatio;
             nextPage = pageNumber;
-            largestIntersection = entry.intersectionRatio;
           }
         });
 
         if (nextPage !== activePage) {
           setActivePage(nextPage);
-          reportProgress(nextPage, numPages);
+          reportProgress(nextPage, renderedPageCount);
         }
       },
-      {
-        root: containerRef.current,
-        threshold: [0.2, 0.35, 0.5, 0.7],
-      }
+      { root: containerRef.current, threshold: [0.1, 0.35, 0.5, 0.75] }
     );
 
-    pageRefs.current.forEach((pageRef) => observer.observe(pageRef));
+    pageRefs.current.forEach((element) => observer.observe(element));
 
     return () => observer.disconnect();
-  }, [activePage, numPages, renderedPageCount, reportProgress]);
+  }, [activePage, isDocumentReady, numPages, renderedPageCount, reportProgress]);
 
-  // ── Scroll to initial page on first load ───────────────────────────────────
   useEffect(() => {
-    if (!numPages || initialScrollDone.current) return;
+    if (!containerRef.current || !isDocumentReady || !numPages) {
+      return;
+    }
+
+    const container = containerRef.current;
+    const total = renderedPageCount;
+    let scrollTimeout: ReturnType<typeof setTimeout>;
+
+    const handleScroll = () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => reportScrollProgress(container, total), 120);
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      clearTimeout(scrollTimeout);
+      container.removeEventListener("scroll", handleScroll);
+    };
+  }, [isDocumentReady, numPages, renderedPageCount, reportScrollProgress]);
+
+  useEffect(() => {
+    if (!isDocumentReady || !numPages || initialScrollDone.current) {
+      return;
+    }
 
     const visiblePages = maxPages ? Math.min(numPages, maxPages) : numPages;
-    const targetPage = Math.min(
-      Math.max(1, initialPage),
-      Math.max(1, visiblePages)
-    );
+    const targetPage = Math.min(Math.max(1, initialPage), Math.max(1, visiblePages));
     const pageRef = pageRefs.current.get(targetPage);
 
-    if (!pageRef) return;
+    if (!pageRef) {
+      return;
+    }
 
     const timer = window.setTimeout(() => {
       pageRef.scrollIntoView({ behavior: "auto", block: "start" });
       initialScrollDone.current = true;
-    }, 120);
+    }, 150);
 
     return () => window.clearTimeout(timer);
-  }, [initialPage, maxPages, numPages]);
+  }, [initialPage, isDocumentReady, maxPages, numPages]);
 
-  // ── Reset refs when file/lesson changes ────────────────────────────────────
   useEffect(() => {
-    pageRefs.current.clear();
-    initialScrollDone.current = false;
-    lastReportedPage.current = Math.max(1, initialPage);
-    setIsLoading(true);
-    setError(null);
-    setNumPages(null);
-    setActivePage(Math.max(1, initialPage));
-  }, [file, lessonId, initialPage]);
+    if (!isLoading) {
+      return;
+    }
 
-  // ── Guard ──────────────────────────────────────────────────────────────────
-  if (typeof window === "undefined" || !file) {
+    const timeout = window.setTimeout(() => {
+      setIsLoading(false);
+      setDocError("PDF viewer timed out. Please refresh the page.");
+    }, 30_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [isLoading]);
+
+  if (!file) {
     return null;
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="relative flex h-full min-h-[500px] w-full flex-col overflow-hidden bg-[#02040a]">
-      {/* Loading overlay */}
-      {isLoading && (
+      {isLoading && !docError ? (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-[#02040a] text-slate-400">
           <Loader2 className="h-8 w-8 animate-spin text-primary-blue" />
-          <p className="text-sm font-medium">Preparing document viewer...</p>
+          <p className="animate-pulse text-sm font-medium">Preparing document...</p>
         </div>
-      )}
+      ) : null}
 
-      {/* Error overlay */}
-      {error && (
+      {docError ? (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-[#02040a] px-6 text-center">
           <div className="rounded-full bg-rose-500/10 p-4">
             <AlertCircle className="h-8 w-8 text-rose-500" />
           </div>
           <div className="max-w-xs">
             <p className="text-sm font-bold text-white">Renderer Error</p>
-            <p className="mt-1 whitespace-pre-wrap text-[10px] sm:text-xs text-slate-400">
-              {error}
+            <p className="mt-1 whitespace-pre-wrap text-[10px] text-slate-400 sm:text-xs">
+              {docError}
             </p>
           </div>
           <button
+            type="button"
             onClick={() => window.location.reload()}
-            className="mt-4 rounded-xl bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+            className="mt-4 rounded-xl bg-white/5 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10"
           >
             Retry
           </button>
         </div>
-      )}
+      ) : null}
 
-      {/* Scrollable PDF content */}
       <div
         ref={containerRef}
         className={cn(
           "h-full w-full overflow-y-auto px-3 py-8 scroll-smooth sm:px-6",
-          numPages ? "opacity-100" : "invisible opacity-0"
+          isDocumentReady ? "opacity-100" : "invisible opacity-0"
         )}
       >
         <Document
+          key={`${lessonId}-${file}`}
           file={file}
           onLoadSuccess={handleDocumentLoadSuccess}
           onLoadError={handleDocumentLoadError}
+          onSourceError={handleDocumentLoadError}
           loading={null}
           error={null}
           className="mx-auto flex max-w-4xl flex-col gap-12"
         >
-          {renderedPageCount > 0 &&
+          {isDocumentReady &&
+            renderedPageCount > 0 &&
             Array.from({ length: renderedPageCount }).map((_, index) => {
               const pageNumber = index + 1;
 
@@ -266,14 +325,13 @@ export function LessonPdfViewer({
         <div className="h-64 shrink-0" />
       </div>
 
-      {/* Page counter pill */}
-      {numPages && (
-        <div className="absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 shadow-xl backdrop-blur-md transition-all duration-300">
+      {isDocumentReady && numPages ? (
+        <div className="absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/60 px-3 py-1.5 shadow-xl backdrop-blur-md transition-all duration-300">
           <p className="select-none text-[10px] font-bold uppercase tracking-widest text-white">
             Page {activePage} / {numPages}
           </p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

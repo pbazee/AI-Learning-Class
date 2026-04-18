@@ -10,6 +10,7 @@ import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 
 const progressPayloadSchema = z.object({
   isCompleted: z.boolean().optional(),
+  manualCompletionState: z.enum(["COMPLETE", "INCOMPLETE"]).optional(),
   touchOnly: z.boolean().optional(),
   progressPercent: z.number().min(0).max(100).optional(),
   watchedSeconds: z.number().min(0).optional(),
@@ -128,30 +129,50 @@ export async function POST(
     } else if (
       typeof payload.isCompleted === "boolean" ||
       typeof payload.progressPercent === "number" ||
-      typeof payload.watchedSeconds === "number"
+      typeof payload.watchedSeconds === "number" ||
+      typeof payload.lastPdfPage === "number" ||
+      typeof payload.manualCompletionState === "string"
     ) {
-      const nextProgressPercent =
+      const existingProgressPercent = existingProgress?.progressPercent ?? 0;
+      const requestedProgressPercent =
         typeof payload.progressPercent === "number"
-          ? Math.max(existingProgress?.progressPercent ?? 0, payload.progressPercent)
-          : payload.isCompleted
-            ? 100
-            : payload.isCompleted === false
-              ? Math.min(existingProgress?.progressPercent ?? 0, 99)
-              : existingProgress?.progressPercent ?? 0;
+          ? Math.max(0, Math.min(100, payload.progressPercent))
+          : undefined;
+      const nextProgressPercent =
+        payload.manualCompletionState === "COMPLETE"
+          ? 100
+          : payload.manualCompletionState === "INCOMPLETE"
+            ? Math.min(requestedProgressPercent ?? existingProgressPercent, 99)
+            : payload.isCompleted === false && typeof requestedProgressPercent === "number"
+              ? Math.min(requestedProgressPercent, 99)
+              : typeof requestedProgressPercent === "number"
+                ? Math.max(existingProgressPercent, requestedProgressPercent)
+                : payload.isCompleted === true
+                  ? 100
+                  : payload.isCompleted === false
+                    ? Math.min(existingProgressPercent, 99)
+                    : existingProgressPercent;
       const nextWatchedSeconds =
         typeof payload.watchedSeconds === "number"
-          ? Math.max(existingProgress?.watchedSeconds ?? 0, Math.round(payload.watchedSeconds))
+          ? Math.max(0, Math.round(payload.watchedSeconds))
           : existingProgress?.watchedSeconds ?? 0;
       const nextLastPdfPage =
         typeof payload.lastPdfPage === "number"
           ? Math.max(1, Math.round(payload.lastPdfPage))
           : existingProgress?.lastPdfPage ?? null;
       const nextIsCompleted =
-        payload.isCompleted === true
+        payload.manualCompletionState === "COMPLETE"
           ? true
-          : payload.isCompleted === false
+          : payload.manualCompletionState === "INCOMPLETE"
             ? false
-            : nextProgressPercent >= 100 || existingProgress?.isCompleted === true;
+            : payload.isCompleted === true
+              ? true
+              : payload.isCompleted === false
+                ? false
+                : nextProgressPercent >= 100 || existingProgress?.isCompleted === true;
+      const persistedProgressPercent = nextIsCompleted
+        ? 100
+        : Math.min(nextProgressPercent, 99);
 
       await prisma.lessonProgress.upsert({
         where: {
@@ -162,7 +183,7 @@ export async function POST(
         },
         update: {
           isCompleted: nextIsCompleted,
-          progressPercent: nextProgressPercent,
+          progressPercent: persistedProgressPercent,
           watchedSeconds: nextWatchedSeconds,
           lastPdfPage: nextLastPdfPage,
           completedAt: nextIsCompleted ? new Date() : null,
@@ -171,7 +192,7 @@ export async function POST(
           userId: profile.id,
           lessonId,
           isCompleted: nextIsCompleted,
-          progressPercent: nextProgressPercent,
+          progressPercent: persistedProgressPercent,
           watchedSeconds: nextWatchedSeconds,
           lastPdfPage: nextLastPdfPage,
           completedAt: nextIsCompleted ? new Date() : null,
@@ -183,20 +204,18 @@ export async function POST(
 
     const progress = await getCourseProgressState(profile.id, lesson.module.courseId);
 
-    if (progress.percentage === 100) {
-      await prisma.enrollment.update({
-        where: {
-          userId_courseId: {
-            userId: profile.id,
-            courseId: lesson.module.courseId,
-          },
+    await prisma.enrollment.update({
+      where: {
+        userId_courseId: {
+          userId: profile.id,
+          courseId: lesson.module.courseId,
         },
-        data: {
-          status: "COMPLETED",
-          completedAt: new Date(),
-        },
-      });
-    }
+      },
+      data: {
+        status: progress.percentage === 100 ? "COMPLETED" : "ACTIVE",
+        completedAt: progress.percentage === 100 ? new Date() : null,
+      },
+    });
 
     return NextResponse.json({
       success: true,
