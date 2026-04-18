@@ -4,17 +4,12 @@ import "@/lib/promise-polyfill";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { Document, Page, pdfjs } from "react-pdf";
 import { cn } from "@/lib/utils";
 
-// Lazy-load react-pdf components to prevent pdfjs-dist from being evaluated 
-// during SSR bundling, which causes "Object.defineProperty called on non-object"
-import type { DocumentProps, PageProps } from "react-pdf";
-
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
+/**
+ * PDF Viewer Component
+ * Uses dynamic imports for react-pdf to prevent SSR evaluation issues.
+ */
 
 interface LessonPdfViewerProps {
   file: string;
@@ -43,8 +38,8 @@ export function LessonPdfViewer({
   const [isLoading, setIsLoading] = useState(true);
   const [docError, setDocError] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<number>(Math.max(1, initialPage));
-  const [pdfModule, setPdfModule] = useState<ReactPdfModule | null>(null);
-
+  const [pdfModule, setPdfModule] = useState<any | null>(null);
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const initialScrollDone = useRef(false);
@@ -59,7 +54,40 @@ export function LessonPdfViewer({
     MIN_PAGE_WIDTH
   );
 
-<<<<<<< HEAD
+  // ── Worker & Module Setup ───────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    if (typeof window === "undefined") return;
+
+    const setup = async () => {
+      try {
+        // Import layers for PDF rendering
+        await Promise.all([
+          import("react-pdf/dist/Page/AnnotationLayer.css"),
+          import("react-pdf/dist/Page/TextLayer.css"),
+        ]);
+
+        const { pdfjs, Document, Page } = await import("react-pdf");
+        
+        if (!cancelled && pdfjs?.GlobalWorkerOptions) {
+          // Standard path for public folder worker
+          pdfjs.GlobalWorkerOptions.workerSrc = `/pdfjs/pdf.worker.min.mjs`;
+        }
+        
+        if (!cancelled) {
+          setPdfModule({ Document, Page });
+        }
+      } catch (err) {
+        console.error("[lesson-pdf-viewer] Failed to configure PDF viewer:", err);
+        setDocError("Failed to initialize PDF environment.");
+      }
+    };
+
+    setup();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Reset on File Change ───────────────────────────────────────────────────
   useEffect(() => {
     docKeyRef.current += 1;
     pageRefs.current.clear();
@@ -72,51 +100,10 @@ export function LessonPdfViewer({
     setActivePage(Math.max(1, initialPage));
   }, [file, lessonId, initialPage]);
 
-=======
-  // ── Worker & Module Setup ───────────────────────────────────────────────────────────
-  // IMPORTANT: react-pdf and pdfjs-dist must be imported dynamically (not statically).
-  // Static imports cause webpack to evaluate pdfjs-dist during bundling,
-  // before the browser environment exists, triggering:
-  // "Object.defineProperty called on non-object" and "Cannot read image.png"
-  useEffect(() => {
-    let cancelled = false;
-
-    // Guard: Skip execution during SSR to prevent webpack from evaluating dynamic imports
-    if (typeof window === "undefined") return;
-
-    const setup = async () => {
-      try {
-        // Dynamically import both the CSS and the react-pdf module
-        // These must be inside the effect function to prevent SSR evaluation
-        await Promise.all([
-          import("react-pdf/dist/Page/AnnotationLayer.css"),
-          import("react-pdf/dist/Page/TextLayer.css"),
-        ]);
-
-        const { pdfjs, Document, Page } = await import("react-pdf");
-        
-        if (!cancelled && pdfjs?.GlobalWorkerOptions) {
-          pdfjs.GlobalWorkerOptions.workerSrc = `/pdfjs/pdf.worker.min.mjs`;
-        }
-        
-        // Store the Document and Page components for rendering
-        if (!cancelled) {
-          setPdfModule({ Document, Page });
-        }
-      } catch (err) {
-        console.error("[lesson-pdf-viewer] Failed to configure PDF viewer:", err);
-      }
-    };
-    setup();
-    return () => { cancelled = true; };
-  }, []);
-
-  // ── Progress reporting ─────────────────────────────────────────────────────
->>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
+  // ── Progress Reporting ─────────────────────────────────────────────────────
   const reportProgress = useCallback(
     (page: number, total: number, force = false) => {
       if (page === lastReportedPage.current && !force) return;
-
       const percent = page >= total ? 100 : Math.round((page / total) * 100);
       lastReportedPage.current = page;
       onProgress(percent, page);
@@ -127,7 +114,6 @@ export function LessonPdfViewer({
   const reportScrollProgress = useCallback(
     (container: HTMLElement, total: number) => {
       if (total === 0) return;
-
       const { scrollTop, scrollHeight, clientHeight } = container;
       const maxScroll = scrollHeight - clientHeight;
 
@@ -137,11 +123,7 @@ export function LessonPdfViewer({
       }
 
       const scrollFraction = scrollTop / maxScroll;
-      const estimatedPage = Math.max(
-        1,
-        Math.min(total, Math.ceil(scrollFraction * total))
-      );
-
+      const estimatedPage = Math.max(1, Math.min(total, Math.ceil(scrollFraction * total)));
       reportProgress(estimatedPage, total);
     },
     [reportProgress]
@@ -151,22 +133,10 @@ export function LessonPdfViewer({
     (pdf: { numPages: number }) => {
       const capturedKey = docKeyRef.current;
       const totalPages = pdf.numPages;
-<<<<<<< HEAD
-      const visiblePages = maxPages
-        ? Math.min(totalPages, maxPages)
-        : totalPages;
-      const clampedPage = Math.min(
-=======
       const visiblePages = maxPages ? Math.min(totalPages, maxPages) : totalPages;
-      const clampedInitialPage = Math.min(
->>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
-        Math.max(1, initialPage),
-        Math.max(1, visiblePages)
-      );
+      const clampedPage = Math.min(Math.max(1, initialPage), Math.max(1, visiblePages));
 
-      if (capturedKey !== docKeyRef.current) {
-        return;
-      }
+      if (capturedKey !== docKeyRef.current) return;
 
       setNumPages(totalPages);
       setActivePage(clampedPage);
@@ -176,31 +146,22 @@ export function LessonPdfViewer({
       setIsDocumentReady(true);
       onLoad?.({ numPages: totalPages });
 
-      Promise.resolve().then(() =>
-        reportProgress(clampedPage, visiblePages, true)
-      );
+      Promise.resolve().then(() => reportProgress(clampedPage, visiblePages, true));
     },
     [initialPage, maxPages, onLoad, reportProgress]
   );
 
   const handleDocumentLoadError = useCallback((loadError: Error) => {
-<<<<<<< HEAD
     console.error("[lesson-pdf-viewer] Document load failed", loadError);
-=======
-    console.error("[lesson-pdf-viewer] Failed to load PDF document.", loadError);
->>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
     setNumPages(null);
     setIsDocumentReady(false);
-    setDocError(
-      `Unable to load this PDF in the classroom.\n\nDetails: ${loadError.message}`
-    );
+    setDocError(`Unable to load this PDF.\n\nDetails: ${loadError.message}`);
     setIsLoading(false);
   }, []);
 
+  // ── Intersection Observer for Active Page ──────────────────────────────────
   useEffect(() => {
-    if (!isDocumentReady || !numPages || !containerRef.current || renderedPageCount === 0) {
-      return;
-    }
+    if (!isDocumentReady || !numPages || !containerRef.current || renderedPageCount === 0) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -209,12 +170,7 @@ export function LessonPdfViewer({
 
         entries.forEach((entry) => {
           const pageNumber = Number(entry.target.getAttribute("data-page-id"));
-
-          if (
-            pageNumber &&
-            entry.isIntersecting &&
-            entry.intersectionRatio > largestRatio
-          ) {
+          if (pageNumber && entry.isIntersecting && entry.intersectionRatio > largestRatio) {
             largestRatio = entry.intersectionRatio;
             nextPage = pageNumber;
           }
@@ -229,14 +185,12 @@ export function LessonPdfViewer({
     );
 
     pageRefs.current.forEach((element) => observer.observe(element));
-
     return () => observer.disconnect();
   }, [activePage, isDocumentReady, numPages, renderedPageCount, reportProgress]);
 
+  // ── Scroll Handling ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!containerRef.current || !isDocumentReady || !numPages) {
-      return;
-    }
+    if (!containerRef.current || !isDocumentReady || !numPages) return;
 
     const container = containerRef.current;
     const total = renderedPageCount;
@@ -248,25 +202,21 @@ export function LessonPdfViewer({
     };
 
     container.addEventListener("scroll", handleScroll, { passive: true });
-
     return () => {
       clearTimeout(scrollTimeout);
       container.removeEventListener("scroll", handleScroll);
     };
   }, [isDocumentReady, numPages, renderedPageCount, reportScrollProgress]);
 
+  // ── Initial Scroll to Page ────────────────────────────────────────────────
   useEffect(() => {
-    if (!isDocumentReady || !numPages || initialScrollDone.current) {
-      return;
-    }
+    if (!isDocumentReady || !numPages || initialScrollDone.current) return;
 
     const visiblePages = maxPages ? Math.min(numPages, maxPages) : numPages;
     const targetPage = Math.min(Math.max(1, initialPage), Math.max(1, visiblePages));
     const pageRef = pageRefs.current.get(targetPage);
 
-    if (!pageRef) {
-      return;
-    }
+    if (!pageRef) return;
 
     const timer = window.setTimeout(() => {
       pageRef.scrollIntoView({ behavior: "auto", block: "start" });
@@ -276,26 +226,11 @@ export function LessonPdfViewer({
     return () => window.clearTimeout(timer);
   }, [initialPage, isDocumentReady, maxPages, numPages]);
 
-  useEffect(() => {
-    if (!isLoading) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setIsLoading(false);
-      setDocError("PDF viewer timed out. Please refresh the page.");
-    }, 30_000);
-
-    return () => window.clearTimeout(timeout);
-  }, [isLoading]);
-
-  if (!file) {
-    return null;
-  }
+  if (!file) return null;
 
   return (
     <div className="relative flex h-full min-h-[500px] w-full flex-col overflow-hidden bg-[#02040a]">
-      {isLoading && !docError ? (
+      {(isLoading || !pdfModule) && !docError ? (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-[#02040a] text-slate-400">
           <Loader2 className="h-8 w-8 animate-spin text-primary-blue" />
           <p className="animate-pulse text-sm font-medium">Preparing document...</p>
@@ -309,14 +244,12 @@ export function LessonPdfViewer({
           </div>
           <div className="max-w-xs">
             <p className="text-sm font-bold text-white">Renderer Error</p>
-            <p className="mt-1 whitespace-pre-wrap text-[10px] text-slate-400 sm:text-xs">
-              {docError}
-            </p>
+            <p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">{docError}</p>
           </div>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-4 rounded-xl bg-white/5 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10"
+            className="mt-4 rounded-xl bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
           >
             Retry
           </button>
@@ -330,24 +263,9 @@ export function LessonPdfViewer({
           isDocumentReady ? "opacity-100" : "invisible opacity-0"
         )}
       >
-<<<<<<< HEAD
-        <Document
-          key={`${lessonId}-${file}`}
-          file={file}
-          onLoadSuccess={handleDocumentLoadSuccess}
-          onLoadError={handleDocumentLoadError}
-          onSourceError={handleDocumentLoadError}
-          loading={null}
-          error={null}
-          className="mx-auto flex max-w-4xl flex-col gap-12"
-        >
-          {isDocumentReady &&
-            renderedPageCount > 0 &&
-            Array.from({ length: renderedPageCount }).map((_, index) => {
-              const pageNumber = index + 1;
-=======
         {pdfModule?.Document ? (
           <pdfModule.Document
+            key={docKeyRef.current}
             file={file}
             onLoadSuccess={handleDocumentLoadSuccess}
             onLoadError={handleDocumentLoadError}
@@ -358,20 +276,15 @@ export function LessonPdfViewer({
             {renderedPageCount > 0 &&
               Array.from({ length: renderedPageCount }).map((_, index) => {
                 const pageNumber = index + 1;
->>>>>>> a5eb9621f927e9f0eb8ab1cf3820e7ede4ea1b81
-
                 return (
                   <div
                     key={`${lessonId}-p-${pageNumber}`}
                     ref={(element) => {
-                      if (element) {
-                        pageRefs.current.set(pageNumber, element);
-                      } else {
-                        pageRefs.current.delete(pageNumber);
-                      }
+                      if (element) pageRefs.current.set(pageNumber, element);
+                      else pageRefs.current.delete(pageNumber);
                     }}
                     data-page-id={pageNumber}
-                    className="overflow-hidden rounded-2xl border border-white/5 bg-white shadow-2xl transition-all duration-300"
+                    className="overflow-hidden rounded-2xl border border-white/5 bg-white shadow-2xl"
                   >
                     <pdfModule.Page
                       pageNumber={pageNumber}
@@ -379,8 +292,8 @@ export function LessonPdfViewer({
                       renderTextLayer={false}
                       renderAnnotationLayer={false}
                       loading={
-                        <div
-                          className="flex items-center justify-center bg-white"
+                        <div 
+                          className="flex items-center justify-center bg-white" 
                           style={{ minHeight: 640, width: pageWidth }}
                         >
                           <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary-blue/30 border-t-primary-blue" />
@@ -391,17 +304,12 @@ export function LessonPdfViewer({
                 );
               })}
           </pdfModule.Document>
-        ) : (
-          <div className="flex items-center justify-center p-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-blue/30 border-t-primary-blue" />
-          </div>
-        )}
-
+        ) : null}
         <div className="h-64 shrink-0" />
       </div>
 
       {isDocumentReady && numPages ? (
-        <div className="absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/60 px-3 py-1.5 shadow-xl backdrop-blur-md transition-all duration-300">
+        <div className="absolute bottom-6 right-6 z-20 rounded-full border border-white/10 bg-black/60 px-3 py-1.5 shadow-xl backdrop-blur-md">
           <p className="select-none text-[10px] font-bold uppercase tracking-widest text-white">
             Page {activePage} / {numPages}
           </p>
