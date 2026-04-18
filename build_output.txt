@@ -1,0 +1,144 @@
+﻿
+> ai-genius-lab@0.1.0 build
+> next build
+
+   Γû▓ Next.js 15.5.14
+   - Environments: .env.local, .env
+
+   Creating an optimized production build ...
+ Γ£ô Compiled successfully in 4.1min
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/79) ...
+   Generating static pages (19/79) 
+   Generating static pages (39/79) 
+   Generating static pages (59/79) 
+ Γ£ô Generating static pages (79/79)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                    Size  First Load JS  Revalidate  Expire
+Γöî Γùï /                                       11.8 kB         266 kB          5m      1y
+Γö£ Γùï /_not-found                               283 B         103 kB
+Γö£ Γùï /about                                  1.34 kB         250 kB          5m      1y
+Γö£ ╞Æ /admin                                  15.5 kB         238 kB
+Γö£ ╞Æ /admin/affiliates                       9.07 kB         171 kB
+Γö£ ╞Æ /admin/analytics                          283 B         103 kB
+Γö£ Γùï /admin/announcements                     1.5 kB         170 kB
+Γö£ Γùï /admin/ask-ai                           6.53 kB         169 kB
+Γö£ Γùï /admin/blogs                            7.71 kB         232 kB
+Γö£ Γùï /admin/categories                       4.24 kB         233 kB
+Γö£ Γùï /admin/coupons                          1.45 kB         170 kB
+Γö£ Γùï /admin/courses                            16 kB         241 kB
+Γö£ Γùï /admin/hero                               283 B         103 kB
+Γö£ Γùï /admin/hero-slides                       3.9 kB         233 kB
+Γö£ Γùï /admin/learners                           138 B         170 kB
+Γö£ Γùï /admin/messages                          8.2 kB         173 kB
+Γö£ Γùï /admin/orders                           9.95 kB         172 kB
+Γö£ Γùï /admin/paragraphs                       4.59 kB         169 kB
+Γö£ Γùï /admin/popups                            9.3 kB         232 kB
+Γö£ Γùï /admin/referrals                        6.85 kB         169 kB
+Γö£ Γùï /admin/reviews                          1.44 kB         170 kB
+Γö£ Γùï /admin/settings                         11.5 kB         234 kB
+Γö£ Γùï /admin/subscribers                      8.19 kB         170 kB
+Γö£ Γùï /admin/subscriptions                    1.73 kB         170 kB
+Γö£ Γùï /admin/trusted-logos                    3.47 kB         233 kB
+Γö£ Γùï /admin/user-subscriptions               8.86 kB         171 kB
+Γö£ Γùï /admin/users                              139 B         170 kB
+Γö£ ╞Æ /affiliate                              3.79 kB         253 kB
+Γö£ ╞Æ /affiliate/dashboard                      12 kB         367 kB
+Γö£ ╞Æ /api/account/profile                      283 B         103 kB
+Γö£ ╞Æ /api/admin/affiliate-conversions          283 B         103 kB
+Γö£ ╞Æ /api/admin/affiliate-payouts              283 B         103 kB
+Γö£ ╞Æ /api/admin/affiliate-payouts/[id]         283 B         103 kB
+Γö£ ╞Æ /api/admin/affiliate-program              283 B         103 kB
+Γö£ ╞Æ /api/admin/affiliates                     283 B         103 kB
+Γö£ ╞Æ /api/admin/affiliates/[id]/status         283 B         103 kB
+Γö£ ╞Æ /api/admin/referral-program               283 B         103 kB
+Γö£ ╞Æ /api/admin/referrals                      283 B         103 kB
+Γö£ ╞Æ /api/admin/settings                       283 B         103 kB
+Γö£ ╞Æ /api/admin/upload                         283 B         103 kB
+Γö£ ╞Æ /api/admin/upload/sign                    283 B         103 kB
+Γö£ ╞Æ /api/admin/user-subscriptions/email       283 B         103 kB
+Γö£ ╞Æ /api/affiliate/apply                      283 B         103 kB
+Γö£ ╞Æ /api/affiliate/dashboard                  283 B         103 kB
+Γö£ ╞Æ /api/affiliate/payout-request             283 B         103 kB
+Γö£ ╞Æ /api/affiliate/track                      283 B         103 kB
+Γö£ ╞Æ /api/announcements                        283 B         103 kB
+Γö£ ╞Æ /api/ask-ai                               283 B         103 kB
+Γö£ ╞Æ /api/auth/login                           283 B         103 kB
+Γö£ ╞Æ /api/auth/sync-user                       283 B         103 kB
+Γö£ ╞Æ /api/certificate/generate                 283 B         103 kB
+Γö£ ╞Æ /api/certificates/[code]/pdf              283 B         103 kB
+Γö£ ╞Æ /api/checkout/quote                       283 B         103 kB
+Γö£ ╞Æ /api/checkout/session                     283 B         103 kB
+Γö£ ╞Æ /api/contact/messages                     283 B         103 kB
+Γö£ ╞Æ /api/copilot                              283 B         103 kB
+Γö£ ╞Æ /api/courses/[courseId]/enroll            283 B         103 kB
+Γö£ ╞Æ /api/courses/[courseId]/reviews           283 B         103 kB
+Γö£ ╞Æ /api/email/send                           283 B         103 kB
+Γö£ ╞Æ /api/learn/lessons/[lessonId]/notes       283 B         103 kB
+Γö£ ╞Æ /api/learn/lessons/[lessonId]/pdf         283 B         103 kB
+Γö£ ╞Æ /api/learn/lessons/[lessonId]/progress    283 B         103 kB
+Γö£ ╞Æ /api/newsletter/subscribe                 283 B         103 kB
+Γö£ ╞Æ /api/paypal/capture                       283 B         103 kB
+Γö£ ╞Æ /api/paypal/webhook                       283 B         103 kB
+Γö£ ╞Æ /api/paystack/verify                      283 B         103 kB
+Γö£ ╞Æ /api/paystack/webhook                     283 B         103 kB
+Γö£ ╞Æ /api/popups/active                        283 B         103 kB
+Γö£ ╞Æ /api/referrals/apply                      283 B         103 kB
+Γö£ ╞Æ /api/referrals/stats                      283 B         103 kB
+Γö£ ╞Æ /api/search/courses                       283 B         103 kB
+Γö£ ╞Æ /api/settings                             283 B         103 kB
+Γö£ ╞Æ /api/storefront/personalization           283 B         103 kB
+Γö£ ╞Æ /api/stripe/confirm                       283 B         103 kB
+Γö£ ╞Æ /api/stripe/webhook                       283 B         103 kB
+Γö£ ╞Æ /api/team/workspace                       283 B         103 kB
+Γö£ ╞Æ /api/team/workspace/export                283 B         103 kB
+Γö£ ╞Æ /api/wishlist/[courseId]                  283 B         103 kB
+Γö£ ╞Æ /auth/callback                            283 B         103 kB
+Γö£ Γùï /blog                                   1.34 kB         250 kB
+Γö£ ╞Æ /blog/[slug]                            1.34 kB         250 kB
+Γö£ Γùï /cart                                   3.24 kB         252 kB
+Γö£ Γùï /categories                             4.28 kB         253 kB
+Γö£ ╞Æ /certificates                           3.89 kB         253 kB
+Γö£ ╞Æ /certificates/[code]                    1.34 kB         250 kB
+Γö£ Γùï /checkout                               6.45 kB         253 kB
+Γö£ Γùï /checkout/complete                      1.58 kB         248 kB
+Γö£ Γùï /checkout/success                       2.28 kB         248 kB
+Γö£ ╞Æ /contact                                4.16 kB         253 kB
+Γö£ Γùï /courses                                4.65 kB         259 kB          5m      1y
+Γö£ ╞Æ /courses/[slug]                         20.3 kB         269 kB
+Γö£ ╞Æ /dashboard                              2.84 kB         252 kB
+Γö£ Γùï /dashboard/certificates                   283 B         103 kB
+Γö£ ╞Æ /dashboard/referrals                    6.54 kB         256 kB
+Γö£ Γùï /dashboard/settings                       283 B         103 kB
+Γö£ ╞Æ /dashboard/teams                        7.02 kB         256 kB
+Γö£ Γùï /faqs                                   1.32 kB         250 kB
+Γö£ Γùï /forgot-password                        4.29 kB         253 kB
+Γö£ Γùï /icon                                     283 B         103 kB
+Γö£ Γùï /leaderboard                            1.32 kB         250 kB
+Γö£ ╞Æ /learn/[slug]/[lessonId]                15.5 kB         177 kB
+Γö£ Γùï /login                                  7.26 kB         229 kB
+Γö£ Γùï /paths                                    283 B         103 kB
+Γö£ Γùï /pricing                                 3.3 kB         252 kB
+Γö£ Γùï /reviews                                2.99 kB         252 kB
+Γö£ ╞Æ /settings                               5.83 kB         255 kB
+Γö£ Γùï /sign-in                                  283 B         103 kB
+Γö£ ╞Æ /sign-up                                  283 B         103 kB
+Γö£ Γùï /signin                                   283 B         103 kB
+Γö£ Γùï /signup                                 10.3 kB         232 kB
+Γö£ Γùï /sitemap.xml                              283 B         103 kB          5m      1y
+Γö£ ╞Æ /team/join/[token]                      4.03 kB         253 kB
+Γöö ╞Æ /wishlist                               1.65 kB         256 kB
++ First Load JS shared by all                103 kB
+  Γö£ chunks/1255-f8a8fe852c7e1df2.js         45.7 kB
+  Γö£ chunks/4bd1b696-100b9d70ed4e49c1.js     54.2 kB
+  Γöö other shared chunks (total)             3.04 kB
+
+
+╞Æ Middleware                                96.9 kB
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

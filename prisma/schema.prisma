@@ -221,12 +221,15 @@ model LessonProgress {
   id              String    @id @default(uuid())
   userId          String
   lessonId        String
+  contentType     CourseAssetType?
   isCompleted     Boolean   @default(false)
   watchedSeconds  Int       @default(0)
+  lastPosition    Int?
   completedAt     DateTime?
   updatedAt       DateTime  @updatedAt
   progressPercent Float     @default(0)
   lastPdfPage     Int?
+  lastPage        Int?
   lesson          Lesson    @relation(fields: [lessonId], references: [id])
   user            User      @relation(fields: [userId], references: [id])
 

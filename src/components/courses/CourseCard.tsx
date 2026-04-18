@@ -206,7 +206,7 @@ export function CourseCard({
             <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/44 via-black/10 to-transparent" />
 
             <div className="absolute inset-x-0 top-0 flex items-start justify-between p-5 sm:p-6">
-              <span className="rounded-full bg-emerald-500 px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-[0_18px_34px_-22px_rgba(16,185,129,0.8)] sm:text-xs">
+              <span className="rounded-full bg-emerald-500 px-3 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-white shadow-[0_12px_24px_-16px_rgba(16,185,129,0.7)] sm:px-3 sm:py-1 sm:text-[10px]">
                 {displayLevel}
               </span>
 

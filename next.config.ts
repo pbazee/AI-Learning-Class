@@ -10,7 +10,6 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: ["@prisma/client", "prisma"],
-  transpilePackages: ["react-pdf", "pdfjs-dist"],
   webpack: (config, { dev, isServer }) => {
     if (dev) {
       config.devtool = false;

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
+import { CourseAssetType, LessonType, Prisma } from "@prisma/client";
 import { clampPercentage } from "@/lib/site";
 import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 
@@ -33,6 +33,50 @@ type WorkspaceLessonNoteRow = LessonNoteRow & {
 type LessonNotesTableCheckRow = {
   relation_name: string | null;
 };
+
+export type LessonProgressContentType = "video" | "audio" | "pdf";
+
+export type SerializedLessonProgress = {
+  lessonId: string;
+  contentType: LessonProgressContentType | null;
+  progressPercent: number;
+  lastPosition: number | null;
+  lastPage: number | null;
+  watchedSeconds: number;
+  lastPdfPage: number | null;
+  isCompleted: boolean;
+  completedAt: string | null;
+  updatedAt: string | null;
+};
+
+type LessonProgressRow = {
+  lessonId: string;
+  contentType: CourseAssetType | null;
+  isCompleted: boolean;
+  progressPercent: number;
+  watchedSeconds: number;
+  lastPosition: number | null;
+  lastPdfPage: number | null;
+  lastPage: number | null;
+  completedAt: Date | null;
+  updatedAt: Date;
+};
+
+type UpsertLessonProgressInput = {
+  userId: string;
+  lessonId: string;
+  courseId: string;
+  lessonType: LessonType;
+  contentType?: LessonProgressContentType | CourseAssetType | null;
+  touchOnly?: boolean;
+  isCompleted?: boolean;
+  manualCompletionState?: "COMPLETE" | "INCOMPLETE";
+  progressPercent?: number;
+  lastPosition?: number | null;
+  lastPage?: number | null;
+};
+
+export type CourseProgressState = Awaited<ReturnType<typeof getCourseProgressState>>;
 
 let lessonNotesTableReady: Promise<boolean> | null = null;
 let lessonNotesTableAvailable = false;
@@ -131,6 +175,79 @@ function serializeWorkspaceNote(row: WorkspaceLessonNoteRow): WorkspaceLessonNot
   };
 }
 
+function toSerializedContentType(value: CourseAssetType | null | undefined): LessonProgressContentType | null {
+  switch (value) {
+    case "VIDEO":
+      return "video";
+    case "AUDIO":
+      return "audio";
+    case "PDF":
+      return "pdf";
+    default:
+      return null;
+  }
+}
+
+function toStoredContentType(
+  value: LessonProgressContentType | CourseAssetType | null | undefined,
+  lessonType?: LessonType
+) {
+  if (value === "VIDEO" || value === "AUDIO" || value === "PDF") {
+    return value;
+  }
+
+  if (value === "video" || value === "audio" || value === "pdf") {
+    return value.toUpperCase() as CourseAssetType;
+  }
+
+  switch (lessonType) {
+    case "VIDEO":
+    case "LIVE":
+      return "VIDEO";
+    case "AUDIO":
+      return "AUDIO";
+    case "PDF":
+      return "PDF";
+    default:
+      return null;
+  }
+}
+
+function serializeLessonProgress(row: LessonProgressRow): SerializedLessonProgress {
+  const lastPosition = row.lastPosition ?? row.watchedSeconds ?? null;
+  const lastPage = row.lastPage ?? row.lastPdfPage ?? null;
+  const progressPercent = clampPercentage(row.isCompleted ? 100 : row.progressPercent ?? 0);
+
+  return {
+    lessonId: row.lessonId,
+    contentType: toSerializedContentType(row.contentType),
+    progressPercent,
+    lastPosition,
+    lastPage,
+    watchedSeconds: lastPosition ?? 0,
+    lastPdfPage: lastPage,
+    isCompleted: row.isCompleted || progressPercent >= 100,
+    completedAt: row.completedAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function clampWholeSeconds(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.max(0, Math.round(value));
+}
+
+function clampWholePage(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.max(1, Math.round(value));
+}
+
 export async function ensureLessonProgressColumns() {
   if (lessonProgressColumnsAvailable) {
     return true;
@@ -148,9 +265,44 @@ export async function ensureLessonProgressColumns() {
           ADD COLUMN IF NOT EXISTS "lastPdfPage" INTEGER
         `);
         await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "LessonProgress"
+          ADD COLUMN IF NOT EXISTS "contentType" "CourseAssetType"
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "LessonProgress"
+          ADD COLUMN IF NOT EXISTS "lastPosition" INTEGER
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "LessonProgress"
+          ADD COLUMN IF NOT EXISTS "lastPage" INTEGER
+        `);
+        await prisma.$executeRaw(Prisma.sql`
           UPDATE "LessonProgress"
           SET "progressPercent" = CASE WHEN "isCompleted" = TRUE THEN 100 ELSE COALESCE("progressPercent", 0) END
           WHERE "progressPercent" IS NULL OR ("isCompleted" = TRUE AND "progressPercent" < 100)
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          UPDATE "LessonProgress"
+          SET "lastPosition" = COALESCE("lastPosition", "watchedSeconds")
+          WHERE "lastPosition" IS NULL AND COALESCE("watchedSeconds", 0) > 0
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          UPDATE "LessonProgress"
+          SET "lastPage" = COALESCE("lastPage", "lastPdfPage")
+          WHERE "lastPage" IS NULL AND "lastPdfPage" IS NOT NULL
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          UPDATE "LessonProgress" AS lp
+          SET "contentType" = CASE l."type"::text
+            WHEN 'VIDEO' THEN 'VIDEO'::"CourseAssetType"
+            WHEN 'LIVE' THEN 'VIDEO'::"CourseAssetType"
+            WHEN 'AUDIO' THEN 'AUDIO'::"CourseAssetType"
+            WHEN 'PDF' THEN 'PDF'::"CourseAssetType"
+            ELSE lp."contentType"
+          END
+          FROM "Lesson" AS l
+          WHERE lp."lessonId" = l.id
+            AND lp."contentType" IS NULL
         `);
 
         lessonProgressColumnsAvailable = true;
@@ -209,10 +361,15 @@ export async function getCourseProgressState(userId: string, courseId: string) {
       },
       select: {
         lessonId: true,
+        contentType: true,
         isCompleted: true,
         progressPercent: true,
         watchedSeconds: true,
+        lastPosition: true,
         lastPdfPage: true,
+        lastPage: true,
+        completedAt: true,
+        updatedAt: true,
       },
     }),
   ]);
@@ -220,12 +377,7 @@ export async function getCourseProgressState(userId: string, courseId: string) {
   const lessonProgressByLessonId = Object.fromEntries(
     progressRows.map((row) => [
       row.lessonId,
-      {
-        progressPercent: clampPercentage(row.isCompleted ? 100 : row.progressPercent ?? 0),
-        watchedSeconds: row.watchedSeconds,
-        lastPdfPage: row.lastPdfPage ?? null,
-        isCompleted: row.isCompleted,
-      },
+      serializeLessonProgress(row),
     ])
   );
 
@@ -253,6 +405,220 @@ export async function getCourseProgressState(userId: string, courseId: string) {
     totalLessons,
     percentage,
     lessonProgressByLessonId,
+  };
+}
+
+export async function getLessonProgressEntry(userId: string, lessonId: string) {
+  await ensureLessonProgressColumns();
+
+  const row = await prisma.lessonProgress.findUnique({
+    where: {
+      userId_lessonId: {
+        userId,
+        lessonId,
+      },
+    },
+    select: {
+      lessonId: true,
+      contentType: true,
+      isCompleted: true,
+      progressPercent: true,
+      watchedSeconds: true,
+      lastPosition: true,
+      lastPdfPage: true,
+      lastPage: true,
+      completedAt: true,
+      updatedAt: true,
+    },
+  });
+
+  return row ? serializeLessonProgress(row) : null;
+}
+
+export async function upsertLessonProgressEntry({
+  userId,
+  lessonId,
+  courseId,
+  lessonType,
+  contentType,
+  touchOnly,
+  isCompleted,
+  manualCompletionState,
+  progressPercent,
+  lastPosition,
+  lastPage,
+}: UpsertLessonProgressInput) {
+  await ensureLessonProgressColumns();
+
+  const existingProgress = await prisma.lessonProgress.findUnique({
+    where: {
+      userId_lessonId: {
+        userId,
+        lessonId,
+      },
+    },
+    select: {
+      lessonId: true,
+      contentType: true,
+      isCompleted: true,
+      progressPercent: true,
+      watchedSeconds: true,
+      lastPosition: true,
+      lastPdfPage: true,
+      lastPage: true,
+      completedAt: true,
+      updatedAt: true,
+    },
+  });
+
+  if (touchOnly) {
+    const row = await prisma.lessonProgress.upsert({
+      where: {
+        userId_lessonId: {
+          userId,
+          lessonId,
+        },
+      },
+      update: {
+        watchedSeconds: {
+          increment: 0,
+        },
+      },
+      create: {
+        userId,
+        lessonId,
+        contentType: toStoredContentType(contentType, lessonType),
+        isCompleted: false,
+        progressPercent: 0,
+        completedAt: null,
+      },
+      select: {
+        lessonId: true,
+        contentType: true,
+        isCompleted: true,
+        progressPercent: true,
+        watchedSeconds: true,
+        lastPosition: true,
+        lastPdfPage: true,
+        lastPage: true,
+        completedAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const courseProgress = await getCourseProgressState(userId, courseId);
+    await prisma.enrollment.updateMany({
+      where: {
+        userId,
+        courseId,
+      },
+      data: {
+        status: courseProgress.percentage === 100 ? "COMPLETED" : "ACTIVE",
+        completedAt: courseProgress.percentage === 100 ? new Date() : null,
+      },
+    });
+
+    return {
+      progress: serializeLessonProgress(row),
+      courseProgress,
+    };
+  }
+
+  const storedContentType =
+    toStoredContentType(contentType, lessonType) ??
+    existingProgress?.contentType ??
+    toStoredContentType(undefined, lessonType);
+  const requestedProgressPercent =
+    typeof progressPercent === "number"
+      ? clampPercentage(progressPercent)
+      : undefined;
+  const requestedLastPosition =
+    lastPosition === null ? null : clampWholeSeconds(lastPosition);
+  const requestedLastPage = lastPage === null ? null : clampWholePage(lastPage);
+  const fallbackLastPosition = existingProgress?.lastPosition ?? existingProgress?.watchedSeconds ?? 0;
+  const fallbackLastPage = existingProgress?.lastPage ?? existingProgress?.lastPdfPage ?? null;
+  const nextIsCompleted =
+    manualCompletionState === "COMPLETE"
+      ? true
+      : manualCompletionState === "INCOMPLETE"
+        ? false
+        : isCompleted === true
+          ? true
+          : isCompleted === false
+            ? false
+            : (requestedProgressPercent ?? existingProgress?.progressPercent ?? 0) >= 100 || existingProgress?.isCompleted === true;
+  const nextProgressPercent = nextIsCompleted
+    ? 100
+    : requestedProgressPercent ?? clampPercentage(existingProgress?.progressPercent ?? 0);
+  const nextLastPosition =
+    storedContentType === "VIDEO" || storedContentType === "AUDIO"
+      ? nextIsCompleted
+        ? null
+        : requestedLastPosition ?? fallbackLastPosition
+      : null;
+  const nextLastPage =
+    storedContentType === "PDF"
+      ? requestedLastPage ?? fallbackLastPage
+      : null;
+
+  const row = await prisma.lessonProgress.upsert({
+    where: {
+      userId_lessonId: {
+        userId,
+        lessonId,
+      },
+    },
+    update: {
+      contentType: storedContentType,
+      isCompleted: nextIsCompleted,
+      progressPercent: nextProgressPercent,
+      watchedSeconds: nextLastPosition ?? 0,
+      lastPosition: nextLastPosition,
+      lastPdfPage: nextLastPage,
+      lastPage: nextLastPage,
+      completedAt: nextIsCompleted ? new Date() : null,
+    },
+    create: {
+      userId,
+      lessonId,
+      contentType: storedContentType,
+      isCompleted: nextIsCompleted,
+      progressPercent: nextProgressPercent,
+      watchedSeconds: nextLastPosition ?? 0,
+      lastPosition: nextLastPosition,
+      lastPdfPage: nextLastPage,
+      lastPage: nextLastPage,
+      completedAt: nextIsCompleted ? new Date() : null,
+    },
+    select: {
+      lessonId: true,
+      contentType: true,
+      isCompleted: true,
+      progressPercent: true,
+      watchedSeconds: true,
+      lastPosition: true,
+      lastPdfPage: true,
+      lastPage: true,
+      completedAt: true,
+      updatedAt: true,
+    },
+  });
+
+  const courseProgress = await getCourseProgressState(userId, courseId);
+  await prisma.enrollment.updateMany({
+    where: {
+      userId,
+      courseId,
+    },
+    data: {
+      status: courseProgress.percentage === 100 ? "COMPLETED" : "ACTIVE",
+      completedAt: courseProgress.percentage === 100 ? new Date() : null,
+    },
+  });
+
+  return {
+    progress: serializeLessonProgress(row),
+    courseProgress,
   };
 }
 

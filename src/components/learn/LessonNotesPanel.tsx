@@ -2,26 +2,32 @@
 
 import { useCallback, useEffect, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Save, Loader2, GripVertical, Maximize2 } from "lucide-react";
+import { X, Save, Loader2, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LessonNotesPanelProps {
   lessonId: string;
   viewerId: string | null;
   initialContent?: string;
+  content?: string;
   isOpen: boolean;
   onClose: () => void;
+  onContentChange?: (content: string) => void;
+  isSaving?: boolean;
 }
 
 export function LessonNotesPanel({
   lessonId,
   viewerId,
   initialContent = "",
+  content: controlledContent,
   isOpen,
   onClose,
+  onContentChange,
+  isSaving: externalIsSaving,
 }: LessonNotesPanelProps) {
-  const [content, setContent] = useState(initialContent);
-  const [isSaving, setIsSaving] = useState(false);
+  const [internalContent, setInternalContent] = useState(initialContent);
+  const [isSavingInternal, setIsSavingInternal] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
   // Floating State
@@ -34,9 +40,24 @@ export function LessonNotesPanel({
   const resizeStartRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
 
+  const content = controlledContent ?? internalContent;
+  const isSaving = externalIsSaving ?? isSavingInternal;
+
+  const updateContent = useCallback(
+    (value: string) => {
+      if (typeof controlledContent === "undefined") {
+        setInternalContent(value);
+      }
+      onContentChange?.(value);
+    },
+    [controlledContent, onContentChange]
+  );
+
   useEffect(() => {
-    setContent(initialContent);
-  }, [initialContent]);
+    if (typeof controlledContent === "undefined") {
+      setInternalContent(initialContent);
+    }
+  }, [controlledContent, initialContent]);
 
   // Set initial position to the right side of the screen on mount
   useEffect(() => {
@@ -51,7 +72,7 @@ export function LessonNotesPanel({
   const saveNotes = useCallback(async () => {
     if (!viewerId) return;
 
-    setIsSaving(true);
+    setIsSavingInternal(true);
     try {
       const response = await fetch(`/api/learn/lessons/${lessonId}/notes`, {
         method: "POST",
@@ -67,7 +88,7 @@ export function LessonNotesPanel({
     } catch (error) {
       console.error("Error saving notes:", error);
     } finally {
-      setIsSaving(false);
+      setIsSavingInternal(false);
     }
   }, [content, lessonId, viewerId]);
 
@@ -171,7 +192,7 @@ export function LessonNotesPanel({
           <div className="flex-1 overflow-hidden p-3 pt-4">
             <textarea
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => updateContent(e.target.value)}
               placeholder="Jot down your insights..."
               className="h-full w-full resize-none rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white placeholder-slate-500 focus:border-primary-blue/50 focus:outline-none focus:ring-1 focus:ring-primary-blue/30 custom-scrollbar"
             />
@@ -210,12 +231,13 @@ export function LessonNotesPanel({
           {/* Resize Handle */}
           <div
             onMouseDown={startResizing}
-            className="absolute bottom-0 right-0 h-6 w-6 cursor-nwse-resize flex items-end justify-end p-1 group"
+            className="absolute bottom-0 right-0 h-8 w-8 cursor-nwse-resize flex items-end justify-end p-1 group hover:bg-primary-blue/10 transition-colors rounded-tl"
+            title="Drag to resize"
           >
-            <div className="h-1.5 w-1.5 rounded-full bg-slate-600 group-hover:bg-primary-blue transition-colors mb-0.5 mr-0.5" />
+            <div className="h-2 w-2 rounded-full bg-slate-500 group-hover:bg-primary-blue transition-colors mb-1 mr-1" />
           </div>
         </motion.div>
       )}
     </AnimatePresence>
   );
-}
+}
