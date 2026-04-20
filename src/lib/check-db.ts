@@ -23,9 +23,9 @@ async function main() {
     }
   } catch (error) {
     console.error('DB Connection Error:', error)
-  } finally {
-    await prisma.$disconnect()
   }
 }
 
 main()
+  .then(() => process.exit(0))
+  .catch(() => process.exit(1))

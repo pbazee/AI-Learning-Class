@@ -2,7 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { getActiveCatalogEntitlement } from "@/lib/access-control";
-import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { isPrismaConnectionError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
 type UserAiUsageRow = {

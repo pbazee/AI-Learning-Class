@@ -9,6 +9,8 @@ import { RouteScrollReset } from "@/components/layout/RouteScrollReset";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { buildSiteMetadata } from "@/lib/site-server";
+import { Navbar } from "@/components/layout/Navbar";
+import { getMetadataBase } from "@/lib/site-server";
 
 const PopupCampaigns = dynamic(
   () =>
@@ -23,6 +25,8 @@ const inter = Inter({
   display: "swap",
 });
 
+export const metadataBase = getMetadataBase();
+
 export async function generateMetadata(): Promise<Metadata> {
   const metadata = await buildSiteMetadata("/");
 
@@ -36,7 +40,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -78,6 +82,7 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <PopupCampaigns />
             </Suspense>
+            <Navbar />
             {children}
             <MobileBottomNav />
           </ToastProvider>

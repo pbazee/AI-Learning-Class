@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -17,7 +17,7 @@ export default async function CertificatesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+
 
       <main>
         <div className="border-b border-border bg-card">

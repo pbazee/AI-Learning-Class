@@ -330,7 +330,6 @@ export default function CheckoutPage() {
 
   return (
     <div className="site-shell overflow-x-hidden">
-      <NavbarClient />
       <div className="pb-16 pt-6 sm:pt-8">
         <div className="section-frame">
           <div className="mb-8">

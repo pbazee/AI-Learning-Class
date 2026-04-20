@@ -38,7 +38,6 @@ export default async function AboutPage() {
 
   return (
     <div className="site-shell min-h-screen">
-      <Navbar />
 
       <main className="pb-20 pt-8 sm:pt-10">
         <section className="section-frame">

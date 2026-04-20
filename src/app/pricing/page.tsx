@@ -36,7 +36,6 @@ export default async function PricingPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
       <div>
         <PricingSection plans={plans} />
 

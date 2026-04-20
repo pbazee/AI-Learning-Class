@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BookOpen, Heart, House, ShoppingCart, UserRound } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
 
@@ -33,14 +33,18 @@ export function MobileBottomNav() {
   const pathname = usePathname();
   const cartCount = useCartStore((state) => state.itemCount)();
   const [mounted, setMounted] = useState(false);
-  const [accountHref, setAccountHref] = useState("/login");
+  const [authResolved, setAuthResolved] = useState(false);
+  const [accountHref, setAccountHref] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      setAccountHref(data.user ? "/dashboard" : "/login");
-    });
+    const supabase = getSupabaseClient();
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setAccountHref(data.user ? "/dashboard" : "/login");
+      })
+      .finally(() => setAuthResolved(true));
 
     const {
       data: { subscription },
@@ -57,7 +61,7 @@ export function MobileBottomNav() {
 
   const items = [
     ...navItems,
-    { label: "Account", href: accountHref, icon: UserRound },
+    { label: "Account", href: accountHref || "/login", icon: UserRound },
   ];
 
   return (
@@ -90,7 +94,7 @@ export function MobileBottomNav() {
                     </span>
                   ) : null}
                 </div>
-                <span>{label}</span>
+                <span>{label === "Account" && !authResolved ? "..." : label}</span>
               </Link>
             );
           })}

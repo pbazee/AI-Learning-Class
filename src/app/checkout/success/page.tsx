@@ -18,7 +18,6 @@ export default function CheckoutSuccessPage() {
 
   return (
     <div className="site-shell">
-      <NavbarClient />
 
       {confetti && (
         <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">

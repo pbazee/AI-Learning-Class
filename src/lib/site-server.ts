@@ -151,7 +151,16 @@ export async function buildSiteMetadata(
       siteName: branding.siteName,
       title,
       description,
-      images: image ? [{ url: image }] : undefined,
+      images: image
+        ? [
+            {
+              url: image,
+              width: 1200,
+              height: 630,
+              alt: title,
+            },
+          ]
+        : undefined,
     },
     twitter: {
       card: image ? "summary_large_image" : "summary",

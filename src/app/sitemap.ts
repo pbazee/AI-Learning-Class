@@ -18,6 +18,11 @@ const staticPages: Array<{
   { path: "/leaderboard", changeFrequency: "weekly", priority: 0.6 },
   { path: "/pricing", changeFrequency: "weekly", priority: 0.8 },
   { path: "/reviews", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/affiliate", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/faqs", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/paths", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/team", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/certificates", changeFrequency: "monthly", priority: 0.6 },
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

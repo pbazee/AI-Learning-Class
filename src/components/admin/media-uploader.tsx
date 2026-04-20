@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { FileAudio, FileImage, FileText, FileVideo, Trash2, UploadCloud } from "lucide-react";
 import { AdminButton, AdminCard } from "@/components/admin/ui";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
 
 export type UploadedAsset = {
@@ -106,7 +106,7 @@ export function MediaUploader({
         );
       }
 
-      const supabase = createClient();
+      const supabase = getSupabaseClient();
       const { error: uploadError } = await supabase.storage
         .from(signPayload.bucket)
         .uploadToSignedUrl(signPayload.path, signPayload.token, file, {

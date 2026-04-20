@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Trophy, Medal, Award, TrendingUp, Star } from "lucide-react";
@@ -6,9 +6,9 @@ import { getLeaderboard } from "@/lib/data";
 import { buildSiteMetadata } from "@/lib/site-server";
 
 const badgeCopy: Record<string, string> = {
-  Trophy: "🏆",
-  Silver: "🥈",
-  Bronze: "🥉",
+  Trophy: "ðŸ†",
+  Silver: "ðŸ¥ˆ",
+  Bronze: "ðŸ¥‰",
 };
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,7 +25,7 @@ export default async function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+
 
       <main>
         <div className="bg-blue-600 text-white dark:bg-blue-700">

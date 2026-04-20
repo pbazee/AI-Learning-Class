@@ -1,8 +1,9 @@
 import "server-only";
 
 import { CourseAssetType, LessonType, Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { isPrismaConnectionError } from "@/lib/prisma-errors";
 import { clampPercentage } from "@/lib/site";
-import { isPrismaConnectionError, prisma } from "@/lib/prisma";
 
 export type LessonPlayerNote = {
   id: string;
@@ -90,21 +91,6 @@ async function ensureLessonNotesTable() {
 
   if (!lessonNotesTableReady) {
     lessonNotesTableReady = (async () => {
-      try {
-        await prisma.$connect();
-        await prisma.$queryRaw(Prisma.sql`SELECT 1`);
-      } catch (error) {
-        if (isPrismaConnectionError(error)) {
-          console.error(
-            "[lesson-player] Database connection check failed while preparing lesson notes. Notes will fall back safely.",
-            error
-          );
-          return false;
-        }
-
-        throw error;
-      }
-
       try {
         const existingTable = await prisma.$queryRaw<LessonNotesTableCheckRow[]>(Prisma.sql`
           SELECT to_regclass('public.lesson_notes')::text AS relation_name
@@ -537,28 +523,37 @@ export async function upsertLessonProgressEntry({
   const requestedLastPage = lastPage === null ? null : clampWholePage(lastPage);
   const fallbackLastPosition = existingProgress?.lastPosition ?? existingProgress?.watchedSeconds ?? 0;
   const fallbackLastPage = existingProgress?.lastPage ?? existingProgress?.lastPdfPage ?? null;
+  const isManualIncomplete = manualCompletionState === "INCOMPLETE";
   const nextIsCompleted =
     manualCompletionState === "COMPLETE"
       ? true
-      : manualCompletionState === "INCOMPLETE"
+      : isManualIncomplete
         ? false
         : isCompleted === true
           ? true
           : isCompleted === false
             ? false
             : (requestedProgressPercent ?? existingProgress?.progressPercent ?? 0) >= 100 || existingProgress?.isCompleted === true;
+  // When manually marking incomplete, always reset to 0% so getCourseProgressState
+  // no longer counts this lesson as completed (it checks both isCompleted AND progressPercent >= 100).
   const nextProgressPercent = nextIsCompleted
     ? 100
-    : requestedProgressPercent ?? clampPercentage(existingProgress?.progressPercent ?? 0);
+    : isManualIncomplete
+      ? 0
+      : requestedProgressPercent ?? clampPercentage(existingProgress?.progressPercent ?? 0);
   const nextLastPosition =
     storedContentType === "VIDEO" || storedContentType === "AUDIO"
       ? nextIsCompleted
         ? null
-        : requestedLastPosition ?? fallbackLastPosition
+        : isManualIncomplete
+          ? null
+          : requestedLastPosition ?? fallbackLastPosition
       : null;
   const nextLastPage =
     storedContentType === "PDF"
-      ? requestedLastPage ?? fallbackLastPage
+      ? isManualIncomplete
+        ? null
+        : requestedLastPage ?? fallbackLastPage
       : null;
 
   const row = await prisma.lessonProgress.upsert({

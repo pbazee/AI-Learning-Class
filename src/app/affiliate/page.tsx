@@ -1,4 +1,4 @@
-﻿import { Navbar } from "@/components/layout/Navbar";
+import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { AffiliatePortal } from "@/components/affiliate/AffiliatePortal";
 import { redirect } from "next/navigation";
@@ -48,7 +48,6 @@ export default async function AffiliatePage() {
   return (
     <div className="min-h-screen bg-background">
       <ScrollToTopOnMount />
-      <Navbar />
 
       <section className="relative overflow-hidden bg-primary-blue pb-16 pt-12 sm:pb-20 sm:pt-16">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_60%)]" />

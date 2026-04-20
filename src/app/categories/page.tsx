@@ -18,7 +18,6 @@ export default async function CategoriesPage() {
 
   return (
     <div className="min-h-screen">
-      <Navbar />
       <main className="pt-6 sm:pt-8">
         <CategoriesGrid categories={categories} />
       </main>

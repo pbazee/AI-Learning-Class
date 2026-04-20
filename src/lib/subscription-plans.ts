@@ -3,7 +3,8 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { resolveYearlyPrice } from "@/lib/site";
 import type { SubscriptionPlan } from "@/types";
-import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { isPrismaConnectionError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
 
 let subscriptionPlansTableReady: Promise<boolean> | null = null;
 let subscriptionPlansTableAvailable = false;

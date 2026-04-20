@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/layout/Navbar";
@@ -24,7 +24,7 @@ export default async function BlogPage() {
   if (!featured) {
     return (
       <div className="min-h-screen bg-background">
-        <Navbar />
+
         <div>
           <div className="mx-auto max-w-4xl px-4 py-24 text-center sm:px-6 lg:px-8">
             <h1 className="mb-3 text-3xl font-black text-foreground">The AI Journal is empty right now</h1>
@@ -40,7 +40,7 @@ export default async function BlogPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+
       <div>
         <div className="border-b border-border bg-card">
           <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">

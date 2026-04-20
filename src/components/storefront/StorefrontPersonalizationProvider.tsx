@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import type { CourseAccessState } from "@/types";
 
 type AffiliateStatus = {
@@ -51,7 +51,7 @@ export function StorefrontPersonalizationProvider({
   );
 
   useEffect(() => {
-    const supabase = createClient();
+    const supabase = getSupabaseClient();
     let cancelled = false;
 
     async function loadPersonalization() {

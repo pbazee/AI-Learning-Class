@@ -12,7 +12,7 @@ import {
   buildFreeCourseLoginPath,
   enrollInFreeCourse,
 } from "@/lib/course-enrollment";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { useCartStore } from "@/store/cart";
 import { useToast } from "@/components/ui/ToastProvider";
 import { cn, formatNumber, formatPrice, levelLabel } from "@/lib/utils";
@@ -77,7 +77,7 @@ export function CourseCard({
     }
 
     try {
-      const supabase = createClient();
+      const supabase = getSupabaseClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -189,7 +189,7 @@ export function CourseCard({
           aria-label={`Open ${course.title}`}
           className="absolute inset-0 z-10 rounded-[30px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-blue/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070b]"
         />
-        <div className="pointer-events-none relative z-20 flex h-full min-h-[448px] flex-col sm:min-h-[500px]">
+        <div className="pointer-events-none relative z-20 flex h-full min-h-[432px] flex-col sm:min-h-[472px]">
           <div className="relative basis-[47%] overflow-hidden sm:basis-[48%] lg:basis-[52%]">
             <Image
               src={heroImage}
@@ -227,7 +227,7 @@ export function CourseCard({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col bg-[#070a0f] px-[18px] pb-5 pt-[18px] text-white sm:px-6 sm:pb-7 sm:pt-5">
+          <div className="flex min-h-0 flex-1 flex-col bg-[#070a0f] px-[18px] pb-4 pt-[18px] text-white sm:px-6 sm:pb-5 sm:pt-5">
             {hasAccess ? (
               <div className="mb-3 inline-flex items-center self-start rounded-full border border-primary-blue/25 bg-primary-blue/14 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-primary-blue">
                 {courseAccess?.statusLabel ?? "Enrolled"}
@@ -292,7 +292,7 @@ export function CourseCard({
               onClick={hasAccess ? handleResumeLearning : handlePrimaryAction}
               disabled={enrolling && !hasAccess}
               className={cn(
-                "pointer-events-auto mt-auto inline-flex w-full items-center justify-center rounded-[16px] px-4 py-3 text-[13px] font-bold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                "pointer-events-auto mt-2.5 inline-flex w-full items-center justify-center rounded-[16px] px-4 py-2 text-[13px] font-bold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                 buttonClassName
               )}
             >

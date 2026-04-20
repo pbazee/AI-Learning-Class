@@ -1,7 +1,8 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
-import { isPrismaConnectionError, logPrismaConnectionEvent, prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { isPrismaConnectionError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
 
 let lessonPreviewColumnsReady = false;
 let lessonPreviewColumnsPromise: Promise<boolean> | null = null;

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { CheckCircle2, Globe2, Loader2, Save, UserRound } from "lucide-react";
 import { CountryCombobox } from "@/components/checkout/CountryCombobox";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
 type LearnerSettingsClientProps = {
@@ -83,7 +83,7 @@ export function LearnerSettingsClient({
     startTransition(() => {
       void (async () => {
         try {
-          const supabase = createClient();
+          const supabase = getSupabaseClient();
           const { error: authError } = await supabase.auth.updateUser({
             data: {
               full_name: trimmedName,

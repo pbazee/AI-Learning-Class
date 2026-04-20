@@ -21,7 +21,6 @@ export default async function CoursesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
       <StorefrontPersonalizationProvider
         courseIds={courses.map((course) => course.id)}
       >

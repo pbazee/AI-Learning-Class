@@ -49,7 +49,6 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   return (
     <div className="min-h-screen bg-background">
       <JsonLd data={articleJsonLd} />
-      <Navbar />
       <div className="w-full">
         <div className="relative w-full">
           {post.coverImage && (

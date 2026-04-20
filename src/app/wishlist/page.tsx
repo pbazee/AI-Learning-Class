@@ -26,7 +26,6 @@ export default async function WishlistPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
       <main className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
         <div className="mb-10 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-primary-blue text-white shadow-[0_20px_40px_-24px_rgba(59,130,246,0.9)]">

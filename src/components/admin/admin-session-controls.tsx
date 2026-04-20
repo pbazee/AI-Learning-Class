@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Loader2, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/ToastProvider";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export function AdminSessionControls() {
   const [busy, setBusy] = useState(false);
@@ -12,7 +12,7 @@ export function AdminSessionControls() {
   const { toast } = useToast();
 
   async function handleSignOut() {
-    const supabase = createClient();
+    const supabase = getSupabaseClient();
     setBusy(true);
 
     try {

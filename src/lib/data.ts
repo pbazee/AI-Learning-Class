@@ -25,12 +25,12 @@ import {
 import { getCompletedCourseCertificateRecords } from "@/lib/learner-records";
 import { getAccessibleCourseAccessByCourseId } from "@/lib/access-control";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
+import { prisma } from "./prisma";
 import {
   isPrismaConnectionError,
   isPrismaSchemaMismatchError,
   logPrismaConnectionEvent,
-  prisma,
-} from "./prisma";
+} from "./prisma-errors";
 import { ensureSubscriptionPlansTable, mapSubscriptionPlan } from "@/lib/subscription-plans";
 import { createServerSupabaseClient } from "./supabase-server";
 import { syncAuthenticatedUser } from "./auth-user-sync";

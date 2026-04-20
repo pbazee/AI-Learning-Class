@@ -7,7 +7,7 @@ import { FooterClient } from "@/components/layout/FooterClient";
 import { NavbarClient } from "@/components/layout/NavbarClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
     setMessage("");
 
     try {
-      const supabase = createClient();
+      const supabase = getSupabaseClient();
       const redirectTo = `${window.location.origin}/login`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
@@ -38,7 +38,6 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavbarClient />
       <main className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
         <Card className="w-full max-w-lg">
           <CardHeader>

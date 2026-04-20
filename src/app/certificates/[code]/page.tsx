@@ -43,7 +43,6 @@ export default async function CertificateDetailPage({
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fc_0%,#edf2ff_34%,#eef2f9_100%)] dark:bg-[linear-gradient(180deg,#030712_0%,#07101d_36%,#020617_100%)]">
-      <Navbar />
 
       <main className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(circle_at_top,rgba(0,86,210,0.22),transparent_58%)]" />

@@ -382,6 +382,10 @@ export function LessonPlayerClient({
   const currentLessonProgress = normalizeLessonProgressEntry(lessonProgressMap[currentLesson.id]);
   const currentContentType = resolvedLessonRenderer.kind;
   const primaryAssetUrl = resolvedLessonRenderer.primaryAssetUrl;
+  const pdfDocumentUrl =
+    currentContentType === "pdf" && primaryAssetUrl
+      ? `/api/learn/lessons/${currentLesson.id}/pdf`
+      : null;
   const isPreviewOnlyLesson = currentLesson.isPreview && !hasFullCourseAccess;
   const previewPagesLimit =
     isPreviewOnlyLesson && currentContentType === "pdf"
@@ -812,7 +816,9 @@ export function LessonPlayerClient({
         totalPages,
       };
 
-      const isCompleted = totalPages > 0 && currentPage >= totalPages;
+      // Only mark as complete automatically if we actually have page count data
+      // and the user has reached the final page.
+      const isCompleted = totalPages > 1 && currentPage >= totalPages;
 
       updateCurrentLessonProgress((current) => ({
         ...current,
@@ -941,7 +947,30 @@ export function LessonPlayerClient({
     if (!hasFullCourseAccess || !viewerId) return;
 
     setManualCompletionPending(true);
-    const nextCompletionState = currentLessonProgress.isCompleted ? "INCOMPLETE" : "COMPLETE";
+    const isCurrentlyCompleted = currentLessonProgress.isCompleted;
+    const nextCompletionState = isCurrentlyCompleted ? "INCOMPLETE" : "COMPLETE";
+
+    // Optimistic UI update so the button reacts instantly.
+    if (nextCompletionState === "INCOMPLETE") {
+      // Reset all client-side tracking state so subsequent progress events
+      // are recorded and saved correctly from scratch.
+      lastPersistedPayloadRef.current = "";
+      lastMediaSavedCheckpointRef.current = 0;
+      latestMediaSnapshotRef.current = null;
+      latestPdfSnapshotRef.current = {
+        page: 1,
+        totalPages: latestPdfSnapshotRef.current.totalPages,
+      };
+      updateCurrentLessonProgress({
+        isCompleted: false,
+        progressPercent: 0,
+        lastPosition: null,
+        lastPage: null,
+        lastPdfPage: null,
+        watchedSeconds: 0,
+        completedAt: null,
+      });
+    }
 
     try {
       const response = await fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
@@ -965,6 +994,12 @@ export function LessonPlayerClient({
 
       if (data.progress) {
         applyServerCourseProgress(data.progress);
+        // Re-clear refs after server confirms the incomplete state so the
+        // very first post-reset progress tick is not silently deduped.
+        if (nextCompletionState === "INCOMPLETE") {
+          lastPersistedPayloadRef.current = "";
+          lastMediaSavedCheckpointRef.current = 0;
+        }
       }
 
       if (nextCompletionState === "COMPLETE") {
@@ -975,6 +1010,15 @@ export function LessonPlayerClient({
     } catch (error) {
       console.error("[lesson-player] Failed to toggle lesson completion.", error);
       markProgressSyncError();
+
+      // Revert the optimistic update on failure.
+      if (nextCompletionState === "INCOMPLETE") {
+        updateCurrentLessonProgress({
+          isCompleted: true,
+          progressPercent: 100,
+          completedAt: new Date().toISOString(),
+        });
+      }
     } finally {
       setManualCompletionPending(false);
     }
@@ -985,6 +1029,7 @@ export function LessonPlayerClient({
     hasFullCourseAccess,
     markProgressSaved,
     markProgressSyncError,
+    updateCurrentLessonProgress,
     viewerId,
   ]);
 
@@ -1335,13 +1380,13 @@ export function LessonPlayerClient({
               <div className="mx-auto max-w-7xl">
                 {/* ── Media area ── */}
                 <div className="relative">
-                  {currentContentType === "pdf" && primaryAssetUrl ? (
+                  {currentContentType === "pdf" && pdfDocumentUrl ? (
                     <div
                       ref={pdfViewportRef}
                       className="min-h-[500px] w-full overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white to-slate-100 shadow-2xl"
                     >
                       <LessonPdfViewer
-                        file={primaryAssetUrl}
+                        file={pdfDocumentUrl}
                         lessonId={currentLesson.id}
                         viewportWidth={pdfViewportWidth || pdfViewportRef.current?.clientWidth || 800}
                         onProgress={handlePdfProgress}
@@ -1354,19 +1399,21 @@ export function LessonPlayerClient({
                   ) : null}
 
                   {currentContentType === "video" && primaryAssetUrl ? (
-                    <div className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl" style={{ aspectRatio: "16/9" }}>
-                      <MediaPlayer
-                        ref={mediaPlayerRef}
-                        src={primaryAssetUrl}
-                        type="video"
-                        initialTime={mediaStartTime}
-                        maxDuration={previewMinutesLimitSeconds || undefined}
-                        isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
-                        onLoadedMetadata={(duration) => setMediaDuration(duration)}
-                        onTimeUpdate={handleMediaProgress}
-                        onPause={handleMediaPause}
-                        onEnded={handleMediaEnded}
-                      />
+                    <div className="mx-auto w-full max-w-4xl">
+                      <div className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl" style={{ aspectRatio: "16/9" }}>
+                        <MediaPlayer
+                          ref={mediaPlayerRef}
+                          src={primaryAssetUrl}
+                          type="video"
+                          initialTime={mediaStartTime}
+                          maxDuration={previewMinutesLimitSeconds || undefined}
+                          isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
+                          onLoadedMetadata={(duration) => setMediaDuration(duration)}
+                          onTimeUpdate={handleMediaProgress}
+                          onPause={handleMediaPause}
+                          onEnded={handleMediaEnded}
+                        />
+                      </div>
                     </div>
                   ) : null}
 

@@ -1,6 +1,10 @@
 import { ImageResponse } from "next/og";
 import { getSiteBranding } from "@/lib/site-server";
 
+// Always regenerate so admin-uploaded favicons take effect immediately.
+export const revalidate = 0;
+
+// Use the largest standard favicon size for crisp rendering at all scales.
 export const size = {
   width: 512,
   height: 512,
@@ -9,12 +13,14 @@ export const size = {
 export const contentType = "image/png";
 
 function getBrandMonogram(siteName: string) {
-  return siteName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "AI";
+  return (
+    siteName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "AI"
+  );
 }
 
 export default async function Icon() {
@@ -23,6 +29,8 @@ export default async function Icon() {
 
   return new ImageResponse(
     (
+      // Root fills the full canvas – no padding or border-radius so the
+      // image occupies every pixel just like Google / Grok favicons.
       <div
         style={{
           width: "100%",
@@ -30,60 +38,46 @@ export default async function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "transparent",
+          background: assetUrl
+            ? "transparent"
+            : "linear-gradient(135deg, #2563eb 0%, #0f172a 100%)",
+          borderRadius: "96px",
+          overflow: "hidden",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "100%",
-            height: "100%",
-            borderRadius: "104px",
-            overflow: "hidden",
-            background: assetUrl
-              ? "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(239,246,255,0.98) 100%)"
-              : "linear-gradient(135deg, #2563eb 0%, #0f172a 100%)",
-            boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)",
-          }}
-        >
-          {assetUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={assetUrl}
-              alt={branding.siteName}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "contain",
-                padding: "4%",
-                filter: "drop-shadow(0 18px 32px rgba(15,23,42,0.18))",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "100%",
-                height: "100%",
-                color: "#ffffff",
-                fontSize: 270,
-                fontWeight: 900,
-                letterSpacing: "-0.08em",
-                fontFamily: "Inter, Arial, sans-serif",
-              }}
-            >
-              {getBrandMonogram(branding.siteName)}
-            </div>
-          )}
-        </div>
+        {assetUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={assetUrl}
+            alt={branding.siteName}
+            style={{
+              width: "100%",
+              height: "100%",
+              // cover fills every pixel; contain would add letterboxing
+              objectFit: "contain",
+            }}
+          />
+        ) : (
+          // Monogram fallback – large text, no inner box
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "100%",
+              height: "100%",
+              color: "#ffffff",
+              fontSize: 260,
+              fontWeight: 900,
+              letterSpacing: "-0.06em",
+              fontFamily: "Inter, Arial, sans-serif",
+            }}
+          >
+            {getBrandMonogram(branding.siteName)}
+          </div>
+        )}
       </div>
     ),
-    {
-      ...size,
-    }
+    { ...size }
   );
 }

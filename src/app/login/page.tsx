@@ -11,7 +11,7 @@ import {
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -111,7 +111,7 @@ function LoginPageInner() {
   async function handleGoogleSignIn() {
     setError(null);
     setLoading(true);
-    const supabase = createClient();
+    const supabase = getSupabaseClient();
     await syncNewsletterPreference(email);
     logger.debug("[login] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
 

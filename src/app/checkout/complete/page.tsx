@@ -97,7 +97,6 @@ export default function CheckoutCompletePage() {
 
   return (
     <div className="site-shell">
-      <NavbarClient />
       <div className="flex min-h-[calc(100vh-var(--navbar-height))] items-center justify-center px-4 py-16">
         <div className="surface-card w-full max-w-lg p-8 text-center">
           {error ? (

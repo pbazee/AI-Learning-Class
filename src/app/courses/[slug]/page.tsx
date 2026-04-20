@@ -70,7 +70,6 @@ export default async function CourseDetailPage({
   return (
     <div className="bg-background">
       <JsonLd data={courseJsonLd} />
-      <Navbar branding={branding} />
       <CourseDetailClient
         course={course}
         viewer={viewer ? { id: viewer.id, name: viewer.name || viewer.email || "Member" } : null}

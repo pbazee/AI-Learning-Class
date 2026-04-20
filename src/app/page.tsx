@@ -102,7 +102,6 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen">
       <JsonLd data={homepageJsonLd} />
-      <Navbar branding={branding} />
       <HeroCarousel slides={slides} stats={heroStats} />
       <TrustedLogosMarquee logos={trustedLogos} />
       <StorefrontPersonalizationProvider

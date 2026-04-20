@@ -11,7 +11,7 @@ import {
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
 
 const quizQuestions = [
@@ -139,7 +139,7 @@ export default function SignupPage() {
   async function handleGoogleSignUp() {
     setError(null);
     setLoading(true);
-    const supabase = createClient();
+    const supabase = getSupabaseClient();
     await syncNewsletterPreference(email, name);
     logger.debug("[signup] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
 
@@ -166,7 +166,7 @@ export default function SignupPage() {
     }
 
     setLoading(true);
-    const supabase = createClient();
+    const supabase = getSupabaseClient();
     logger.info("[signup] Creating account for:", email);
 
     const { data, error } = await supabase.auth.signUp({

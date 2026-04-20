@@ -26,7 +26,7 @@ import { SiteLogo } from "@/components/layout/SiteLogo";
 import { useTheme } from "next-themes";
 import type { CourseSearchSuggestion } from "@/types";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
-import { createClient } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
 
@@ -188,6 +188,7 @@ export function NavbarClient({
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [authResolved, setAuthResolved] = useState(false);
   const [branding, setBranding] = useState(
     serverBranding || {
       siteName: DEFAULT_SITE_NAME,
@@ -204,14 +205,43 @@ export function NavbarClient({
   const profileRef = useRef<HTMLDivElement>(null);
   const desktopSearchRef = useRef<HTMLDivElement>(null);
   const mobileSearchRef = useRef<HTMLDivElement>(null);
+  // Track which user ID we have already fully synced (incl. role API call) so
+  // that repeated focus / visibilitychange events don't trigger unnecessary
+  // re-renders or extra API calls for the same logged-in user.
+  const lastSyncedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    const supabase = createClient();
+    const supabase = getSupabaseClient();
     const syncRole = async (nextUser: User | null) => {
-      setUser(nextUser);
-      if (!nextUser) return void setUserRole(null);
+      // Use a functional updater so React bails out of re-rendering when the
+      // user object is equivalent (same id + email = same reference returned).
+      setUser((prevUser) => {
+        if (
+          prevUser?.id === nextUser?.id &&
+          prevUser?.email === nextUser?.email &&
+          prevUser?.user_metadata?.full_name === nextUser?.user_metadata?.full_name
+        ) {
+          return prevUser; // stable reference → no re-render
+        }
+        return nextUser;
+      });
+
+      if (!nextUser) {
+        lastSyncedUserIdRef.current = null;
+        setUserRole(null);
+        return;
+      }
+
       const sessionRole = getSupabaseSessionRole(nextUser);
+
+      // Skip the expensive DB/API role sync when we have already resolved
+      // this exact user on mount — covers repeated focus/visibility events.
+      if (lastSyncedUserIdRef.current === nextUser.id) {
+        return;
+      }
+      lastSyncedUserIdRef.current = nextUser.id;
+
       try {
         const response = await fetch("/api/auth/sync-user", { method: "POST", cache: "no-store" });
         const payload = await response.json();
@@ -243,7 +273,16 @@ export function NavbarClient({
       await syncRole(currentUser);
     };
 
-    supabase.auth.getUser().then(({ data }) => void syncRole(data.user));
+    supabase.auth
+      .getUser()
+      .then(async ({ data }) => {
+        await syncRole(data.user);
+      })
+      .catch(() => {
+        setUser(null);
+        setUserRole(null);
+      })
+      .finally(() => setAuthResolved(true));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => void syncRole(session?.user ?? null));
     const handleWindowFocus = () => void resyncCurrentUser();
     const handleVisibilityChange = () => {
@@ -321,7 +360,7 @@ export function NavbarClient({
   }, [pathname]);
 
   async function handleSignOut() {
-    const supabase = createClient();
+    const supabase = getSupabaseClient();
     await supabase.auth.signOut();
     setUserRole(null);
     router.push("/");
@@ -387,9 +426,12 @@ export function NavbarClient({
               {mounted ? <button type="button" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} className={iconButtonClassName}>{resolvedTheme === "dark" ? <SunMedium className="h-[18px] w-[18px]" /> : <MoonStar className="h-[18px] w-[18px]" />}</button> : null}
               <Link href="/cart" className={cn(iconButtonClassName, "relative")}>
                 <ShoppingCart className="h-[18px] w-[18px]" />
-                {cartCount > 0 ? <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-blue px-1 text-[10px] font-bold text-white">{cartCount}</span> : null}
+                {mounted && cartCount > 0 ? <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-blue px-1 text-[10px] font-bold text-white">{cartCount}</span> : null}
               </Link>
-              {user ? (
+              {!mounted || !authResolved ? (
+                // Auth skeleton while Supabase resolves the current user.
+                <div className="h-9 w-24 animate-pulse rounded-full bg-slate-200 dark:bg-slate-800" />
+              ) : user ? (
                 <div ref={profileRef} className="relative">
                   <button type="button" onClick={() => setProfileOpen((current) => !current)} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-[0_10px_26px_-24px_rgba(15,23,42,0.35)] transition hover:border-primary-blue/25 dark:border-slate-800 dark:bg-slate-900 dark:text-white">
                     <span className="max-w-[88px] truncate">{displayName.split(" ")[0] || "Member"}</span>
@@ -484,7 +526,14 @@ export function NavbarClient({
                   })}
                 </div>
                 <div className="mt-6 rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                  {user ? (
+                  {!mounted || !authResolved ? (
+                    // Skeleton while auth resolves.
+                    <div className="space-y-2">
+                      <div className="h-3 w-16 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
+                      <div className="h-5 w-32 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
+                      <div className="h-3 w-40 animate-pulse rounded-full bg-slate-200 dark:bg-slate-700" />
+                    </div>
+                  ) : user ? (
                     <>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Signed in as</p>
                       <p className="mt-2 text-base font-bold text-slate-950 dark:text-white">{displayName}</p>
