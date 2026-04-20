@@ -27,42 +27,50 @@ function normalizeSocialLinks(value: unknown) {
 
 export const getSiteBranding = unstable_cache(
   async (): Promise<SiteBranding> => {
-    const settings = await prisma.siteSettings.findUnique({
-      where: { id: "singleton" },
-      select: {
-        siteName: true,
-        logoUrl: true,
-        faviconUrl: true,
-        socialLinks: true,
-        updatedAt: true,
-      },
-    });
+    try {
+      const settings = await prisma.siteSettings.findUnique({
+        where: { id: "singleton" },
+        select: {
+          siteName: true,
+          logoUrl: true,
+          faviconUrl: true,
+          socialLinks: true,
+          updatedAt: true,
+        },
+      });
 
-    const socialLinks = normalizeSocialLinks(settings?.socialLinks);
-    const assetVersion = settings?.updatedAt?.getTime();
-    const logoUrl = appendMediaVersion(
-      resolveMediaUrl({
-        url: settings?.logoUrl,
-        path: socialLinks.brandLogoPath,
-        fallback: "",
-      }),
-      assetVersion
-    );
-    const faviconUrl = appendMediaVersion(
-      resolveMediaUrl({
-        url: settings?.faviconUrl,
-        path: socialLinks.brandFaviconPath,
-        fallback: "",
-      }),
-      assetVersion
-    );
+      const socialLinks = normalizeSocialLinks(settings?.socialLinks);
+      const assetVersion = settings?.updatedAt?.getTime();
+      const logoUrl = appendMediaVersion(
+        resolveMediaUrl({
+          url: settings?.logoUrl ?? undefined,
+          path: socialLinks.brandLogoPath,
+          fallback: "",
+        }),
+        assetVersion
+      );
+      const faviconUrl = appendMediaVersion(
+        resolveMediaUrl({
+          url: settings?.faviconUrl ?? undefined,
+          path: socialLinks.brandFaviconPath,
+          fallback: "",
+        }),
+        assetVersion
+      );
 
-    return {
-      siteName: normalizeSiteName(settings?.siteName),
-      logoUrl: logoUrl || undefined,
-      faviconUrl: faviconUrl || undefined,
-      assetVersion: assetVersion ? String(assetVersion) : undefined,
-    };
+      return {
+        siteName: normalizeSiteName(settings?.siteName),
+        logoUrl: logoUrl || undefined,
+        faviconUrl: faviconUrl || undefined,
+        assetVersion: assetVersion ? String(assetVersion) : undefined,
+      };
+    } catch (err) {
+      console.error("[getSiteBranding] Failed to fetch site branding", err);
+      // Fallback to avoid crashing the whole site metadata/layout
+      return {
+        siteName: "AI Learning Platform",
+      };
+    }
   },
   ["site-branding"],
   { tags: [PUBLIC_CACHE_TAGS.siteSettings] }

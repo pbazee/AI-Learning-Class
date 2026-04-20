@@ -296,10 +296,27 @@ export function CoursePreviewModal({
                 src={pdfViewerUrl}
                 title={`${activePreview.title} PDF preview`}
                 className={cn(
-                  "h-[72vh] w-full bg-white",
-                  lockedPdfPreview && "pointer-events-none"
+                  "h-[72vh] w-full bg-white transition-opacity duration-300",
+                  lockedPdfPreview && "pointer-events-none",
+                  // On mobile, native iframes for PDF often fail or allow downloading full doc
+                  "hidden sm:block"
                 )}
               />
+              <div className="flex sm:hidden flex-col items-center justify-center bg-white p-8 text-center min-h-[40vh]">
+                 <div className="rounded-full bg-primary-blue/10 p-4 mb-4">
+                    <FileText className="h-8 w-8 text-primary-blue" />
+                 </div>
+                 <h4 className="text-slate-900 font-bold mb-2">Mobile PDF Preview</h4>
+                 <p className="text-slate-600 text-sm mb-6 max-w-[240px]">
+                   Interactive PDF previews are optimized for desktop. On mobile, you can view the first {effectivePdfLimit} pages by enrolling.
+                 </p>
+                 <button
+                   onClick={() => void onLockedAction()}
+                   className="rounded-xl bg-primary-blue px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary-blue/30"
+                 >
+                   {lockedActionLabel}
+                 </button>
+              </div>
             </div>
             <p className="mt-3 text-xs leading-5 text-white/54">
               {lockedPdfPreview
@@ -343,7 +360,7 @@ export function CoursePreviewModal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[130] bg-slate-950/82 backdrop-blur-md" />
-        <Dialog.Content className="fixed inset-0 z-[131] flex h-screen flex-col bg-[#02050b] text-white focus:outline-none">
+        <Dialog.Content className="fixed inset-0 z-[131] flex h-[100dvh] flex-col bg-[#02050b] text-white focus:outline-none">
           <div className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-6 lg:px-8">
             <div className="min-w-0">
               <Dialog.Title className="truncate text-lg font-black text-white sm:text-xl">
@@ -474,7 +491,7 @@ export function CoursePreviewModal({
                 </div>
               </div>
 
-              <div className="border-t border-white/10 bg-slate-950/92 px-4 py-4 sm:px-6 lg:px-8">
+              <div className="safe-bottom border-t border-white/10 bg-slate-950/92 px-4 py-4 pb-safe sm:px-6 lg:px-8">
                 <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-white">

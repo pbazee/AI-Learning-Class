@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useRef } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { X, Save, Loader2, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,10 +33,9 @@ export function LessonNotesPanel({
   // Floating State
   const [position, setPosition] = useState({ x: 0, y: 100 });
   const [size, setSize] = useState({ width: 400, height: 500 });
-  const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   
-  const dragStartRef = useRef({ x: 0, y: 0 });
+  const dragControls = useDragControls();
   const resizeStartRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -96,17 +95,15 @@ export function LessonNotesPanel({
     void saveNotes();
   };
 
-  // Drag Handlers
-  const startDragging = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    dragStartRef.current = {
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
-    };
+  // Drag and Resize Handlers
+  const onDragEnd = (_: any, info: { point: { x: number, y: number }, offset: { x: number, y: number } }) => {
+    setPosition(prev => ({
+      x: Math.max(0, Math.min(window.innerWidth - size.width, prev.x + info.offset.x)),
+      y: Math.max(0, Math.min(window.innerHeight - 100, prev.y + info.offset.y))
+    }));
   };
 
-  // Resize Handlers
-  const startResizing = (e: React.MouseEvent) => {
+  const startResizing = (e: React.PointerEvent) => {
     e.stopPropagation();
     setIsResizing(true);
     resizeStartRef.current = {
@@ -115,46 +112,32 @@ export function LessonNotesPanel({
       w: size.width,
       h: size.height
     };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  useEffect(() => {
-    const handlePointerMove = (e: MouseEvent) => {
-      if (isDragging) {
-        const newX = Math.max(0, Math.min(window.innerWidth - size.width, e.clientX - dragStartRef.current.x));
-        const newY = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragStartRef.current.y));
-        setPosition({ x: newX, y: newY });
-      }
-      
-      if (isResizing) {
-        const deltaX = e.clientX - resizeStartRef.current.x;
-        const deltaY = e.clientY - resizeStartRef.current.y;
-        const newWidth = Math.max(320, Math.min(800, resizeStartRef.current.w + deltaX));
-        const newHeight = Math.max(300, Math.min(window.innerHeight - position.y - 20, resizeStartRef.current.h + deltaY));
-        setSize({ width: newWidth, height: newHeight });
-      }
-    };
+  const handlePointerResize = (e: React.PointerEvent) => {
+    if (!isResizing) return;
+    const deltaX = e.clientX - resizeStartRef.current.x;
+    const deltaY = e.clientY - resizeStartRef.current.y;
+    const newWidth = Math.max(320, Math.min(800, resizeStartRef.current.w + deltaX));
+    const newHeight = Math.max(300, Math.min(window.innerHeight - position.y - 20, resizeStartRef.current.h + deltaY));
+    setSize({ width: newWidth, height: newHeight });
+  };
 
-    const handlePointerUp = () => {
-      setIsDragging(false);
-      setIsResizing(false);
-    };
-
-    if (isDragging || isResizing) {
-      window.addEventListener("mousemove", handlePointerMove);
-      window.addEventListener("mouseup", handlePointerUp);
-    }
-
-    return () => {
-      window.removeEventListener("mousemove", handlePointerMove);
-      window.removeEventListener("mouseup", handlePointerUp);
-    };
-  }, [isDragging, isResizing, position, size]);
+  const stopResizing = (e: React.PointerEvent) => {
+    setIsResizing(false);
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  };
 
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
           ref={panelRef}
+          drag={!isResizing}
+          dragMomentum={false}
+          dragControls={dragControls}
+          onDragEnd={onDragEnd}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
@@ -170,7 +153,7 @@ export function LessonNotesPanel({
         >
           {/* Header / Drag Area */}
           <div 
-            onMouseDown={startDragging}
+            onPointerDown={(e) => dragControls.start(e)}
             className="flex items-center justify-between border-b border-white/5 p-3 cursor-move bg-white/[0.02]"
           >
             <div className="flex items-center gap-2">
@@ -230,7 +213,9 @@ export function LessonNotesPanel({
 
           {/* Resize Handle */}
           <div
-            onMouseDown={startResizing}
+            onPointerDown={startResizing}
+            onPointerMove={handlePointerResize}
+            onPointerUp={stopResizing}
             className="absolute bottom-0 right-0 h-8 w-8 cursor-nwse-resize flex items-end justify-end p-1 group hover:bg-primary-blue/10 transition-colors rounded-tl"
             title="Drag to resize"
           >

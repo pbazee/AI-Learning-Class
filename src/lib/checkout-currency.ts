@@ -51,19 +51,29 @@ export function normalizeCheckoutCurrency(
   return BASE_CHECKOUT_CURRENCY;
 }
 
+const DEFAULT_RATES: Record<string, number> = {
+  KES: 129,
+  GHS: 14,
+  NGN: 1450,
+  ZAR: 19,
+};
+
 function getUsdConversionRate(targetCurrency: SupportedCheckoutCurrency) {
   if (targetCurrency === BASE_CHECKOUT_CURRENCY) {
     return 1;
   }
 
   const envKey = `CHECKOUT_RATE_USD_TO_${targetCurrency}`;
-  const rawValue = (env as any)[envKey]?.trim();
+  // Check process.env directly because config.ts might strip it if not in schema
+  const rawValue = ((env as any)[envKey] || (process.env as any)[envKey])?.trim();
   const parsedValue = rawValue ? Number(rawValue) : NaN;
 
   if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-    throw new Error(
-      `Set ${envKey} to enable ${targetCurrency} checkout pricing.`
+    const defaultValue = DEFAULT_RATES[targetCurrency] ?? 1;
+    console.warn(
+      `[checkout-currency] ${envKey} is not set or invalid. Falling back to default rate: ${defaultValue}`
     );
+    return defaultValue;
   }
 
   return parsedValue;

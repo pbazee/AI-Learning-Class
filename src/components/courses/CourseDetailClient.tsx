@@ -325,7 +325,7 @@ export function CourseDetailClient({
                         <button
                           type="button"
                           onClick={handlePrimaryAction}
-                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90"
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white shadow-lg shadow-primary-blue/20 transition-all hover:bg-primary-blue/90 active:scale-[0.98]"
                         >
                           {resolvedCourseAccess?.actionLabel ?? "Continue Learning"}
                         </button>
@@ -334,14 +334,14 @@ export function CourseDetailClient({
                           type="button"
                           onClick={handlePrimaryAction}
                           disabled={enrolling}
-                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90 disabled:opacity-70"
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white shadow-lg shadow-primary-blue/20 transition-all hover:bg-primary-blue/90 disabled:opacity-70 active:scale-[0.98]"
                         >
                           {enrolling ? "Enrolling..." : "Enroll Free"}
                         </button>
                       ) : inCart ? (
                         <Link
                           href="/cart"
-                          className="block rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3.5 text-center font-semibold text-primary-blue transition-all hover:bg-primary-blue/15"
+                          className="block rounded-xl border border-primary-blue/20 bg-primary-blue/10 py-3.5 text-center font-semibold text-primary-blue transition-all hover:bg-primary-blue/15 active:scale-[0.98]"
                         >
                           <Check className="mr-2 inline h-4 w-4" /> Go to Cart
                         </Link>
@@ -349,7 +349,7 @@ export function CourseDetailClient({
                         <button
                           type="button"
                           onClick={handlePrimaryAction}
-                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white transition-colors hover:bg-primary-blue/90"
+                          className="w-full rounded-xl bg-primary-blue py-3.5 font-semibold text-white shadow-lg shadow-primary-blue/20 transition-all hover:bg-primary-blue/90 active:scale-[0.98]"
                         >
                           Add to Cart
                         </button>
