@@ -60,6 +60,7 @@ export function CoursesCatalog({
   const initialCategory = searchParams.get("category") ?? "all";
   const initialPriceFilter = searchParams.get("price");
   const initialFilter = searchParams.get("filter") ?? undefined;
+  const initialSort = searchParams.get("sort");
   const [search, setSearch] = useState(initialSearch);
   const [category, setCategory] = useState(initialCategory);
   const [level, setLevel] = useState<Level | "ALL">("ALL");
@@ -67,7 +68,9 @@ export function CoursesCatalog({
     initialPriceFilter === "free" || initialPriceFilter === "paid" ? initialPriceFilter : "all"
   );
   const [specialFilter, setSpecialFilter] = useState<SpecialFilter>(normalizeSpecialFilter(initialFilter));
-  const [sort, setSort] = useState(initialFilter === "popular" ? "popular" : "popular");
+  const [sort, setSort] = useState(
+    sortOptions.some((option) => option.value === initialSort) ? initialSort ?? "popular" : "popular"
+  );
   const effectiveViewerId = viewerId ?? personalization.viewerId;
   const effectiveCourseAccessMap =
     courseAccessMap ?? personalization.courseAccessMap;
@@ -95,6 +98,11 @@ export function CoursesCatalog({
         : "all"
     );
     setSpecialFilter(normalizeSpecialFilter(searchParams.get("filter") ?? undefined));
+    setSort(
+      sortOptions.some((option) => option.value === searchParams.get("sort"))
+        ? (searchParams.get("sort") as typeof sortOptions[number]["value"])
+        : "popular"
+    );
   }, [routeSignature, searchParams]);
 
   const filtered = useMemo(() => {

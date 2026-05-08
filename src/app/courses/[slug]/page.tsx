@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { CourseDetailClient } from "@/components/courses/CourseDetailClient";
@@ -9,7 +8,7 @@ import { getAskAiSettings } from "@/lib/ask-ai-settings";
 import { getCoursePreviewState } from "@/lib/course-preview-state";
 import { getCourseBySlug, getCurrentUserProfile, getUserCourseAccessMap } from "@/lib/data";
 import { buildCourseJsonLd } from "@/lib/seo";
-import { buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
+import { absoluteUrl, buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 import { resolveMediaUrl } from "@/lib/media";
 
 export async function generateMetadata({
@@ -28,7 +27,7 @@ export async function generateMetadata({
   }
 
   const courseImage = resolveMediaUrl({
-    url: course.imageUrl || course.thumbnailUrl,
+    url: course.thumbnailUrl || course.imageUrl,
     path: course.imagePath,
     fallback: "",
   });
@@ -37,6 +36,9 @@ export async function generateMetadata({
     title: `${course.title} | AI GENIUS LAB`,
     description: course.shortDescription || course.description,
     image: courseImage || undefined,
+    canonicalUrl: absoluteUrl(`/courses/${course.slug}`),
+    openGraphTitle: `${course.title} | AI GENIUS LAB`,
+    openGraphDescription: course.shortDescription || course.description,
   });
 }
 
@@ -77,6 +79,7 @@ export default async function CourseDetailPage({
         previewState={previewState}
         askAiEnabled={askAiSettings.enabled}
         askAiAssistantLabel={askAiSettings.assistantLabel}
+        shareUrl={absoluteUrl(`/courses/${course.slug}`)}
         expiredAccess={
           expiredAccess
             ? {

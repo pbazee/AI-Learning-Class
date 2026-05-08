@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
 import { AnnouncementBarWrapper } from "@/components/landing/AnnouncementBarWrapper";
+import { AppChrome } from "@/components/layout/AppChrome";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { RouteScrollReset } from "@/components/layout/RouteScrollReset";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
@@ -74,17 +75,23 @@ export default async function RootLayout({
         >
           <ToastProvider>
             <Suspense fallback={null}>
-              <AnnouncementBarWrapper />
-            </Suspense>
-            <Suspense fallback={null}>
               <RouteScrollReset />
             </Suspense>
-            <Suspense fallback={null}>
-              <PopupCampaigns />
-            </Suspense>
-            <Navbar />
+            <AppChrome
+              announcementBar={
+                <Suspense fallback={null}>
+                  <AnnouncementBarWrapper />
+                </Suspense>
+              }
+              popupCampaigns={
+                <Suspense fallback={null}>
+                  <PopupCampaigns />
+                </Suspense>
+              }
+              navbar={<Navbar />}
+              mobileBottomNav={<MobileBottomNav />}
+            />
             {children}
-            <MobileBottomNav />
           </ToastProvider>
         </ThemeProvider>
       </body>

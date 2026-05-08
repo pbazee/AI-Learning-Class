@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Mail } from "lucide-react";
-import { FooterClient } from "@/components/layout/FooterClient";
-import { NavbarClient } from "@/components/layout/NavbarClient";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { ArrowRight, Loader2, Mail } from "lucide-react";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { getSupabaseClient } from "@/lib/supabase";
 
 export default function ForgotPasswordPage() {
@@ -21,7 +19,7 @@ export default function ForgotPasswordPage() {
 
     try {
       const supabase = getSupabaseClient();
-      const redirectTo = `${window.location.origin}/login`;
+      const redirectTo = `${window.location.origin}/reset-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
       if (error) {
@@ -37,66 +35,80 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center px-4 py-16 sm:px-6 lg:px-8">
-        <Card className="w-full max-w-lg">
-          <CardHeader>
-            <Button asChild variant="ghost" size="sm" className="mb-4 w-fit px-0 text-blue-600 hover:bg-transparent hover:text-blue-700">
-              <Link href="/login">
-                <ArrowLeft className="h-4 w-4" />
-                Back to login
-              </Link>
-            </Button>
-            <CardTitle>Forgot your password?</CardTitle>
-            <CardDescription>
-              Enter your email and we&apos;ll send you reset instructions.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="forgot-password-email" className="mb-2 block text-sm font-semibold text-foreground">
-                  Email address
-                </label>
-                <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    id="forgot-password-email"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    required
-                    placeholder="you@example.com"
-                    className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-400/30"
-                  />
-                </div>
-              </div>
+    <AuthShell
+      badge="Account Recovery"
+      backHref="/login"
+      backLabel="Back to login"
+      siteName={DEFAULT_SITE_NAME}
+      subtitle="Enter the email tied to your account and we will send a secure link to choose a new password."
+      title="Reset your password"
+    >
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)]">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label
+              htmlFor="forgot-password-email"
+              className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
+            >
+              Email address
+            </label>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                id="forgot-password-email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                placeholder="you@example.com"
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-500 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+              />
+            </div>
+          </div>
 
-              <Button type="submit" className="w-full" disabled={status === "loading"}>
-                {status === "loading" ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Sending Reset Link
-                  </>
-                ) : (
-                  "Send Reset Instructions"
-                )}
-              </Button>
-            </form>
+          <button
+            type="submit"
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            disabled={status === "loading"}
+          >
+            {status === "loading" ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Sending reset link
+              </>
+            ) : (
+              <>
+                Send reset instructions
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
+          </button>
+        </form>
 
-            {message ? (
-              <p
-                className={`mt-4 text-sm ${
-                  status === "success" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                }`}
-              >
-                {message}
+        {message ? (
+          <div
+            className={`mt-4 rounded-2xl border px-4 py-3 text-sm leading-6 ${
+              status === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-rose-200 bg-rose-50 text-rose-700"
+            }`}
+          >
+            <p>{message}</p>
+            {status === "success" ? (
+              <p className="mt-2 text-xs uppercase tracking-[0.14em] text-emerald-700/80">
+                Check your inbox and click the reset link. You will be taken to a page to set your new password.
               </p>
             ) : null}
-          </CardContent>
-        </Card>
-      </main>
-      <FooterClient />
-    </div>
+          </div>
+        ) : null}
+
+        <p className="mt-6 text-sm text-slate-700">
+          Remembered your password?{" "}
+          <Link href="/login" className="font-semibold text-slate-950 transition hover:text-sky-700">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    </AuthShell>
   );
 }

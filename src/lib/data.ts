@@ -46,11 +46,13 @@ import {
   normalizeSiteSettingsSocialLinks,
   type AboutContent,
 } from "@/lib/site-settings";
+import { estimateReadingTimeMinutes, formatReadingTime } from "@/lib/reading-time";
 import {
   PUBLIC_CACHE_TAGS,
   PUBLIC_PAGE_REVALIDATE_SECONDS,
 } from "@/lib/cache-config";
 import { env } from "@/lib/config";
+import { getLessonAssetDisplayTitle, inferLessonAssetKind, sortLessonAssets } from "@/lib/lesson-assets";
 
 type CourseWithCategory = Prisma.CourseGetPayload<{
   include: { category: true };
@@ -60,7 +62,15 @@ type CourseWithDetails = Prisma.CourseGetPayload<{
   include: {
     category: true;
     modules: {
-      include: { lessons: true };
+      include: {
+        lessons: {
+          include: {
+            lessonAssets: {
+              orderBy: { sortOrder: "asc" };
+            };
+          };
+        };
+      };
     };
     reviews: {
       where: { isApproved: true };
@@ -117,6 +127,72 @@ export type UserCertificateRecord = {
     slug: string;
   };
 };
+
+function mapLessonAssets(
+  lesson: {
+    id: string;
+    assetUrl?: string | null;
+    assetPath?: string | null;
+    lessonAssets?: Array<{
+      id: string;
+      assetType: "VIDEO" | "PDF" | "FILE";
+      assetUrl: string;
+      assetPath: string | null;
+      fileName: string | null;
+      mimeType: string | null;
+      sizeBytes: number | null;
+      title: string | null;
+      isPrimary: boolean;
+      sortOrder: number;
+    }>;
+  }
+) {
+  if (lesson.lessonAssets && lesson.lessonAssets.length > 0) {
+    return sortLessonAssets(lesson.lessonAssets)
+      .map((asset, index) => ({
+        id: asset.id,
+        lessonId: lesson.id,
+        assetType: asset.assetType,
+        assetUrl: asset.assetUrl,
+        assetPath: asset.assetPath ?? undefined,
+        fileName: asset.fileName ?? undefined,
+        mimeType: asset.mimeType ?? undefined,
+        sizeBytes: asset.sizeBytes ?? undefined,
+        title: asset.title ?? getLessonAssetDisplayTitle(asset),
+        isPrimary: index === 0 || asset.isPrimary,
+        sortOrder: asset.sortOrder,
+      }));
+  }
+
+  const fallbackAssetUrl = lesson.assetUrl?.trim();
+  if (!fallbackAssetUrl) {
+    return [];
+  }
+
+  const fallbackKind = inferLessonAssetKind({
+    assetUrl: fallbackAssetUrl,
+  });
+
+  return [
+    {
+      id: `legacy-${lesson.id}`,
+      lessonId: lesson.id,
+      assetType:
+        (fallbackKind === "PDF" ? "PDF" : fallbackKind === "VIDEO" ? "VIDEO" : "FILE") as
+          | "VIDEO"
+          | "PDF"
+          | "FILE",
+      assetUrl: fallbackAssetUrl,
+      assetPath: lesson.assetPath ?? undefined,
+      fileName: getLessonAssetDisplayTitle({ assetUrl: fallbackAssetUrl }),
+      mimeType: undefined,
+      sizeBytes: undefined,
+      title: getLessonAssetDisplayTitle({ assetUrl: fallbackAssetUrl }),
+      isPrimary: true,
+      sortOrder: 0,
+    },
+  ];
+}
 
 export type RevenuePoint = {
   month: string;
@@ -283,21 +359,6 @@ function formatDate(date?: Date | null) {
 
 function formatShortDate(date?: Date | null) {
   return date ? shortDateFormatter.format(date) : "";
-}
-
-function stripMarkup(value: string) {
-  return value
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/`[^`]*`/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[#>*_\-\[\]()]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function estimateReadTime(content: string) {
-  const words = stripMarkup(content).split(/\s+/).filter(Boolean).length;
-  return `${Math.max(1, Math.ceil(words / 220))} min read`;
 }
 
 function formatRole(role?: string | null) {
@@ -514,24 +575,36 @@ function mapCourse(
           order: module.order,
           lessons: [...module.lessons]
             .sort((left, right) => left.order - right.order)
-            .map((lesson) => ({
-              id: lesson.id,
-              moduleId: lesson.moduleId,
-              title: lesson.title,
-              description: lesson.description ?? undefined,
-              type: lesson.type,
-              videoUrl: lesson.videoUrl ?? lesson.assetUrl ?? undefined,
-              assetUrl: lesson.assetUrl ?? lesson.videoUrl ?? undefined,
-              assetPath: lesson.assetPath ?? undefined,
-              duration: lesson.duration ?? undefined,
-              content: lesson.content ?? undefined,
-              isPreview: lesson.isPreview,
-              previewPages: lesson.previewPages ?? undefined,
-              previewMinutes: lesson.previewMinutes ?? undefined,
-              allowDownload: lesson.allowDownload,
-              sellSeparately: lesson.sellSeparately,
-              order: lesson.order,
-            })),
+            .map((lesson) => {
+              const assets = mapLessonAssets(lesson);
+              const primaryAsset =
+                [...assets].sort((left, right) => {
+                  if (left.isPrimary !== right.isPrimary) {
+                    return left.isPrimary ? -1 : 1;
+                  }
+
+                  return left.sortOrder - right.sortOrder;
+                })[0];
+
+              return {
+                id: lesson.id,
+                moduleId: lesson.moduleId,
+                title: lesson.title,
+                description: lesson.description ?? undefined,
+                type: lesson.type,
+                videoUrl: primaryAsset?.assetUrl ?? lesson.videoUrl ?? lesson.assetUrl ?? undefined,
+                assetUrl: primaryAsset?.assetUrl ?? lesson.assetUrl ?? lesson.videoUrl ?? undefined,
+                assetPath: primaryAsset?.assetPath ?? lesson.assetPath ?? undefined,
+                duration: lesson.duration ?? undefined,
+                content: lesson.content ?? undefined,
+                isPreview: lesson.isPreview,
+                previewPages: lesson.previewPages ?? undefined,
+                previewMinutes: lesson.previewMinutes ?? undefined,
+                sellSeparately: lesson.sellSeparately,
+                order: lesson.order,
+                assets,
+              };
+            }),
         })),
     };
   }
@@ -1377,17 +1450,21 @@ export async function getHomepageParagraphContentMap(): Promise<HomepageParagrap
   );
 }
 
-export async function getCourseBySlug(slug: string): Promise<Course | null> {
+const getCourseBySlugCached = cache(async (slug: string): Promise<Course | null> => {
   return safeDatabaseRead("getCourseBySlug", null, async () => {
-    await ensureLessonPreviewColumns();
-
     const course = await prisma.course.findUnique({
       where: { slug },
       include: {
         category: true,
         modules: {
           include: {
-            lessons: true,
+            lessons: {
+              include: {
+                lessonAssets: {
+                  orderBy: { sortOrder: "asc" },
+                },
+              },
+            },
           },
         },
         reviews: {
@@ -1416,6 +1493,10 @@ export async function getCourseBySlug(slug: string): Promise<Course | null> {
 
     return mappedCourse ?? null;
   });
+});
+
+export async function getCourseBySlug(slug: string): Promise<Course | null> {
+  return getCourseBySlugCached(slug);
 }
 
 export async function getCourseByLessonId(lessonId: string): Promise<Course | null> {
@@ -1581,13 +1662,23 @@ function mapBlogPost(
     excerpt: post.excerpt ?? undefined,
     content: post.content,
     coverImage: post.coverImage ?? undefined,
+    metaTitle: post.metaTitle ?? undefined,
+    metaDescription: post.metaDescription ?? undefined,
+    focusKeyword: post.focusKeyword ?? undefined,
+    ogTitle: post.ogTitle ?? undefined,
+    ogDescription: post.ogDescription ?? undefined,
+    ogImageUrl: post.ogImageUrl ?? undefined,
+    ogImagePath: post.ogImagePath ?? undefined,
+    canonicalUrl: post.canonicalUrl ?? undefined,
+    noIndex: post.noIndex,
     categoryName: post.category?.name ?? undefined,
     status: (post.status as BlogPost["status"]) ?? undefined,
     authorName: authorMap.get(post.authorId) ?? "AI GENIUS LAB",
     tags: post.tags,
     publishedAt: formatDate(post.publishedAt ?? post.createdAt),
     publishedAtIso: (post.publishedAt ?? post.createdAt).toISOString(),
-    readTime: estimateReadTime(post.content),
+    readTime: formatReadingTime(post.content),
+    readingTimeMinutes: estimateReadingTimeMinutes(post.content),
   };
 }
 

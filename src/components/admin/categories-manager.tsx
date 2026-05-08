@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteCategoryAction, saveCategoryAction } from "@/app/admin/actions";
 import { MediaUploader } from "@/components/admin/media-uploader";
@@ -238,7 +239,14 @@ export function CategoriesManager({
         },
         {
           header: "Courses",
-          cell: (item) => <span className="text-sm font-semibold text-foreground">{item.courseCount}</span>,
+          cell: (item) => (
+            <Link
+              href={`/admin/categories/${item.slug}/courses`}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-primary-blue transition-colors hover:text-white"
+            >
+              {item.courseCount} course{item.courseCount === 1 ? "" : "s"} <span aria-hidden="true">→</span>
+            </Link>
+          ),
         },
         {
           header: "Theme",

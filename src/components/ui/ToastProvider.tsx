@@ -15,11 +15,11 @@ type ToastItem = {
 };
 
 type ToastContextValue = {
-  success: (message: string) => void;
-  error: (message: string) => void;
-  warning: (message: string) => void;
-  info: (message: string) => void;
-  toast: (message: string, type?: ToastType) => void;
+  success: (message: string, durationMs?: number) => void;
+  error: (message: string, durationMs?: number) => void;
+  warning: (message: string, durationMs?: number) => void;
+  info: (message: string, durationMs?: number) => void;
+  toast: (message: string, type?: ToastType, durationMs?: number) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -50,25 +50,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const enqueue = useCallback(
-    (message: string, type: ToastType) => {
+    (message: string, type: ToastType, durationMs = 4000) => {
       logger.debug(`[toast.${type}]`, message);
       const id = createToastId();
       const nextToast: ToastItem = { id, message, type, visible: true };
       setToasts((current) => [...current, nextToast]);
       window.setTimeout(() => {
         dismissToast(id);
-      }, 4000);
+      }, durationMs);
     },
     [dismissToast]
   );
 
   const contextValue = useMemo<ToastContextValue>(
     () => ({
-      success: (message) => enqueue(message, "success"),
-      error: (message) => enqueue(message, "error"),
-      warning: (message) => enqueue(message, "warning"),
-      info: (message) => enqueue(message, "info"),
-      toast: (message, type = "info") => enqueue(message, type),
+      success: (message, durationMs) => enqueue(message, "success", durationMs),
+      error: (message, durationMs) => enqueue(message, "error", durationMs),
+      warning: (message, durationMs) => enqueue(message, "warning", durationMs),
+      info: (message, durationMs) => enqueue(message, "info", durationMs),
+      toast: (message, type = "info", durationMs) => enqueue(message, type, durationMs),
     }),
     [enqueue]
   );

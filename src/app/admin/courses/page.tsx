@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { CoursesManager } from "@/components/admin/courses-manager";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
+import { ensureLessonAssetsTable } from "@/lib/lesson-assets-table";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
+import { getLessonAssetDisplayTitle, inferLessonAssetKind } from "@/lib/lesson-assets";
 
 export default async function AdminCoursesPage() {
   await ensureLessonPreviewColumns();
+  await ensureLessonAssetsTable();
   await ensureSubscriptionPlansTable();
 
   const [courses, categories, instructors, activePlans] = await Promise.all([
@@ -29,6 +32,11 @@ export default async function AdminCoursesPage() {
           include: {
             lessons: {
               orderBy: { order: "asc" },
+              include: {
+                lessonAssets: {
+                  orderBy: { sortOrder: "asc" },
+                },
+              },
             },
           },
         },
@@ -119,12 +127,49 @@ export default async function AdminCoursesPage() {
             type: lesson.type,
             assetUrl: lesson.assetUrl,
             assetPath: lesson.assetPath,
+            assets:
+              lesson.lessonAssets.length > 0
+                ? lesson.lessonAssets.map((asset) => ({
+                    id: asset.id,
+                    assetType: asset.assetType,
+                    assetUrl: asset.assetUrl,
+                    assetPath: asset.assetPath ?? "",
+                    fileName: asset.fileName ?? "",
+                    mimeType: asset.mimeType ?? undefined,
+                    sizeBytes: asset.sizeBytes ?? undefined,
+                    title: asset.title ?? asset.fileName ?? "",
+                    isPrimary: asset.isPrimary,
+                    sortOrder: asset.sortOrder,
+                  }))
+                : lesson.assetUrl
+                  ? [
+                      {
+                        assetType:
+                          inferLessonAssetKind({
+                            assetUrl: lesson.assetUrl,
+                          }) === "PDF"
+                            ? "PDF"
+                            : inferLessonAssetKind({
+                                assetUrl: lesson.assetUrl,
+                              }) === "VIDEO"
+                              ? "VIDEO"
+                              : "FILE",
+                        assetUrl: lesson.assetUrl,
+                        assetPath: lesson.assetPath ?? "",
+                        fileName: getLessonAssetDisplayTitle({ assetUrl: lesson.assetUrl }),
+                        mimeType: undefined,
+                        sizeBytes: undefined,
+                        title: getLessonAssetDisplayTitle({ assetUrl: lesson.assetUrl }),
+                        isPrimary: true,
+                        sortOrder: 0,
+                      },
+                    ]
+                  : [],
             duration: lesson.duration,
             content: lesson.content,
             isPreview: lesson.isPreview,
             previewPages: lesson.previewPages,
             previewMinutes: lesson.previewMinutes,
-            allowDownload: lesson.allowDownload,
             sellSeparately: lesson.sellSeparately,
             order: lesson.order,
           })),

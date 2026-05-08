@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Download,
   FileText,
   Loader2,
   Lock,
@@ -36,11 +37,17 @@ import {
 import { cn } from "@/lib/utils";
 import { clampPercentage, DEFAULT_ASK_AI_NAME } from "@/lib/site";
 import type { Course } from "@/types";
+import {
+  getLessonAssetDisplayTitle,
+  inferLessonAssetKind,
+  sortLessonAssets,
+} from "@/lib/lesson-assets";
 import { resolveMediaUrl } from "@/lib/media";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { LessonNotesPanel } from "./LessonNotesPanel";
+import { useToast } from "@/components/ui/ToastProvider";
 
-const LessonPdfViewer = dynamic(() => import("./LessonPdfViewer").then((mod) => mod.LessonPdfViewer), {
+const LessonPdfViewer = dynamic(() => import("./LessonPdfViewer"), {
   ssr: false,
   loading: () => (
     <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white/5 min-h-[600px]">
@@ -59,7 +66,9 @@ type LessonPlayerNote = {
 };
 
 type CourseLesson = NonNullable<Course["modules"]>[number]["lessons"][number];
+type CourseLessonAsset = NonNullable<CourseLesson["assets"]>[number];
 type LessonRendererKind = "pdf" | "video" | "audio";
+type LessonResourceKind = LessonRendererKind | "file";
 
 type LessonProgressState = {
   contentType: LessonRendererKind | null;
@@ -83,6 +92,12 @@ type ResolvedLessonRenderer = {
   primaryAssetUrl: string | null;
 };
 
+type ResolvedLessonAsset = CourseLessonAsset & {
+  displayTitle: string;
+  kind: LessonResourceKind;
+  resolvedUrl: string;
+};
+
 type ResumePromptState =
   | { kind: "media"; position: number }
   | { kind: "pdf"; page: number }
@@ -94,10 +109,70 @@ type PdfScrollRequest = {
   behavior?: ScrollBehavior;
 } | null;
 
+type ResourceProgressState = {
+  isCompleted: boolean;
+  kind: "media" | "pdf";
+  lastPage?: number;
+  lastPosition?: number;
+  progressPercent: number;
+  updatedAt: number;
+};
+
 const DESKTOP_BREAKPOINT = 1024;
 const MEDIA_SAVE_INTERVAL_SECONDS = 5;
 const PDF_SAVE_DEBOUNCE_MS = 500;
 const SAVED_PROGRESS_FEEDBACK_MS = 2500;
+const SIDEBAR_STORAGE_KEY = "lesson-player-sidebar-open";
+const RESOURCE_PROGRESS_STORAGE_KEY = "lesson-player-resource-progress";
+
+function getResourceProgressKey(lessonId: string, assetId: string) {
+  return `${lessonId}:${assetId}`;
+}
+
+function normalizeResourceProgressMap(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return {} as Record<string, ResourceProgressState>;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => {
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+
+    const resourceEntry = entry as Partial<ResourceProgressState>;
+    const kind = resourceEntry.kind === "pdf" ? "pdf" : resourceEntry.kind === "media" ? "media" : null;
+
+    if (!kind) {
+      return [];
+    }
+
+    return [[
+      key,
+      {
+        isCompleted: Boolean(resourceEntry.isCompleted),
+        kind,
+        lastPage:
+          typeof resourceEntry.lastPage === "number" && Number.isFinite(resourceEntry.lastPage)
+            ? Math.max(1, Math.round(resourceEntry.lastPage))
+            : undefined,
+        lastPosition:
+          typeof resourceEntry.lastPosition === "number" && Number.isFinite(resourceEntry.lastPosition)
+            ? Math.max(0, Math.round(resourceEntry.lastPosition))
+            : undefined,
+        progressPercent:
+          typeof resourceEntry.progressPercent === "number" && Number.isFinite(resourceEntry.progressPercent)
+            ? clampPercentage(resourceEntry.progressPercent)
+            : 0,
+        updatedAt:
+          typeof resourceEntry.updatedAt === "number" && Number.isFinite(resourceEntry.updatedAt)
+            ? resourceEntry.updatedAt
+            : Date.now(),
+      } satisfies ResourceProgressState,
+    ]];
+  });
+
+  return Object.fromEntries(entries) as Record<string, ResourceProgressState>;
+}
 
 function inferLessonRendererFromUrl(url?: string | null): LessonRendererKind | null {
   const normalizedUrl = url?.trim();
@@ -115,15 +190,93 @@ function normalizeLessonAssetType(lesson: CourseLesson) {
   return normalizedAssetType === "LIVE" ? "VIDEO" : normalizedAssetType;
 }
 
-function resolveLessonRenderer(lesson: CourseLesson): ResolvedLessonRenderer {
-  const primaryAssetUrl =
+function resolveLessonAssets(lesson: CourseLesson): ResolvedLessonAsset[] {
+  const assets = sortLessonAssets(lesson.assets ?? []);
+
+  if (assets.length > 0) {
+    return [...assets]
+      .sort((left, right) => {
+        if (left.isPrimary !== right.isPrimary) {
+          return left.isPrimary ? -1 : 1;
+        }
+
+        return left.sortOrder - right.sortOrder;
+      })
+      .map((asset) => {
+        const resolvedUrl =
+          resolveMediaUrl({
+            url: asset.assetUrl,
+            path: asset.assetPath,
+            fallback: "",
+          }) || "";
+        const kind = inferLessonAssetKind(asset);
+
+        return {
+          ...asset,
+          displayTitle: asset.title || getLessonAssetDisplayTitle(asset),
+          kind:
+            kind === "PDF"
+              ? "pdf"
+              : kind === "VIDEO"
+                ? "video"
+                : kind === "AUDIO"
+                  ? "audio"
+                  : "file",
+          resolvedUrl,
+        } satisfies ResolvedLessonAsset;
+      })
+      .filter((asset) => asset.resolvedUrl);
+  }
+
+  const fallbackUrl =
     resolveMediaUrl({
       url: lesson.assetUrl || lesson.videoUrl,
       path: lesson.assetPath,
       fallback: "",
-    }) || null;
+    }) || "";
+
+  if (!fallbackUrl) {
+    return [];
+  }
+
+  const kind = inferLessonAssetKind({
+    assetUrl: fallbackUrl,
+  });
+
+  return [
+    {
+      id: `legacy-${lesson.id}`,
+      lessonId: lesson.id,
+      assetType: kind === "PDF" ? "PDF" : kind === "VIDEO" ? "VIDEO" : "FILE",
+      assetUrl: fallbackUrl,
+      assetPath: lesson.assetPath,
+      fileName: getLessonAssetDisplayTitle({ assetUrl: fallbackUrl }),
+      mimeType: undefined,
+      sizeBytes: undefined,
+      title: getLessonAssetDisplayTitle({ assetUrl: fallbackUrl }),
+      displayTitle: getLessonAssetDisplayTitle({ assetUrl: fallbackUrl }),
+      isPrimary: true,
+      sortOrder: 0,
+      kind:
+        kind === "PDF"
+          ? "pdf"
+          : kind === "VIDEO"
+            ? "video"
+            : kind === "AUDIO"
+              ? "audio"
+              : "file",
+      resolvedUrl: fallbackUrl,
+    },
+  ];
+}
+
+function resolveLessonRenderer(
+  lesson: CourseLesson,
+  lessonAssets: ResolvedLessonAsset[]
+): ResolvedLessonRenderer {
+  const primaryAssetUrl = lessonAssets[0]?.resolvedUrl ?? null;
   const assetTypeLabel = normalizeLessonAssetType(lesson);
-  const inferredRenderer = inferLessonRendererFromUrl(primaryAssetUrl);
+  const inferredRenderer = lessonAssets[0]?.kind === "file" ? null : lessonAssets[0]?.kind ?? inferLessonRendererFromUrl(primaryAssetUrl);
 
   const missingAssetRenderer = {
     assetTypeLabel,
@@ -369,31 +522,66 @@ export function LessonPlayerClient({
   const [pdfInitialPage, setPdfInitialPage] = useState(1);
   const [pdfScrollRequest, setPdfScrollRequest] = useState<PdfScrollRequest>(null);
   const [resumePrompt, setResumePrompt] = useState<ResumePromptState>(null);
+  const [isMediaFullscreen, setIsMediaFullscreen] = useState(false);
+  const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
+  const [fetchedLessonAssets, setFetchedLessonAssets] = useState<CourseLesson["assets"] | null>(null);
+  const [resourceProgressMap, setResourceProgressMap] = useState<Record<string, ResourceProgressState>>({});
+  const [activeResourceStartTime, setActiveResourceStartTime] = useState(0);
+  const [activeResourceInitialPage, setActiveResourceInitialPage] = useState(1);
+  const [resourceResumePrompt, setResourceResumePrompt] = useState<ResumePromptState>(null);
+  const { toast } = useToast();
 
   const modules = course.modules ?? [];
   const allLessons = useMemo(() => modules.flatMap((module) => module.lessons), [modules]);
   const currentLesson =
     allLessons.find((lesson) => lesson.id === initialLessonId) ?? allLessons[0];
   const currentIndex = allLessons.findIndex((lesson) => lesson.id === currentLesson.id);
+  const lessonForRendering = useMemo(
+    () =>
+      fetchedLessonAssets === null
+        ? currentLesson
+        : {
+            ...currentLesson,
+            assets: fetchedLessonAssets,
+          },
+    [currentLesson, fetchedLessonAssets]
+  );
+  const resolvedLessonAssets = useMemo(
+    () => resolveLessonAssets(lessonForRendering),
+    [lessonForRendering]
+  );
   const resolvedLessonRenderer = useMemo(
-    () => resolveLessonRenderer(currentLesson),
-    [currentLesson]
+    () => resolveLessonRenderer(lessonForRendering, resolvedLessonAssets),
+    [lessonForRendering, resolvedLessonAssets]
   );
   const currentLessonProgress = normalizeLessonProgressEntry(lessonProgressMap[currentLesson.id]);
   const currentContentType = resolvedLessonRenderer.kind;
   const primaryAssetUrl = resolvedLessonRenderer.primaryAssetUrl;
-  const pdfDocumentUrl =
-    currentContentType === "pdf" && primaryAssetUrl
-      ? `/api/learn/lessons/${currentLesson.id}/pdf`
+  const primaryLessonAsset = resolvedLessonAssets[0] ?? null;
+  const additionalLessonAssets = resolvedLessonAssets.slice(1);
+  const activeResourceAsset =
+    additionalLessonAssets.find((asset) => asset.id === activeResourceId) ?? null;
+  const activeResourceProgress =
+    activeResourceAsset
+      ? resourceProgressMap[getResourceProgressKey(currentLesson.id, activeResourceAsset.id)] ?? null
       : null;
+  const activeViewerAsset = activeResourceAsset ?? primaryLessonAsset;
+  const activeViewerKind =
+    activeResourceAsset?.kind === "pdf" ||
+    activeResourceAsset?.kind === "video" ||
+    activeResourceAsset?.kind === "audio"
+      ? activeResourceAsset.kind
+      : currentContentType;
+  const activeViewerUrl = activeResourceAsset?.resolvedUrl ?? primaryAssetUrl;
+  const activeResourcePdfUrl = activeResourceAsset?.resolvedUrl ?? null;
   const isPreviewOnlyLesson = currentLesson.isPreview && !hasFullCourseAccess;
   const previewPagesLimit =
-    isPreviewOnlyLesson && currentContentType === "pdf"
+    isPreviewOnlyLesson && activeViewerKind === "pdf"
       ? currentLesson.previewPages ?? undefined
       : undefined;
   const previewMinutesLimitSeconds =
     isPreviewOnlyLesson &&
-    (currentContentType === "video" || currentContentType === "audio") &&
+    (activeViewerKind === "video" || activeViewerKind === "audio") &&
     currentLesson.previewMinutes
       ? currentLesson.previewMinutes * 60
       : 0;
@@ -415,12 +603,130 @@ export function LessonPlayerClient({
     page: currentLessonProgress.lastPage ?? 1,
     totalPages: 0,
   });
+  const autoCompletedPdfLessonRef = useRef<string | null>(null);
   const pdfScrollNonceRef = useRef(0);
+  const fullscreenActionButtonClass =
+    "flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/35 text-white/85 backdrop-blur-md transition hover:bg-black/55 hover:text-white";
 
   const isLessonUnlocked = useCallback(
     (lesson: CourseLesson) => hasFullCourseAccess || lesson.isPreview,
     [hasFullCourseAccess]
   );
+
+  useEffect(() => {
+    setActiveResourceId(null);
+  }, [currentLesson.id]);
+
+  useEffect(() => {
+    if (!isMounted) {
+      return;
+    }
+
+    try {
+      const rawValue = window.localStorage.getItem(RESOURCE_PROGRESS_STORAGE_KEY);
+      if (!rawValue) {
+        return;
+      }
+
+      setResourceProgressMap(normalizeResourceProgressMap(JSON.parse(rawValue)));
+    } catch (error) {
+      console.error("[lesson-player] Failed to load resource progress.", error);
+    }
+  }, [isMounted]);
+
+  useEffect(() => {
+    if (!isMounted) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      RESOURCE_PROGRESS_STORAGE_KEY,
+      JSON.stringify(resourceProgressMap)
+    );
+  }, [isMounted, resourceProgressMap]);
+
+  useEffect(() => {
+    setActiveResourceStartTime(0);
+    setActiveResourceInitialPage(1);
+    setResourceResumePrompt(null);
+
+    if (!activeResourceAsset) {
+      return;
+    }
+
+    const progressEntry =
+      resourceProgressMap[getResourceProgressKey(currentLesson.id, activeResourceAsset.id)];
+
+    if (!progressEntry) {
+      return;
+    }
+
+    if (progressEntry.isCompleted) {
+      if (progressEntry.kind === "pdf" && progressEntry.lastPage) {
+        setActiveResourceInitialPage(progressEntry.lastPage);
+      }
+
+      if (progressEntry.kind === "media" && progressEntry.lastPosition) {
+        setActiveResourceStartTime(progressEntry.lastPosition);
+      }
+
+      return;
+    }
+
+    if (progressEntry.kind === "pdf") {
+      if ((progressEntry.lastPage ?? 1) > 1) {
+        setActiveResourceInitialPage(1);
+        setResourceResumePrompt({ kind: "pdf", page: progressEntry.lastPage ?? 1 });
+      } else {
+        setActiveResourceInitialPage(progressEntry.lastPage ?? 1);
+      }
+      return;
+    }
+
+    if ((progressEntry.lastPosition ?? 0) > 10) {
+      setActiveResourceStartTime(0);
+      setResourceResumePrompt({ kind: "media", position: progressEntry.lastPosition ?? 0 });
+    } else {
+      setActiveResourceStartTime(progressEntry.lastPosition ?? 0);
+    }
+  }, [activeResourceAsset, currentLesson.id, resourceProgressMap]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setFetchedLessonAssets(null);
+
+    async function loadLessonAssets() {
+      try {
+        const response = await fetch(`/api/learn/lessons/${currentLesson.id}/assets`, {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error(`Lesson assets request failed with ${response.status}.`);
+        }
+
+        const payload = (await response.json()) as {
+          assets?: CourseLesson["assets"];
+        };
+
+        if (!cancelled) {
+          setFetchedLessonAssets(Array.isArray(payload.assets) ? payload.assets : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("[lesson-player] Unable to refresh lesson assets.", error);
+          setFetchedLessonAssets(currentLesson.assets ?? null);
+        }
+      }
+    }
+
+    void loadLessonAssets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentLesson.id, currentLesson.assets]);
 
   const clearProgressFeedbackTimeout = useCallback(() => {
     if (progressFeedbackTimeoutRef.current) {
@@ -449,6 +755,108 @@ export function LessonPlayerClient({
       pdfSaveTimeoutRef.current = null;
     }
   }, []);
+
+  const updateResourceProgress = useCallback(
+    (
+      assetId: string,
+      nextState: Partial<ResourceProgressState> & Pick<ResourceProgressState, "kind">
+    ) => {
+      const progressKey = getResourceProgressKey(currentLesson.id, assetId);
+
+      setResourceProgressMap((prev) => {
+        const current = prev[progressKey];
+
+        return {
+          ...prev,
+          [progressKey]: {
+            isCompleted: nextState.isCompleted ?? current?.isCompleted ?? false,
+            kind: nextState.kind,
+            lastPage: nextState.lastPage ?? current?.lastPage,
+            lastPosition: nextState.lastPosition ?? current?.lastPosition,
+            progressPercent: clampPercentage(
+              nextState.progressPercent ?? current?.progressPercent ?? 0
+            ),
+            updatedAt: Date.now(),
+          },
+        };
+      });
+    },
+    [currentLesson.id]
+  );
+
+  const handleActiveResourcePdfProgress = useCallback(
+    (percent: number, currentPage: number, totalPages: number) => {
+      if (!activeResourceAsset || activeResourceAsset.kind !== "pdf") {
+        return;
+      }
+
+      updateResourceProgress(activeResourceAsset.id, {
+        kind: "pdf",
+        isCompleted: totalPages > 0 && currentPage >= totalPages,
+        lastPage: currentPage,
+        progressPercent: percent,
+      });
+    },
+    [activeResourceAsset, updateResourceProgress]
+  );
+
+  const handleActiveResourceMediaProgress = useCallback(
+    (snapshot: MediaPlayerSnapshot) => {
+      if (!activeResourceAsset || (activeResourceAsset.kind !== "video" && activeResourceAsset.kind !== "audio")) {
+        return;
+      }
+
+      updateResourceProgress(activeResourceAsset.id, {
+        kind: "media",
+        isCompleted:
+          snapshot.duration > 0 &&
+          snapshot.currentTime >= Math.max(snapshot.duration - 1, 0),
+        lastPosition: snapshot.currentTime,
+        progressPercent: snapshot.progressPercent,
+      });
+    },
+    [activeResourceAsset, updateResourceProgress]
+  );
+
+  const handleResourceResumePromptResume = useCallback(() => {
+    if (!resourceResumePrompt) {
+      return;
+    }
+
+    if (resourceResumePrompt.kind === "pdf") {
+      setActiveResourceInitialPage(resourceResumePrompt.page);
+    } else {
+      setActiveResourceStartTime(resourceResumePrompt.position);
+    }
+
+    setResourceResumePrompt(null);
+  }, [resourceResumePrompt]);
+
+  const handleResourceResumePromptStartOver = useCallback(() => {
+    if (!activeResourceAsset) {
+      return;
+    }
+
+    if (resourceResumePrompt?.kind === "pdf") {
+      setActiveResourceInitialPage(1);
+      updateResourceProgress(activeResourceAsset.id, {
+        kind: "pdf",
+        isCompleted: false,
+        lastPage: 1,
+        progressPercent: 0,
+      });
+    } else {
+      setActiveResourceStartTime(0);
+      updateResourceProgress(activeResourceAsset.id, {
+        kind: "media",
+        isCompleted: false,
+        lastPosition: 0,
+        progressPercent: 0,
+      });
+    }
+
+    setResourceResumePrompt(null);
+  }, [activeResourceAsset, resourceResumePrompt, updateResourceProgress]);
 
   const updateCurrentLessonProgress = useCallback(
     (
@@ -504,6 +912,7 @@ export function LessonPlayerClient({
   const persistProgress = useCallback(
     (
       payload: {
+        resetProgress?: boolean;
         progressPercent?: number;
         lastPosition?: number | null;
         lastPage?: number | null;
@@ -711,9 +1120,9 @@ export function LessonPlayerClient({
       updateCurrentLessonProgress((current) => ({
         ...current,
         contentType: currentContentType,
-        progressPercent: percent,
-        lastPosition: isCompleted ? null : currentTime,
-        watchedSeconds: isCompleted ? 0 : currentTime,
+        progressPercent: isCompleted ? 100 : Math.max(current.progressPercent, percent),
+        lastPosition: isCompleted ? null : Math.max(current.lastPosition ?? 0, currentTime),
+        watchedSeconds: isCompleted ? 0 : Math.max(current.lastPosition ?? 0, currentTime),
         isCompleted: isCompleted || current.isCompleted,
         completedAt: isCompleted ? new Date().toISOString() : current.completedAt ?? null,
       }));
@@ -727,7 +1136,7 @@ export function LessonPlayerClient({
         canPersistProgress &&
         Math.abs(currentTime - lastMediaSavedCheckpointRef.current) >= MEDIA_SAVE_INTERVAL_SECONDS
       ) {
-        lastMediaSavedCheckpointRef.current = currentTime;
+        lastMediaSavedCheckpointRef.current = Math.max(lastMediaSavedCheckpointRef.current, currentTime);
         persistProgress({
           progressPercent: percent,
           lastPosition: currentTime,
@@ -776,7 +1185,7 @@ export function LessonPlayerClient({
       }
 
       if (canPersistProgress) {
-        lastMediaSavedCheckpointRef.current = currentTime;
+        lastMediaSavedCheckpointRef.current = Math.max(lastMediaSavedCheckpointRef.current, currentTime);
         persistProgress({
           progressPercent: percent,
           lastPosition: currentTime,
@@ -809,6 +1218,121 @@ export function LessonPlayerClient({
       : data.numPages;
   }, [previewPagesLimit]);
 
+  const setLessonCompletionState = useCallback(
+    async (nextCompletionState: "COMPLETE" | "INCOMPLETE", options?: { showToast?: boolean }) => {
+      if (!hasFullCourseAccess || !viewerId) {
+        return false;
+      }
+
+      const isCurrentlyCompleted = currentLessonProgress.isCompleted;
+      const shouldChangeState =
+        (nextCompletionState === "COMPLETE" && !isCurrentlyCompleted) ||
+        (nextCompletionState === "INCOMPLETE" && isCurrentlyCompleted);
+
+      if (!shouldChangeState) {
+        return true;
+      }
+
+      setManualCompletionPending(true);
+
+      if (nextCompletionState === "INCOMPLETE") {
+        lastPersistedPayloadRef.current = "";
+        lastMediaSavedCheckpointRef.current = 0;
+        latestMediaSnapshotRef.current = null;
+        latestPdfSnapshotRef.current = {
+          page: 1,
+          totalPages: latestPdfSnapshotRef.current.totalPages,
+        };
+        autoCompletedPdfLessonRef.current = null;
+        updateCurrentLessonProgress({
+          isCompleted: false,
+          progressPercent: 0,
+          lastPosition: null,
+          lastPage: null,
+          lastPdfPage: null,
+          watchedSeconds: 0,
+          completedAt: null,
+        });
+      }
+
+      try {
+        const response = await fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            manualCompletionState: nextCompletionState,
+            progressPercent: nextCompletionState === "COMPLETE" ? 100 : 0,
+            lastPdfPage:
+              currentContentType === "pdf"
+                ? Math.max(
+                    1,
+                    latestPdfSnapshotRef.current.page || currentLessonProgress.lastPage || 1
+                  )
+                : undefined,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to toggle lesson completion (${response.status}).`);
+        }
+
+        const data = (await response.json()) as {
+          progress?: {
+            completedLessonIds?: string[];
+            lessonProgressByLessonId?: Record<string, Partial<LessonProgressState>>;
+          };
+        };
+
+        if (data.progress) {
+          applyServerCourseProgress(data.progress);
+          if (nextCompletionState === "INCOMPLETE") {
+            lastPersistedPayloadRef.current = "";
+            lastMediaSavedCheckpointRef.current = 0;
+          }
+        }
+
+        if (nextCompletionState === "COMPLETE") {
+          setResumePrompt(null);
+          autoCompletedPdfLessonRef.current = currentLesson.id;
+          if (options?.showToast) {
+            toast("Lesson complete — well done!", "success");
+          }
+        }
+
+        markProgressSaved();
+        return true;
+      } catch (error) {
+        console.error("[lesson-player] Failed to toggle lesson completion.", error);
+        markProgressSyncError();
+
+        if (nextCompletionState === "INCOMPLETE") {
+          updateCurrentLessonProgress({
+            isCompleted: true,
+            progressPercent: 100,
+            completedAt: new Date().toISOString(),
+          });
+        }
+
+        return false;
+      } finally {
+        setManualCompletionPending(false);
+      }
+    },
+    [
+      applyServerCourseProgress,
+      currentContentType,
+      currentLesson.id,
+      currentLessonProgress.isCompleted,
+      currentLessonProgress.lastPage,
+      hasFullCourseAccess,
+      markProgressSaved,
+      markProgressSyncError,
+      toast,
+      updateCurrentLessonProgress,
+      viewerId,
+    ]
+  );
+
   const handlePdfProgress = useCallback(
     (percent: number, currentPage: number, totalPages: number) => {
       latestPdfSnapshotRef.current = {
@@ -823,9 +1347,9 @@ export function LessonPlayerClient({
       updateCurrentLessonProgress((current) => ({
         ...current,
         contentType: "pdf",
-        progressPercent: isCompleted ? 100 : percent,
-        lastPage: currentPage,
-        lastPdfPage: currentPage,
+        progressPercent: isCompleted ? 100 : Math.max(current.progressPercent, percent),
+        lastPage: Math.max(current.lastPage ?? 1, currentPage),
+        lastPdfPage: Math.max(current.lastPdfPage ?? 1, currentPage),
         isCompleted: isCompleted || current.isCompleted,
         completedAt: isCompleted ? new Date().toISOString() : current.completedAt ?? null,
       }));
@@ -845,9 +1369,28 @@ export function LessonPlayerClient({
 
       if (isCompleted) {
         setResumePrompt(null);
+        if (
+          hasFullCourseAccess &&
+          viewerId &&
+          !currentLessonProgress.isCompleted &&
+          autoCompletedPdfLessonRef.current !== currentLesson.id
+        ) {
+          void setLessonCompletionState("COMPLETE", { showToast: true });
+        }
       }
     },
-    [canPersistProgress, clearPdfSaveTimeout, persistProgress, updateCurrentLessonProgress]
+    [
+      autoCompletedPdfLessonRef,
+      canPersistProgress,
+      clearPdfSaveTimeout,
+      currentLesson.id,
+      currentLessonProgress.isCompleted,
+      hasFullCourseAccess,
+      persistProgress,
+      setLessonCompletionState,
+      updateCurrentLessonProgress,
+      viewerId,
+    ]
   );
 
   const handleResumePromptResume = useCallback(() => {
@@ -893,8 +1436,10 @@ export function LessonPlayerClient({
 
       if (canPersistProgress) {
         lastMediaSavedCheckpointRef.current = 0;
+        lastPersistedPayloadRef.current = "";
         persistProgress(
           {
+            resetProgress: true,
             progressPercent: 0,
             lastPosition: 0,
             isCompleted: false,
@@ -903,9 +1448,6 @@ export function LessonPlayerClient({
         );
       }
     } else {
-      const totalPages = latestPdfSnapshotRef.current.totalPages;
-      const startingPercent = totalPages > 0 ? Math.round((1 / totalPages) * 100) : 0;
-
       setPdfInitialPage(1);
       setPdfScrollRequest({
         page: 1,
@@ -914,7 +1456,7 @@ export function LessonPlayerClient({
       });
       updateCurrentLessonProgress((current) => ({
         ...current,
-        progressPercent: startingPercent,
+        progressPercent: 0,
         lastPage: 1,
         lastPdfPage: 1,
         isCompleted: false,
@@ -923,9 +1465,11 @@ export function LessonPlayerClient({
       latestPdfSnapshotRef.current.page = 1;
 
       if (canPersistProgress) {
+        lastPersistedPayloadRef.current = "";
         persistProgress(
           {
-            progressPercent: startingPercent,
+            resetProgress: true,
+            progressPercent: 0,
             lastPage: 1,
             isCompleted: false,
           },
@@ -944,101 +1488,32 @@ export function LessonPlayerClient({
   ]);
 
   const toggleLessonCompletion = useCallback(async () => {
-    if (!hasFullCourseAccess || !viewerId) return;
-
-    setManualCompletionPending(true);
-    const isCurrentlyCompleted = currentLessonProgress.isCompleted;
-    const nextCompletionState = isCurrentlyCompleted ? "INCOMPLETE" : "COMPLETE";
-
-    // Optimistic UI update so the button reacts instantly.
-    if (nextCompletionState === "INCOMPLETE") {
-      // Reset all client-side tracking state so subsequent progress events
-      // are recorded and saved correctly from scratch.
-      lastPersistedPayloadRef.current = "";
-      lastMediaSavedCheckpointRef.current = 0;
-      latestMediaSnapshotRef.current = null;
-      latestPdfSnapshotRef.current = {
-        page: 1,
-        totalPages: latestPdfSnapshotRef.current.totalPages,
-      };
-      updateCurrentLessonProgress({
-        isCompleted: false,
-        progressPercent: 0,
-        lastPosition: null,
-        lastPage: null,
-        lastPdfPage: null,
-        watchedSeconds: 0,
-        completedAt: null,
-      });
-    }
-
-    try {
-      const response = await fetch(`/api/learn/lessons/${currentLesson.id}/progress`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          manualCompletionState: nextCompletionState,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to toggle lesson completion (${response.status}).`);
-      }
-
-      const data = (await response.json()) as {
-        progress?: {
-          completedLessonIds?: string[];
-          lessonProgressByLessonId?: Record<string, Partial<LessonProgressState>>;
-        };
-      };
-
-      if (data.progress) {
-        applyServerCourseProgress(data.progress);
-        // Re-clear refs after server confirms the incomplete state so the
-        // very first post-reset progress tick is not silently deduped.
-        if (nextCompletionState === "INCOMPLETE") {
-          lastPersistedPayloadRef.current = "";
-          lastMediaSavedCheckpointRef.current = 0;
-        }
-      }
-
-      if (nextCompletionState === "COMPLETE") {
-        setResumePrompt(null);
-      }
-
-      markProgressSaved();
-    } catch (error) {
-      console.error("[lesson-player] Failed to toggle lesson completion.", error);
-      markProgressSyncError();
-
-      // Revert the optimistic update on failure.
-      if (nextCompletionState === "INCOMPLETE") {
-        updateCurrentLessonProgress({
-          isCompleted: true,
-          progressPercent: 100,
-          completedAt: new Date().toISOString(),
-        });
-      }
-    } finally {
-      setManualCompletionPending(false);
-    }
-  }, [
-    applyServerCourseProgress,
-    currentLesson.id,
-    currentLessonProgress.isCompleted,
-    hasFullCourseAccess,
-    markProgressSaved,
-    markProgressSyncError,
-    updateCurrentLessonProgress,
-    viewerId,
-  ]);
+    const nextCompletionState = currentLessonProgress.isCompleted ? "INCOMPLETE" : "COMPLETE";
+    await setLessonCompletionState(nextCompletionState);
+  }, [currentLessonProgress.isCompleted, setLessonCompletionState]);
 
   useEffect(() => {
     setIsMounted(true);
-    if (typeof window !== "undefined" && window.innerWidth < DESKTOP_BREAKPOINT) {
-      setSidebarOpen(false);
+    if (typeof window === "undefined") {
+      return;
     }
+
+    const storedSidebarState = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    if (storedSidebarState === "true" || storedSidebarState === "false") {
+      setSidebarOpen(storedSidebarState === "true");
+      return;
+    }
+
+    setSidebarOpen(window.innerWidth >= DESKTOP_BREAKPOINT);
   }, []);
+
+  useEffect(() => {
+    if (!isMounted || typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarOpen));
+  }, [isMounted, sidebarOpen]);
 
   useEffect(() => {
     return () => {
@@ -1048,7 +1523,16 @@ export function LessonPlayerClient({
   }, [clearPdfSaveTimeout, clearProgressFeedbackTimeout]);
 
   useEffect(() => {
+    if (!isMediaFullscreen) {
+      return;
+    }
+
+    setSidebarOpen(false);
+  }, [isMediaFullscreen]);
+
+  useEffect(() => {
     const initialProgress = normalizeLessonProgressEntry(initialLessonProgressMap[currentLesson.id]);
+    autoCompletedPdfLessonRef.current = initialProgress.isCompleted ? currentLesson.id : null;
     setResumePrompt(null);
     setPdfScrollRequest(null);
     setMediaDuration(0);
@@ -1278,11 +1762,8 @@ export function LessonPlayerClient({
             <NotebookText className="h-5 w-5" />
           </button>
 
-          {progressSyncState !== "idle" ? (
+          {progressSyncState === "saved" || progressSyncState === "error" ? (
             <div className="rounded-xl p-3">
-              {progressSyncState === "saving" ? (
-                <Loader2 className="h-5 w-5 animate-spin text-primary-blue" />
-              ) : null}
               {progressSyncState === "saved" ? (
                 <CheckCircle2 className="h-5 w-5 text-emerald-400" />
               ) : null}
@@ -1294,7 +1775,18 @@ export function LessonPlayerClient({
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 overflow-hidden">
+        <button
+          onClick={() => setSidebarOpen((current) => !current)}
+          className={cn(
+            "absolute top-6 z-30 hidden h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-slate-950/85 text-slate-300 shadow-xl backdrop-blur-sm transition-all hover:border-primary-blue/40 hover:text-white lg:flex",
+            sidebarOpen ? "left-[18.75rem]" : "left-4"
+          )}
+          title={sidebarOpen ? "Collapse curriculum" : "Expand curriculum"}
+        >
+          {sidebarOpen ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+        </button>
+
         <AnimatePresence>
           {sidebarOpen ? (
             <div className="flex w-80 flex-col overflow-hidden border-r border-white/5 bg-gradient-to-b from-slate-900/50 to-slate-950/50 shadow-2xl backdrop-blur-sm">
@@ -1319,37 +1811,120 @@ export function LessonPlayerClient({
                           const LessonIcon = getLessonSidebarIcon(lesson);
 
                           return (
-                            <Link
-                              key={lesson.id}
-                              href={`/learn/${course.slug}/${lesson.id}`}
-                              className={cn(
-                                "group block rounded-lg px-3 py-2.5 text-xs font-medium transition-all duration-200",
-                                isCurrentLesson
-                                  ? "bg-gradient-to-r from-primary-blue to-primary-blue/80 text-white shadow-lg shadow-primary-blue/30"
-                                  : "text-slate-300 hover:bg-white/10 hover:text-white",
-                                !isUnlocked && "cursor-not-allowed opacity-50"
-                              )}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex min-w-0 flex-1 items-center gap-2">
-                                  {!isUnlocked ? (
-                                    <Lock className="h-4 w-4 shrink-0 text-slate-500" />
-                                  ) : (
-                                    <LessonIcon className="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-primary-blue" />
-                                  )}
-                                  <span className="truncate">{lesson.title}</span>
+                            <div key={lesson.id}>
+                              <Link
+                                href={`/learn/${course.slug}/${lesson.id}`}
+                                className={cn(
+                                  "group block rounded-lg px-3 py-2.5 text-xs font-medium transition-all duration-200",
+                                  isCurrentLesson
+                                    ? "bg-gradient-to-r from-primary-blue to-primary-blue/80 text-white shadow-lg shadow-primary-blue/30"
+                                    : "text-slate-300 hover:bg-white/10 hover:text-white",
+                                  !isUnlocked && "cursor-not-allowed opacity-50"
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                                    {!isUnlocked ? (
+                                      <Lock className="h-4 w-4 shrink-0 text-slate-500" />
+                                    ) : (
+                                      <LessonIcon className="h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-primary-blue" />
+                                    )}
+                                    <span className="truncate">{lesson.title}</span>
+                                  </div>
+                                  {isCompleted ? (
+                                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                    </span>
+                                  ) : lessonProgress.progressPercent > 0 ? (
+                                    <span className="shrink-0 text-[10px] font-bold text-primary-blue">
+                                      {lessonProgress.progressPercent}%
+                                    </span>
+                                  ) : null}
                                 </div>
-                                {isCompleted ? (
-                                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
-                                    <CheckCircle2 className="h-3.5 w-3.5" />
-                                  </span>
-                                ) : lessonProgress.progressPercent > 0 ? (
-                                  <span className="shrink-0 text-[10px] font-bold text-primary-blue">
-                                    {lessonProgress.progressPercent}%
-                                  </span>
-                                ) : null}
-                              </div>
-                            </Link>
+                              </Link>
+
+                              {isCurrentLesson && additionalLessonAssets.length > 0 ? (
+                                <div className="ml-6 mt-2 space-y-1.5 border-l border-white/10 pl-3">
+                                  {additionalLessonAssets.map((asset) => {
+                                    const progress =
+                                      resourceProgressMap[getResourceProgressKey(currentLesson.id, asset.id)];
+                                    const isActiveResource = activeResourceId === asset.id;
+                                    const resourceBadge =
+                                      asset.kind === "video"
+                                        ? "VIDEO"
+                                        : asset.kind === "audio"
+                                          ? "AUDIO"
+                                          : asset.kind === "pdf"
+                                            ? "PDF"
+                                            : "FILE";
+
+                                    return (
+                                      <div
+                                        key={asset.id}
+                                        className={cn(
+                                          "rounded-lg border px-3 py-2",
+                                          isActiveResource
+                                            ? "border-primary-blue/40 bg-primary-blue/12"
+                                            : "border-white/5 bg-white/[0.03]"
+                                        )}
+                                      >
+                                        {asset.kind === "file" ? (
+                                          <div className="w-full cursor-not-allowed text-left opacity-70">
+                                            <div className="flex items-center gap-2">
+                                              <FileText className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                                              <span className="truncate text-[11px] font-semibold text-slate-300">
+                                                {asset.displayTitle}
+                                              </span>
+                                            </div>
+                                            <div className="mt-1 flex items-center gap-2">
+                                              <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                                                {resourceBadge}
+                                              </span>
+                                              <span className="text-[10px] font-semibold text-slate-500">
+                                                Not viewable here
+                                              </span>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => setActiveResourceId(asset.id)}
+                                            className="w-full text-left"
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              {asset.kind === "video" ? (
+                                                <PlayCircle className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
+                                              ) : asset.kind === "audio" ? (
+                                                <Volume2 className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
+                                              ) : (
+                                                <FileText className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
+                                              )}
+                                              <span className="truncate text-[11px] font-semibold text-white">
+                                                {asset.displayTitle}
+                                              </span>
+                                            </div>
+                                            <div className="mt-1 flex items-center gap-2">
+                                              <span className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                                                {resourceBadge}
+                                              </span>
+                                              {progress?.isCompleted ? (
+                                                <span className="text-[10px] font-semibold text-emerald-300">
+                                                  Done
+                                                </span>
+                                              ) : progress?.progressPercent ? (
+                                                <span className="text-[10px] font-semibold text-primary-blue">
+                                                  {progress.progressPercent}%
+                                                </span>
+                                              ) : null}
+                                            </div>
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
+                            </div>
                           );
                         })}
                       </div>
@@ -1369,6 +1944,46 @@ export function LessonPlayerClient({
                     {completedLessons}/{allLessons.length} lessons completed
                   </p>
                 </div>
+                <div className="mt-4 space-y-3">
+                  <button
+                    onClick={toggleLessonCompletion}
+                    disabled={manualCompletionPending}
+                    className={cn(
+                      "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
+                      currentLessonProgress.isCompleted
+                        ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                        : "bg-primary-blue text-white shadow-lg shadow-primary-blue/30 hover:bg-primary-blue/90"
+                    )}
+                  >
+                    {manualCompletionPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    {currentLessonProgress.isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
+                  </button>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    {currentIndex > 0 ? (
+                      <Link
+                        href={`/learn/${course.slug}/${allLessons[currentIndex - 1].id}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition-all duration-200 hover:bg-white/10 hover:text-white"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous Lesson
+                      </Link>
+                    ) : null}
+                    {currentIndex < allLessons.length - 1 ? (
+                      <Link
+                        href={`/learn/${course.slug}/${allLessons[currentIndex + 1].id}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-blue/30 transition-all duration-200 hover:bg-primary-blue/90"
+                      >
+                        Next Lesson
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
@@ -1380,69 +1995,151 @@ export function LessonPlayerClient({
               <div className="mx-auto max-w-7xl">
                 {/* ── Media area ── */}
                 <div className="relative">
-                  {currentContentType === "pdf" && pdfDocumentUrl ? (
+                  {activeViewerKind === "pdf" && activeViewerUrl ? (
                     <div
                       ref={pdfViewportRef}
                       className="min-h-[500px] w-full overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white to-slate-100 shadow-2xl"
                     >
                       <LessonPdfViewer
-                        file={pdfDocumentUrl}
-                        lessonId={currentLesson.id}
+                        file={activeViewerUrl}
+                        lessonId={activeViewerAsset?.id ?? currentLesson.id}
                         viewportWidth={pdfViewportWidth || pdfViewportRef.current?.clientWidth || 800}
-                        onProgress={handlePdfProgress}
+                        onProgress={
+                          activeResourceAsset ? handleActiveResourcePdfProgress : handlePdfProgress
+                        }
                         onLoad={handlePdfLoad}
-                        initialPage={pdfInitialPage}
+                        initialPage={activeResourceAsset ? activeResourceInitialPage : pdfInitialPage}
                         maxPages={previewPagesLimit}
-                        scrollRequest={pdfScrollRequest}
+                        scrollRequest={activeResourceAsset ? null : pdfScrollRequest}
                       />
                     </div>
                   ) : null}
 
-                  {currentContentType === "video" && primaryAssetUrl ? (
+                  {activeViewerKind === "video" && activeViewerUrl ? (
                     <div className="mx-auto w-full max-w-4xl">
                       <div className="relative w-full overflow-hidden rounded-xl border border-white/10 bg-black shadow-2xl" style={{ aspectRatio: "16/9" }}>
                         <MediaPlayer
                           ref={mediaPlayerRef}
-                          src={primaryAssetUrl}
+                          src={activeViewerUrl}
                           type="video"
-                          initialTime={mediaStartTime}
+                          initialTime={activeResourceAsset ? activeResourceStartTime : mediaStartTime}
                           maxDuration={previewMinutesLimitSeconds || undefined}
                           isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
                           onLoadedMetadata={(duration) => setMediaDuration(duration)}
-                          onTimeUpdate={handleMediaProgress}
-                          onPause={handleMediaPause}
-                          onEnded={handleMediaEnded}
+                          onTimeUpdate={
+                            activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaProgress
+                          }
+                          onPause={
+                            activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaPause
+                          }
+                          onEnded={
+                            activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaEnded
+                          }
+                          onFullscreenChange={setIsMediaFullscreen}
+                          fullscreenActions={
+                            <>
+                              {askAiEnabled ? (
+                                <button
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setAskAiOpen((current) => !current);
+                                  }}
+                                  className={cn(
+                                    fullscreenActionButtonClass,
+                                    askAiOpen && "border-primary-blue/50 bg-primary-blue/25 text-primary-blue"
+                                  )}
+                                  title="Ask AI"
+                                >
+                                  <Sparkles className="h-5 w-5" />
+                                </button>
+                              ) : null}
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setNotesPanelOpen((current) => !current);
+                                }}
+                                className={cn(
+                                  fullscreenActionButtonClass,
+                                  notesPanelOpen && "border-emerald-400/40 bg-emerald-500/20 text-emerald-300"
+                                )}
+                                title="Notes"
+                              >
+                                <NotebookText className="h-5 w-5" />
+                              </button>
+                            </>
+                          }
+                          fullscreenOverlay={
+                            askAiOpen || notesPanelOpen ? (
+                              <div className="flex h-full flex-col justify-start gap-4 pt-14">
+                                {askAiEnabled && askAiOpen ? (
+                                  <div className="min-h-0 flex-1 overflow-hidden rounded-[30px] border border-white/10 bg-slate-950/95 shadow-2xl backdrop-blur-md">
+                                    <AskAI
+                                      courseTitle={course.title}
+                                      onClose={() => setAskAiOpen(false)}
+                                      assistantLabel={askAiAssistantLabel}
+                                      variant="embedded"
+                                      className="h-full"
+                                    />
+                                  </div>
+                                ) : null}
+                                {notesPanelOpen ? (
+                                  <div className="h-[min(34rem,55vh)] overflow-hidden rounded-[30px] border border-white/10 bg-[#04070d]/95 shadow-2xl backdrop-blur-md">
+                                    <LessonNotesPanel
+                                      lessonId={currentLesson.id}
+                                      viewerId={viewerId}
+                                      initialContent={noteContent}
+                                      isOpen={notesPanelOpen}
+                                      onClose={() => setNotesPanelOpen(false)}
+                                      onContentChange={setNoteContent}
+                                      variant="embedded"
+                                      className="h-full border-0 shadow-none"
+                                    />
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null
+                          }
                         />
                       </div>
                     </div>
                   ) : null}
 
-                  {currentContentType === "audio" && primaryAssetUrl ? (
+                  {activeViewerKind === "audio" && activeViewerUrl ? (
                     <div className="w-full overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl" style={{ minHeight: 340 }}>
                       <MediaPlayer
                         ref={mediaPlayerRef}
-                        src={primaryAssetUrl}
+                        src={activeViewerUrl}
                         type="audio"
-                        initialTime={mediaStartTime}
+                        initialTime={activeResourceAsset ? activeResourceStartTime : mediaStartTime}
                         maxDuration={previewMinutesLimitSeconds || undefined}
                         isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
                         onLoadedMetadata={(duration) => setMediaDuration(duration)}
-                        onTimeUpdate={handleMediaProgress}
-                        onPause={handleMediaPause}
-                        onEnded={handleMediaEnded}
+                        onTimeUpdate={
+                          activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaProgress
+                        }
+                        onPause={
+                          activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaPause
+                        }
+                        onEnded={
+                          activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaEnded
+                        }
                       />
                     </div>
                   ) : null}
 
-                  {!currentContentType || !primaryAssetUrl ? (
+                  {!activeViewerKind || !activeViewerUrl ? (
                     <div className="flex min-h-[400px] w-full flex-col items-center justify-center gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-6 shadow-2xl">
                       <AlertCircle className="h-12 w-12 text-rose-400" />
                       <div className="max-w-md text-center">
                         <h3 className="mb-2 text-lg font-bold text-white">
-                          {resolvedLessonRenderer.fallbackTitle}
+                          {activeResourceAsset?.kind === "file"
+                            ? "Resource unavailable in classroom"
+                            : resolvedLessonRenderer.fallbackTitle}
                         </h3>
                         <p className="text-sm text-slate-400">
-                          {resolvedLessonRenderer.fallbackMessage}
+                          {activeResourceAsset?.kind === "file"
+                            ? "This file type is not viewable inside the classroom yet."
+                            : resolvedLessonRenderer.fallbackMessage}
                         </p>
                       </div>
                     </div>
@@ -1450,12 +2147,211 @@ export function LessonPlayerClient({
 
                   <AnimatePresence>
                     <ResumeOverlay
-                      prompt={resumePrompt}
-                      onResume={handleResumePromptResume}
-                      onStartOver={handleResumePromptStartOver}
+                      prompt={activeResourceAsset ? resourceResumePrompt : resumePrompt}
+                      onResume={
+                        activeResourceAsset
+                          ? handleResourceResumePromptResume
+                          : handleResumePromptResume
+                      }
+                      onStartOver={
+                        activeResourceAsset
+                          ? handleResourceResumePromptStartOver
+                          : handleResumePromptStartOver
+                      }
                     />
                   </AnimatePresence>
                 </div>
+
+                {activeResourceAsset ? (
+                  <div className="hidden mt-5 rounded-2xl border border-white/10 bg-[#08101d]/90 p-4 shadow-xl">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Lesson Resources</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Resources are listed in the sidebar under this lesson and keep their own saved position.
+                        </p>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {additionalLessonAssets.length} resource{additionalLessonAssets.length === 1 ? "" : "s"}
+                      </div>
+                    </div>
+
+                    <div className="hidden">
+                      {additionalLessonAssets.map((asset) => {
+                        const assetBadge =
+                          asset.kind === "video"
+                            ? "VIDEO"
+                            : asset.kind === "audio"
+                              ? "AUDIO"
+                              : asset.kind === "pdf"
+                                ? "PDF"
+                                : "FILE";
+
+                        return (
+                          <div
+                            key={asset.id}
+                            className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary-blue/10 text-primary-blue">
+                                {asset.kind === "video" ? (
+                                  <PlayCircle className="h-4 w-4" />
+                                ) : asset.kind === "audio" ? (
+                                  <Volume2 className="h-4 w-4" />
+                                ) : (
+                                  <FileText className="h-4 w-4" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="truncate text-sm font-semibold text-white">
+                                  {asset.displayTitle}
+                                </p>
+                                <span className="rounded-full border border-primary-blue/25 bg-primary-blue/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                                  {assetBadge}
+                                </span>
+                              </div>
+                              <p className="mt-1 truncate text-xs text-slate-400">
+                                {asset.fileName || asset.displayTitle}
+                              </p>
+                            </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              {asset.kind === "video" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveResourceId(asset.id)}
+                                  className="inline-flex items-center justify-center rounded-xl bg-primary-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-blue/90"
+                                >
+                                  ▶ Watch
+                                </button>
+                              ) : asset.kind === "audio" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveResourceId(asset.id)}
+                                  className="inline-flex items-center justify-center rounded-xl bg-primary-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-blue/90"
+                                >
+                                  Listen
+                                </button>
+                              ) : asset.kind === "pdf" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveResourceId(asset.id)}
+                                  className="inline-flex items-center justify-center rounded-xl bg-primary-blue px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-blue/90"
+                                >
+                                  📄 View
+                                </button>
+                              ) : (
+                                <a
+                                  href={asset.resolvedUrl}
+                                  download
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                                >
+                                  <Download className="h-4 w-4" />
+                                  Download
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="mb-4 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-white">{activeResourceAsset.displayTitle}</p>
+                            <p className="mt-1 text-xs text-slate-400">
+                              {activeResourceAsset.kind === "pdf"
+                                ? "Viewing supporting PDF"
+                                : activeResourceAsset.kind === "audio"
+                                  ? "Listening to supporting audio"
+                                  : "Watching supporting video"}
+                            </p>
+                            {activeResourceProgress?.progressPercent ? (
+                              <p className="mt-1 text-[11px] font-semibold text-primary-blue">
+                                Saved progress: {activeResourceProgress.progressPercent}%
+                              </p>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveResourceId(null)}
+                            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
+                          >
+                            Close
+                          </button>
+                        </div>
+
+                        {activeResourceAsset.kind === "pdf" && activeResourcePdfUrl ? (
+                          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white">
+                            <LessonPdfViewer
+                              file={activeResourcePdfUrl}
+                              lessonId={`${currentLesson.id}-${activeResourceAsset.id}`}
+                              viewportWidth={pdfViewportWidth || pdfViewportRef.current?.clientWidth || 800}
+                              onProgress={handleActiveResourcePdfProgress}
+                              initialPage={activeResourceInitialPage}
+                              maxPages={previewPagesLimit}
+                            />
+                            <AnimatePresence>
+                              <ResumeOverlay
+                                prompt={resourceResumePrompt}
+                                onResume={handleResourceResumePromptResume}
+                                onStartOver={handleResourceResumePromptStartOver}
+                              />
+                            </AnimatePresence>
+                          </div>
+                        ) : null}
+
+                        {activeResourceAsset.kind === "video" ? (
+                          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black">
+                            <MediaPlayer
+                              src={activeResourceAsset.resolvedUrl}
+                              type="video"
+                              initialTime={activeResourceStartTime}
+                              maxDuration={previewMinutesLimitSeconds || undefined}
+                              isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
+                              onTimeUpdate={handleActiveResourceMediaProgress}
+                              onPause={handleActiveResourceMediaProgress}
+                              onEnded={handleActiveResourceMediaProgress}
+                            />
+                            <AnimatePresence>
+                              <ResumeOverlay
+                                prompt={resourceResumePrompt}
+                                onResume={handleResourceResumePromptResume}
+                                onStartOver={handleResourceResumePromptStartOver}
+                              />
+                            </AnimatePresence>
+                          </div>
+                        ) : null}
+
+                        {activeResourceAsset.kind === "audio" ? (
+                          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950">
+                            <MediaPlayer
+                              src={activeResourceAsset.resolvedUrl}
+                              type="audio"
+                              initialTime={activeResourceStartTime}
+                              maxDuration={previewMinutesLimitSeconds || undefined}
+                              isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
+                              onTimeUpdate={handleActiveResourceMediaProgress}
+                              onPause={handleActiveResourceMediaProgress}
+                              onEnded={handleActiveResourceMediaProgress}
+                            />
+                            <AnimatePresence>
+                              <ResumeOverlay
+                                prompt={resourceResumePrompt}
+                                onResume={handleResourceResumePromptResume}
+                                onStartOver={handleResourceResumePromptStartOver}
+                              />
+                            </AnimatePresence>
+                          </div>
+                        ) : null}
+                      </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
                   <div className="flex items-start justify-between gap-4">
@@ -1475,82 +2371,6 @@ export function LessonPlayerClient({
                       </div>
                     ) : null}
                   </div>
-
-                  <div className="mt-4 flex items-center gap-4">
-                    <div className="flex-1">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-400">Progress</span>
-                        <span className="text-xs font-bold text-primary-blue">
-                          {currentLessonProgress.progressPercent}%
-                        </span>
-                      </div>
-                      <ProgressBar progress={currentLessonProgress.progressPercent} size="md" />
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-3">
-                    {currentLessonProgress.isCompleted ? (
-                      <>
-                        <button
-                          onClick={toggleLessonCompletion}
-                          disabled={manualCompletionPending}
-                          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-500/20 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition-all duration-200 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {manualCompletionPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4" />
-                          )}
-                          Mark Incomplete
-                        </button>
-                        <div className="flex items-center gap-1 rounded-lg bg-emerald-500/20 px-3 py-2">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                          <span className="text-xs font-bold text-emerald-300">Completed</span>
-                        </div>
-                      </>
-                    ) : (
-                      <button
-                        onClick={toggleLessonCompletion}
-                        disabled={manualCompletionPending}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-blue/30 transition-all duration-200 hover:bg-primary-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {manualCompletionPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="h-4 w-4" />
-                        )}
-                        Mark as Complete
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-6 flex items-center justify-between">
-                  {currentIndex > 0 ? (
-                    <Link
-                      href={`/learn/${course.slug}/${allLessons[currentIndex - 1].id}`}
-                      className="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 transition-all duration-200 hover:bg-white/10 hover:text-white"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Previous
-                    </Link>
-                  ) : (
-                    <span />
-                  )}
-                  <div className="text-xs font-semibold text-slate-400">
-                    {currentIndex + 1} / {allLessons.length}
-                  </div>
-                  {currentIndex < allLessons.length - 1 ? (
-                    <Link
-                      href={`/learn/${course.slug}/${allLessons[currentIndex + 1].id}`}
-                      className="flex items-center gap-2 rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-primary-blue/30 transition-all duration-200 hover:bg-primary-blue/90"
-                    >
-                      Next
-                      <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  ) : (
-                    <span />
-                  )}
                 </div>
               </div>
             </div>
@@ -1559,7 +2379,7 @@ export function LessonPlayerClient({
       </div>
 
       <AnimatePresence>
-        {notesPanelOpen ? (
+        {notesPanelOpen && !isMediaFullscreen ? (
           <LessonNotesPanel
             lessonId={currentLesson.id}
             viewerId={viewerId}
@@ -1572,7 +2392,7 @@ export function LessonPlayerClient({
       </AnimatePresence>
 
       <AnimatePresence>
-        {askAiOpen && askAiEnabled ? (
+        {askAiOpen && askAiEnabled && !isMediaFullscreen ? (
           <div className="fixed bottom-6 right-6 z-50 max-w-md">
             <AskAI
               courseTitle={course.title}

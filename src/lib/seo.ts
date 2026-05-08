@@ -115,12 +115,16 @@ export function buildBlogPostJsonLd(
   post: BlogPost & { content?: string; publishedAtIso?: string },
   input: { siteName: string; logoUrl?: string }
 ) {
+  const description = post.metaDescription || post.ogDescription || post.excerpt || post.content?.slice(0, 160) || post.title;
+  const headline = post.metaTitle || post.ogTitle || post.title;
+  const image = post.ogImageUrl || post.coverImage;
+
   return {
     "@context": "https://schema.org",
     "@type": "Article",
-    headline: post.title,
-    description: post.excerpt || post.content?.slice(0, 160) || post.title,
-    image: post.coverImage ? [post.coverImage] : undefined,
+    headline,
+    description,
+    image: image ? [image] : undefined,
     author: {
       "@type": "Person",
       name: post.authorName || input.siteName,
@@ -137,7 +141,7 @@ export function buildBlogPostJsonLd(
     },
     datePublished: post.publishedAtIso,
     dateModified: post.publishedAtIso,
-    mainEntityOfPage: absoluteUrl(`/blog/${post.slug}`),
+    mainEntityOfPage: post.canonicalUrl || absoluteUrl(`/blog/${post.slug}`),
     keywords: post.tags.join(", "),
   };
 }

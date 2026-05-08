@@ -78,6 +78,10 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
 
     if (!error) {
+      if (type === "recovery") {
+        return NextResponse.redirect(`${origin}/reset-password`);
+      }
+
       const profile = await syncUserProfile();
       return NextResponse.redirect(
         `${origin}${resolvePostAuthDestination(next, profile?.role)}`

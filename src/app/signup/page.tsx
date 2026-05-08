@@ -1,39 +1,55 @@
 "use client";
+
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Check, Sparkles, AlertCircle } from "lucide-react";
-import { SiteLogo } from "@/components/layout/SiteLogo";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertCircle, ArrowRight, Check, Eye, EyeOff, Lock, Mail, Sparkles, User } from "lucide-react";
+import { AuthShell } from "@/components/auth/AuthShell";
 import {
   buildAuthCallbackUrl,
   DEFAULT_AFTER_AUTH,
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
+import { logger } from "@/lib/logger";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { getSupabaseClient } from "@/lib/supabase";
-import { logger } from "@/lib/logger";
 
 const quizQuestions = [
   {
     id: "q1",
     question: "What's your current AI experience level?",
-    options: ["Complete beginner", "Some coding experience", "Data science background", "Experienced ML practitioner"],
+    options: [
+      "Complete beginner",
+      "Some coding experience",
+      "Data science background",
+      "Experienced ML practitioner",
+    ],
   },
   {
     id: "q2",
     question: "What's your primary goal?",
-    options: ["Land an AI job", "Build AI products", "Research & academia", "Understand AI for my business"],
+    options: [
+      "Land an AI job",
+      "Build AI products",
+      "Research & academia",
+      "Understand AI for my business",
+    ],
   },
   {
     id: "q3",
     question: "How much time can you dedicate weekly?",
-    options: ["1–3 hours", "4–7 hours", "8–15 hours", "15+ hours"],
+    options: ["1-3 hours", "4-7 hours", "8-15 hours", "15+ hours"],
   },
   {
     id: "q4",
     question: "Which AI domain excites you most?",
-    options: ["Generative AI & LLMs", "Machine Learning", "Computer Vision", "AI Engineering & MLOps"],
+    options: [
+      "Generative AI & LLMs",
+      "Machine Learning",
+      "Computer Vision",
+      "AI Engineering & MLOps",
+    ],
   },
 ];
 
@@ -143,21 +159,20 @@ export default function SignupPage() {
     await syncNewsletterPreference(email, name);
     logger.debug("[signup] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: buildAuthCallbackUrl(redirectPath) },
     });
 
-    if (error) {
-      console.error("[signup] Google OAuth error:", error.message);
-      setError(error.message);
+    if (oauthError) {
+      console.error("[signup] Google OAuth error:", oauthError.message);
+      setError(oauthError.message);
       setLoading(false);
     }
-    // On success Supabase redirects the browser automatically
   }
 
-  async function handleAccountSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleAccountSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setError(null);
 
     if (password.length < 8) {
@@ -169,7 +184,7 @@ export default function SignupPage() {
     const supabase = getSupabaseClient();
     logger.info("[signup] Creating account for:", email);
 
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -178,16 +193,18 @@ export default function SignupPage() {
       },
     });
 
-    if (error) {
-      console.error("[signup] signUp error:", error.message);
-      setError(error.message);
+    if (signUpError) {
+      console.error("[signup] signUp error:", signUpError.message);
+      setError(signUpError.message);
       setLoading(false);
       return;
     }
 
-    logger.debug("[signup] signUp response — user:", { userId: data.user?.id, hasSession: !!data.session });
+    logger.debug("[signup] signUp response - user:", {
+      userId: data.user?.id,
+      hasSession: !!data.session,
+    });
 
-    // If Supabase email confirmation is enabled, no session yet → show confirm message
     if (data.user && !data.session) {
       void syncNewsletterPreference(email, name);
       logger.info("[signup] Email confirmation required, check inbox");
@@ -196,7 +213,6 @@ export default function SignupPage() {
       return;
     }
 
-    // Auto-confirmed (email confirmation disabled in Supabase) → proceed to quiz
     logger.info("[signup] Account created and auto-confirmed");
     if (referralCode) {
       fetch("/api/referrals/apply", {
@@ -218,156 +234,213 @@ export default function SignupPage() {
   }
 
   function handleAnswer(questionId: string, answerIdx: number) {
-    const newAnswers = { ...answers, [questionId]: answerIdx };
-    setAnswers(newAnswers);
+    const nextAnswers = { ...answers, [questionId]: answerIdx };
+    setAnswers(nextAnswers);
+
     if (quizStep < quizQuestions.length - 1) {
-      setTimeout(() => setQuizStep((p) => p + 1), 300);
+      setTimeout(() => setQuizStep((previous) => previous + 1), 300);
     } else {
       setTimeout(() => setStep("roadmap"), 500);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden py-12">
-      <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 left-1/4 w-64 h-64 bg-blue-400/5 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="w-full max-w-md relative z-10">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center justify-center">
-            <SiteLogo
-              siteName={branding.siteName}
-              logoUrl={branding.logoUrl || undefined}
-              compact
-              textClassName="text-foreground"
-            />
-          </Link>
-        </div>
-
-        {/* Progress steps */}
-        <div className="flex items-center gap-2 mb-8">
-          {["account", "quiz", "roadmap"].map((s, i) => (
-            <div key={s} className="flex items-center gap-2 flex-1">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                step === s
-                  ? "bg-blue-600 text-white"
-                  : ["account", "quiz", "roadmap"].indexOf(step) > i
-                  ? "bg-blue-100 dark:bg-blue-950/40 text-blue-600"
-                  : "bg-muted text-muted-foreground"
-              }`}>
-                {["account", "quiz", "roadmap"].indexOf(step) > i ? <Check className="w-4 h-4" /> : i + 1}
+    <AuthShell
+      badge="Create Your Account"
+      siteName={branding.siteName}
+      logoUrl={branding.logoUrl || undefined}
+      title="Join the next generation of AI builders"
+      subtitle="Open a polished workspace for courses, guided onboarding, and the production-focused paths your team can actually use."
+    >
+      <div className="w-full">
+        <div className="mb-8 flex items-center gap-2">
+          {["account", "quiz", "roadmap"].map((currentStep, index) => (
+            <div key={currentStep} className="flex flex-1 items-center gap-2">
+              <div
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                  step === currentStep
+                    ? "bg-slate-950 text-white"
+                    : ["account", "quiz", "roadmap"].indexOf(step) > index
+                      ? "bg-sky-100 text-sky-700"
+                      : "bg-white/10 text-slate-200"
+                }`}
+              >
+                {["account", "quiz", "roadmap"].indexOf(step) > index ? <Check className="h-4 w-4" /> : index + 1}
               </div>
-              {i < 2 && <div className={`flex-1 h-0.5 transition-all ${["account", "quiz", "roadmap"].indexOf(step) > i ? "bg-blue-400" : "bg-border"}`} />}
+              {index < 2 ? (
+                <div
+                  className={`h-0.5 flex-1 transition-all ${
+                    ["account", "quiz", "roadmap"].indexOf(step) > index ? "bg-sky-500" : "bg-slate-200"
+                  }`}
+                />
+              ) : null}
             </div>
           ))}
         </div>
 
         <AnimatePresence mode="wait">
-          {/* STEP 1: Account */}
-          {step === "account" && (
-            <motion.div key="account" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className="text-center mb-6">
-                <h1 className="text-2xl font-black text-foreground mb-1">Start learning for free</h1>
-                <p className="text-muted-foreground text-sm">Join 500K+ AI learners worldwide</p>
+          {step === "account" ? (
+            <motion.div
+              key="account"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <div className="mb-6 text-center">
+                <h1 className="mb-1 text-2xl font-black text-white">Start learning with a premium setup</h1>
+                <p className="text-sm text-slate-200">
+                  Create your account, then personalize your roadmap in under a minute.
+                </p>
               </div>
 
               {emailConfirmSent ? (
-                <div className="bg-card border border-border rounded-2xl shadow-sm p-8 text-center">
-                  <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-950/40 flex items-center justify-center mx-auto mb-4">
-                    <Mail className="w-8 h-8 text-blue-600" />
+                <div className="rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)]">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-sky-100">
+                    <Mail className="h-8 w-8 text-sky-700" />
                   </div>
-                  <h3 className="text-foreground font-bold mb-2">Confirm your email</h3>
-                  <p className="text-muted-foreground text-sm mb-4">
-                    We sent a confirmation link to <strong className="text-foreground">{email}</strong>. Click it to activate your account and start learning.
+                  <h3 className="mb-2 text-lg font-bold text-slate-950">Confirm your email</h3>
+                  <p className="mb-4 text-sm text-slate-800">
+                    We sent a confirmation link to <strong className="text-slate-950">{email}</strong>. Click it to activate your account and start learning.
                   </p>
                   <button
                     type="button"
                     onClick={() => setEmailConfirmSent(false)}
-                    className="text-xs text-blue-600 hover:underline"
+                    className="text-xs font-semibold text-slate-950 transition hover:text-sky-700"
                   >
                     Use a different email
                   </button>
                 </div>
               ) : (
-                <div className="bg-card border border-border rounded-2xl shadow-sm p-8">
-                  {/* Error banner */}
-                  {error && (
-                    <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm mb-6">
-                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)] sm:p-7">
+                  {error ? (
+                    <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                       <span>{error}</span>
                     </div>
-                  )}
+                  ) : null}
 
                   <button
                     type="button"
                     onClick={handleGoogleSignUp}
                     disabled={loading}
-                    className="w-full flex items-center justify-center gap-3 py-3.5 rounded-xl bg-background border border-border text-foreground text-sm font-medium hover:bg-muted disabled:opacity-60 transition-colors mb-6"
+                    className="mb-6 flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 py-3.5 text-sm font-medium text-slate-950 transition hover:bg-slate-100 disabled:opacity-60"
                   >
                     {loading ? (
-                      <div className="w-5 h-5 border-2 border-muted-foreground/30 border-t-foreground rounded-full animate-spin" />
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" />
                     ) : (
                       <GoogleIcon className="h-5 w-5" />
                     )}
                     Continue with Google
                   </button>
 
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="flex-1 h-px bg-border" /><span className="text-xs text-muted-foreground">or</span><div className="flex-1 h-px bg-border" />
+                  <div className="mb-6 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="text-xs uppercase tracking-[0.16em] text-slate-400">or</span>
+                    <div className="h-px flex-1 bg-slate-200" />
                   </div>
 
                   <form onSubmit={handleAccountSubmit} className="space-y-4">
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Full name</label>
+                      <label className="auth-label mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                        Full name
+                      </label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Your name"
-                          className="w-full pl-10 pr-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder-muted-foreground outline-none text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400/20 transition-all" />
+                        <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(event) => setName(event.target.value)}
+                          required
+                          placeholder="Your name"
+                          className="auth-input h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                        />
                       </div>
                     </div>
+
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Email address</label>
+                      <label className="auth-label mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                        Email address
+                      </label>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com"
-                          className="w-full pl-10 pr-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder-muted-foreground outline-none text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400/20 transition-all" />
+                        <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                          required
+                          placeholder="you@example.com"
+                          className="auth-input h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                        />
                       </div>
                     </div>
+
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Password</label>
+                      <label className="auth-label mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                        Password
+                      </label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Min 8 characters"
-                          className="w-full pl-10 pr-10 py-3 rounded-xl bg-background border border-border text-foreground placeholder-muted-foreground outline-none text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-400/20 transition-all" />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(event) => setPassword(event.target.value)}
+                          required
+                          placeholder="Min 8 characters"
+                          className="auth-input h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-11 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((current) => !current)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-900"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </div>
-                    <label className="flex items-start gap-3 rounded-xl border border-border bg-background px-3 py-3">
+
+                    <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
                       <input
                         type="checkbox"
                         checked={newsletterOptIn}
                         onChange={(event) => setNewsletterOptIn(event.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-border text-primary-blue focus:ring-primary-blue"
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-blue focus:ring-primary-blue"
                       />
-                      <span className="text-xs leading-5 text-muted-foreground">
-                        Get notified on more offers, discounts & new AI trends
+                      <span className="auth-helper-text text-xs leading-5 text-slate-800">
+                        Get notified on more offers, discounts, and new AI trends.
                       </span>
                     </label>
-                    <button type="submit" disabled={loading}
-                      className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
-                      {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Create Account <ArrowRight className="w-4 h-4" /></>}
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                    >
+                      {loading ? (
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      ) : (
+                        <>
+                          Create Account
+                          <ArrowRight className="h-4 w-4" />
+                        </>
+                      )}
                     </button>
-                    <p className="text-center text-xs text-muted-foreground">
-                      By signing up you agree to our <Link href="/terms" className="text-blue-600 hover:underline">Terms</Link> and <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>
+
+                    <p className="auth-helper-text text-center text-xs text-slate-800">
+                      By signing up you agree to our{" "}
+                      <Link href="/terms" className="font-semibold text-slate-950 transition hover:text-sky-700">
+                        Terms
+                      </Link>{" "}
+                      and{" "}
+                      <Link href="/privacy" className="font-semibold text-slate-950 transition hover:text-sky-700">
+                        Privacy Policy
+                      </Link>
+                      .
                     </p>
                   </form>
                 </div>
               )}
 
-              <p className="text-center text-sm text-muted-foreground mt-6">
+              <p className="auth-helper-text mt-6 text-center text-sm text-slate-200">
                 Already have an account?{" "}
                 <Link
                   href={
@@ -375,50 +448,70 @@ export default function SignupPage() {
                       ? `/login?redirect=${encodeURIComponent(redirectPath)}`
                       : "/login"
                   }
-                  className="text-blue-600 hover:underline font-medium"
+                  className="font-semibold text-slate-950 transition hover:text-sky-700"
                 >
                   Sign in
                 </Link>
               </p>
             </motion.div>
-          )}
+          ) : null}
 
-          {/* STEP 2: Quiz */}
-          {step === "quiz" && (
-            <motion.div key="quiz" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className="text-center mb-6">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 mb-3">
-                  <Sparkles className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm text-blue-600 font-medium">60-second AI quiz</span>
+          {step === "quiz" ? (
+            <motion.div
+              key="quiz"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <div className="mb-6 text-center">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-4 py-2">
+                  <Sparkles className="h-4 w-4 text-sky-700" />
+                  <span className="text-sm font-medium text-sky-700">60-second AI quiz</span>
                 </div>
-                <h2 className="text-xl font-black text-foreground mb-1">Personalize your roadmap</h2>
-                <p className="text-muted-foreground text-sm">4 quick questions to build your perfect learning path</p>
+                <h2 className="mb-1 text-xl font-black text-white">Personalize your roadmap</h2>
+                <p className="text-sm text-slate-200">4 quick questions to build your perfect learning path.</p>
               </div>
 
-              <div className="bg-card border border-border rounded-2xl shadow-sm p-8">
-                {/* Quiz progress */}
-                <div className="flex gap-1.5 mb-6">
-                  {quizQuestions.map((_, i) => (
-                    <div key={i} className={`flex-1 h-1.5 rounded-full transition-all ${i <= quizStep ? "bg-blue-600" : "bg-muted"}`} />
+              <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)]">
+                <div className="mb-6 flex gap-1.5">
+                  {quizQuestions.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`h-1.5 flex-1 rounded-full transition-all ${
+                        index <= quizStep ? "bg-sky-600" : "bg-slate-100"
+                      }`}
+                    />
                   ))}
                 </div>
 
                 <AnimatePresence mode="wait">
-                  <motion.div key={quizStep} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                    <p className="text-sm text-muted-foreground mb-1">Question {quizStep + 1} of {quizQuestions.length}</p>
-                    <h3 className="text-lg font-bold text-foreground mb-6">{quizQuestions[quizStep].question}</h3>
+                  <motion.div
+                    key={quizStep}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <p className="mb-1 text-sm text-slate-700">
+                      Question {quizStep + 1} of {quizQuestions.length}
+                    </p>
+                    <h3 className="mb-6 text-lg font-bold text-slate-950">
+                      {quizQuestions[quizStep].question}
+                    </h3>
                     <div className="space-y-3">
-                      {quizQuestions[quizStep].options.map((option, idx) => (
+                      {quizQuestions[quizStep].options.map((option, index) => (
                         <button
-                          key={idx}
-                          onClick={() => handleAnswer(quizQuestions[quizStep].id, idx)}
-                          className={`w-full text-left px-5 py-4 rounded-xl border text-sm transition-all ${
-                            answers[quizQuestions[quizStep].id] === idx
-                              ? "border-blue-400 bg-blue-50 dark:bg-blue-950/40 text-foreground"
-                              : "border-border bg-background text-foreground hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50/50 dark:hover:bg-blue-950/20"
+                          key={index}
+                          type="button"
+                          onClick={() => handleAnswer(quizQuestions[quizStep].id, index)}
+                          className={`w-full rounded-xl border px-5 py-4 text-left text-sm transition-all ${
+                            answers[quizQuestions[quizStep].id] === index
+                              ? "border-sky-300 bg-sky-50 text-slate-950"
+                              : "border-slate-200 bg-slate-50 text-slate-950 hover:border-sky-200 hover:bg-white"
                           }`}
                         >
-                          <span className="font-semibold text-blue-600 mr-3">{String.fromCharCode(65 + idx)}.</span>
+                          <span className="mr-3 font-semibold text-sky-700">
+                            {String.fromCharCode(65 + index)}.
+                          </span>
                           {option}
                         </button>
                       ))}
@@ -427,51 +520,71 @@ export default function SignupPage() {
                 </AnimatePresence>
               </div>
             </motion.div>
-          )}
+          ) : null}
 
-          {/* STEP 3: Roadmap */}
-          {step === "roadmap" && (
-            <motion.div key="roadmap" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="w-8 h-8 text-blue-600" />
+          {step === "roadmap" ? (
+            <motion.div
+              key="roadmap"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <div className="mb-6 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-sky-200 bg-sky-100">
+                  <Sparkles className="h-8 w-8 text-sky-700" />
                 </div>
-                <h2 className="text-xl font-black text-foreground mb-1">Your AI roadmap is ready!</h2>
-                <p className="text-muted-foreground text-sm">Based on your answers, here&apos;s your personalized learning path</p>
+                <h2 className="mb-1 text-xl font-black text-white">Your AI roadmap is ready</h2>
+                <p className="text-sm text-slate-200">
+                  Based on your answers, here&apos;s your personalized learning path.
+                </p>
               </div>
 
-              <div className="bg-card border border-border rounded-2xl shadow-sm p-6 mb-4">
+              <div className="mb-4 rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)]">
                 <div className="space-y-3">
-                  {roadmapSuggestions.default.map((course, i) => (
-                    <div key={i} className="flex items-center gap-4 p-4 rounded-xl bg-muted/50 border border-border">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ${
-                        i === 0 ? "bg-blue-100 dark:bg-blue-950/50 text-blue-600" :
-                        i === 1 ? "bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600" :
-                        i === 2 ? "bg-pink-100 dark:bg-pink-950/50 text-pink-600" : "bg-amber-100 dark:bg-amber-950/50 text-amber-600"
-                      }`}>
-                        {i + 1}
+                  {roadmapSuggestions.default.map((course, index) => (
+                    <div key={index} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-black ${
+                          index === 0
+                            ? "bg-sky-100 text-sky-700"
+                            : index === 1
+                              ? "bg-indigo-100 text-indigo-700"
+                              : index === 2
+                                ? "bg-rose-100 text-rose-700"
+                                : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {index + 1}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground line-clamp-1">{course}</p>
-                        <p className="text-xs text-muted-foreground">{["Start here", "Level up", "Advanced", "Production"][i]}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-1 text-sm font-medium text-slate-950">{course}</p>
+                        <p className="text-xs text-slate-700">
+                          {["Start here", "Level up", "Advanced", "Production"][index]}
+                        </p>
                       </div>
-                      <Check className="w-4 h-4 text-blue-600 shrink-0" />
+                      <Check className="h-4 w-4 shrink-0 text-sky-700" />
                     </div>
                   ))}
                 </div>
               </div>
 
-              <Link href="/dashboard"
-                className="block text-center w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition-colors">
-                Go to My Dashboard →
+              <Link
+                href="/dashboard"
+                className="block w-full rounded-2xl bg-slate-950 py-4 text-center text-sm font-bold text-white transition hover:bg-slate-800"
+              >
+                Go to My Dashboard -&gt;
               </Link>
-              <button onClick={() => setStep("quiz")} className="block text-center w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <button
+                type="button"
+                onClick={() => setStep("quiz")}
+                className="mt-3 block w-full text-center text-sm text-slate-700 transition hover:text-slate-950"
+              >
                 Retake quiz
               </button>
             </motion.div>
-          )}
+          ) : null}
         </AnimatePresence>
       </div>
-    </div>
+    </AuthShell>
   );
 }

@@ -162,7 +162,6 @@ model Lesson {
   isPreview      Boolean          @default(false)
   order          Int
   createdAt      DateTime         @default(now())
-  allowDownload  Boolean          @default(false)
   assetPath      String?
   assetUrl       String?
   sellSeparately Boolean          @default(false)
@@ -170,10 +169,30 @@ model Lesson {
   previewPages   Int?             @map("preview_pages")
   previewMinutes Int?             @map("preview_minutes")
   aiPrompts      AIPrompt[]
+  lessonAssets   LessonAsset[]
   module         Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   progress       LessonProgress[]
   quizzes        Quiz[]
   lesson_notes   lesson_notes[]
+}
+
+model LessonAsset {
+  id         String          @id @default(uuid())
+  lessonId   String          @map("lesson_id")
+  assetType  LessonAssetType @map("asset_type")
+  assetUrl   String          @map("asset_url")
+  assetPath  String?         @map("asset_path")
+  fileName   String?         @map("file_name")
+  mimeType   String?         @map("mime_type")
+  sizeBytes  Int?            @map("size_bytes")
+  title      String?
+  isPrimary  Boolean         @default(false) @map("is_primary")
+  sortOrder  Int             @default(0) @map("sort_order")
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  lesson     Lesson          @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId, sortOrder], map: "lesson_assets_lesson_sort_idx")
+  @@map("lesson_assets")
 }
 
 model Quiz {
@@ -471,6 +490,15 @@ model BlogPost {
   excerpt        String?
   content        String
   coverImage     String?
+  metaTitle      String?       @map("meta_title")
+  metaDescription String?      @map("meta_description")
+  focusKeyword   String?       @map("focus_keyword")
+  ogTitle        String?       @map("og_title")
+  ogDescription  String?       @map("og_description")
+  ogImageUrl     String?       @map("og_image_url")
+  ogImagePath    String?       @map("og_image_path")
+  canonicalUrl   String?       @map("canonical_url")
+  noIndex        Boolean       @default(false) @map("no_index")
   authorId       String
   tags           String[]
   isPublished    Boolean       @default(false)
@@ -813,6 +841,12 @@ enum LessonType {
   AUDIO
   PDF
   ASSIGNMENT
+}
+
+enum LessonAssetType {
+  VIDEO @map("video")
+  PDF   @map("pdf")
+  FILE  @map("file")
 }
 
 enum EnrollmentStatus {

@@ -14,6 +14,8 @@ interface LessonNotesPanelProps {
   onClose: () => void;
   onContentChange?: (content: string) => void;
   isSaving?: boolean;
+  variant?: "floating" | "embedded";
+  className?: string;
 }
 
 export function LessonNotesPanel({
@@ -25,6 +27,8 @@ export function LessonNotesPanel({
   onClose,
   onContentChange,
   isSaving: externalIsSaving,
+  variant = "floating",
+  className,
 }: LessonNotesPanelProps) {
   const [internalContent, setInternalContent] = useState(initialContent);
   const [isSavingInternal, setIsSavingInternal] = useState(false);
@@ -60,13 +64,26 @@ export function LessonNotesPanel({
 
   // Set initial position to the right side of the screen on mount
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setPosition({
-        x: window.innerWidth - 440,
-        y: 100
-      });
+    if (typeof window === "undefined" || variant !== "floating") {
+      return;
     }
-  }, []);
+
+    setPosition({
+      x: Math.max(16, window.innerWidth - 440),
+      y: 100,
+    });
+  }, [variant]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || variant !== "floating" || !isOpen) {
+      return;
+    }
+
+    setPosition((current) => ({
+      x: Math.max(16, Math.min(window.innerWidth - size.width - 16, current.x)),
+      y: Math.max(16, Math.min(window.innerHeight - size.height - 16, current.y)),
+    }));
+  }, [isOpen, size.height, size.width, variant]);
 
   const saveNotes = useCallback(async () => {
     if (!viewerId) return;
@@ -97,9 +114,13 @@ export function LessonNotesPanel({
 
   // Drag and Resize Handlers
   const onDragEnd = (_: any, info: { point: { x: number, y: number }, offset: { x: number, y: number } }) => {
-    setPosition(prev => ({
-      x: Math.max(0, Math.min(window.innerWidth - size.width, prev.x + info.offset.x)),
-      y: Math.max(0, Math.min(window.innerHeight - 100, prev.y + info.offset.y))
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    setPosition((prev) => ({
+      x: Math.max(16, Math.min(window.innerWidth - size.width - 16, prev.x + info.offset.x)),
+      y: Math.max(16, Math.min(window.innerHeight - size.height - 16, prev.y + info.offset.y)),
     }));
   };
 
@@ -120,7 +141,10 @@ export function LessonNotesPanel({
     const deltaX = e.clientX - resizeStartRef.current.x;
     const deltaY = e.clientY - resizeStartRef.current.y;
     const newWidth = Math.max(320, Math.min(800, resizeStartRef.current.w + deltaX));
-    const newHeight = Math.max(300, Math.min(window.innerHeight - position.y - 20, resizeStartRef.current.h + deltaY));
+    const newHeight = Math.max(
+      300,
+      Math.min(window.innerHeight - position.y - 16, resizeStartRef.current.h + deltaY)
+    );
     setSize({ width: newWidth, height: newHeight });
   };
 
@@ -134,7 +158,7 @@ export function LessonNotesPanel({
       {isOpen && (
         <motion.div
           ref={panelRef}
-          drag={!isResizing}
+          drag={variant === "floating" && !isResizing}
           dragMomentum={false}
           dragControls={dragControls}
           onDragEnd={onDragEnd}
@@ -142,19 +166,29 @@ export function LessonNotesPanel({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           style={{
-            position: "fixed",
-            left: position.x,
-            top: position.y,
-            width: size.width,
-            height: size.height,
-            zIndex: 100,
+            position: variant === "floating" ? "fixed" : "relative",
+            left: variant === "floating" ? position.x : undefined,
+            top: variant === "floating" ? position.y : undefined,
+            width: variant === "floating" ? size.width : "100%",
+            height: variant === "floating" ? size.height : "100%",
+            zIndex: variant === "floating" ? 170 : undefined,
           }}
-          className="flex flex-col rounded-2xl border border-white/10 bg-[#04070d]/95 shadow-2xl backdrop-blur-md overflow-hidden"
+          className={cn(
+            "flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#04070d]/95 shadow-2xl backdrop-blur-md",
+            className
+          )}
         >
           {/* Header / Drag Area */}
           <div 
-            onPointerDown={(e) => dragControls.start(e)}
-            className="flex items-center justify-between border-b border-white/5 p-3 cursor-move bg-white/[0.02]"
+            onPointerDown={(e) => {
+              if (variant === "floating") {
+                dragControls.start(e);
+              }
+            }}
+            className={cn(
+              "flex items-center justify-between border-b border-white/5 bg-white/[0.02] p-3",
+              variant === "floating" ? "cursor-move" : ""
+            )}
           >
             <div className="flex items-center gap-2">
               <GripVertical className="h-4 w-4 text-slate-500" />
@@ -212,15 +246,17 @@ export function LessonNotesPanel({
           </div>
 
           {/* Resize Handle */}
-          <div
-            onPointerDown={startResizing}
-            onPointerMove={handlePointerResize}
-            onPointerUp={stopResizing}
-            className="absolute bottom-0 right-0 h-8 w-8 cursor-nwse-resize flex items-end justify-end p-1 group hover:bg-primary-blue/10 transition-colors rounded-tl"
-            title="Drag to resize"
-          >
-            <div className="h-2 w-2 rounded-full bg-slate-500 group-hover:bg-primary-blue transition-colors mb-1 mr-1" />
-          </div>
+          {variant === "floating" ? (
+            <div
+              onPointerDown={startResizing}
+              onPointerMove={handlePointerResize}
+              onPointerUp={stopResizing}
+              className="group absolute bottom-0 right-0 flex h-8 w-8 cursor-nwse-resize items-end justify-end rounded-tl p-1 transition-colors hover:bg-primary-blue/10"
+              title="Drag to resize"
+            >
+              <div className="mb-1 mr-1 h-2 w-2 rounded-full bg-slate-500 transition-colors group-hover:bg-primary-blue" />
+            </div>
+          ) : null}
         </motion.div>
       )}
     </AnimatePresence>

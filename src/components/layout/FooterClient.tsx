@@ -37,6 +37,10 @@ const quickLinks = [
 ];
 
 const learnLinks = [
+  { label: "Trending Courses", href: "/courses?filter=trending" },
+  { label: "New Courses", href: "/courses?filter=new" },
+  { label: "Popular Courses", href: "/courses?sort=popular" },
+  { label: "Featured Courses", href: "/courses?filter=featured" },
   { label: "All Courses", href: "/courses" },
   { label: "Learning Paths", href: "/paths" },
   { label: "Free Courses", href: "/courses?price=free" },

@@ -15,7 +15,6 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle2,
-  NotebookText,
   BadgeCheck,
 } from "lucide-react";
 import {
@@ -29,6 +28,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserTeamWorkspaceSummary } from "@/lib/team-workspace";
 import { formatDuration } from "@/lib/utils";
 import { ReferEarnCard } from "@/components/dashboard/refer-earn-card";
+import { WorkspaceNotesPanel } from "@/components/dashboard/WorkspaceNotesPanel";
 
 const thumbnailFallback =
   "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop";
@@ -370,44 +370,7 @@ export default async function DashboardPage() {
                 </div>
               ) : null}
 
-              <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-                <div id="workspace-notes" className="mb-4 flex items-center gap-2">
-                  <NotebookText className="h-4 w-4 text-primary-blue" />
-                  <h2 className="text-sm font-bold text-foreground">My workspace notes</h2>
-                </div>
-
-                {workspaceNotes.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Saved lesson-note snapshots will appear here as you study.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {workspaceNotes.map((note) => (
-                      <Link
-                        key={note.id}
-                        href={`/learn/${note.courseSlug}/${note.lessonId}`}
-                        className="block rounded-xl border border-border p-3 transition-colors hover:border-primary-blue/20 hover:bg-primary-blue/5"
-                      >
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-blue">
-                          {note.courseTitle}
-                        </p>
-                        <p className="mt-1 text-xs font-semibold text-foreground">{note.lessonTitle}</p>
-                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
-                          {note.content}
-                        </p>
-                        <p className="mt-2 text-[11px] text-muted-foreground">
-                          {new Intl.DateTimeFormat("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          }).format(new Date(note.timestamp))}
-                        </p>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <WorkspaceNotesPanel notes={workspaceNotes} />
 
               <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-foreground">

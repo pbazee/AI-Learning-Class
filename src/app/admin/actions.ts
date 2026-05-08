@@ -19,6 +19,8 @@ import { notifyContactReply } from "@/lib/contact-notifications";
 import { syncCourseReviewMetrics } from "@/lib/course-reviews";
 import { HOMEPAGE_PARAGRAPH_SECTION_KEYS } from "@/lib/homepage-paragraphs";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
+import { ensureLessonAssetsTable } from "@/lib/lesson-assets-table";
+import { inferPrimaryLessonTypeFromAsset } from "@/lib/lesson-assets";
 import { PUBLIC_CACHE_TAGS } from "@/lib/cache-config";
 import { prisma } from "@/lib/prisma";
 import { isPrismaConnectionError } from "@/lib/prisma-errors";
@@ -39,6 +41,7 @@ const blogStatusOptions = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
 const couponDiscountOptions = ["PERCENTAGE", "FIXED_AMOUNT"] as const;
 const courseAssetTypeOptions = ["AUDIO", "VIDEO", "PDF"] as const;
 const lessonTypeOptions = ["VIDEO", "AUDIO", "PDF", "TEXT", "QUIZ", "ASSIGNMENT", "PROJECT", "LIVE"] as const;
+const lessonAssetTypeOptions = ["VIDEO", "PDF", "FILE"] as const;
 const popupShowOnOptions = ["HOMEPAGE_ONLY", "COURSE_PAGES", "BLOG_PAGES", "ALL_PAGES"] as const;
 
 const categorySchema = z.object({
@@ -81,9 +84,22 @@ const lessonSchema = z.object({
   isPreview: z.boolean().optional().default(false),
   previewPages: z.coerce.number().min(0).optional(),
   previewMinutes: z.coerce.number().min(0).optional(),
-  allowDownload: z.boolean().optional().default(false),
   sellSeparately: z.boolean().optional().default(false),
   order: z.coerce.number().min(0).optional().default(0),
+  assets: z.array(
+    z.object({
+      id: z.string().optional(),
+      assetType: z.enum(lessonAssetTypeOptions),
+      assetUrl: z.string().min(1, "Asset URL is required."),
+      assetPath: z.string().optional(),
+      fileName: z.string().optional(),
+      mimeType: z.string().optional(),
+      sizeBytes: z.coerce.number().min(0).optional(),
+      title: z.string().optional(),
+      isPrimary: z.boolean().optional(),
+      sortOrder: z.coerce.number().min(0).optional(),
+    })
+  ).optional(),
 });
 
 const sectionSchema = z.object({
@@ -173,6 +189,15 @@ const blogSchema = z.object({
   categoryId: z.string().optional().nullable(),
   tags: z.array(z.string()).optional().default([]),
   status: z.enum(blogStatusOptions),
+  metaTitle: z.string().max(60).optional(),
+  metaDescription: z.string().max(160).optional(),
+  focusKeyword: z.string().optional(),
+  ogTitle: z.string().max(60).optional(),
+  ogDescription: z.string().max(160).optional(),
+  ogImageUrl: z.string().optional(),
+  ogImagePath: z.string().optional(),
+  canonicalUrl: z.string().optional(),
+  noIndex: z.boolean().optional().default(false),
 });
 
 const planSchema = z.object({
@@ -334,6 +359,40 @@ function optionalNumber(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function normalizeLessonAssetRecords(
+  assets?: Array<{
+    id?: string;
+    assetType: "VIDEO" | "PDF" | "FILE";
+    assetUrl: string;
+    assetPath?: string;
+    fileName?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    title?: string;
+    isPrimary?: boolean;
+    sortOrder?: number;
+  }>
+) {
+  if (!assets?.length) {
+    return [];
+  }
+
+  return assets
+    .filter((asset) => asset.assetUrl.trim())
+    .map((asset, index) => ({
+      id: asset.id,
+      assetType: asset.assetType,
+      assetUrl: asset.assetUrl.trim(),
+      assetPath: nullableString(asset.assetPath),
+      fileName: nullableString(asset.fileName),
+      mimeType: nullableString(asset.mimeType),
+      sizeBytes: optionalNumber(asset.sizeBytes),
+      title: nullableString(asset.title),
+      isPrimary: index === 0,
+      sortOrder: index,
+    }));
+}
+
 function parseDate(value?: string | null) {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -437,6 +496,22 @@ async function ensureUniqueCourseSlug(baseValue: string, reserved = new Set<stri
 
   reserved.add(nextSlug);
   return nextSlug;
+}
+
+async function ensureFallbackCategory() {
+  return prisma.category.upsert({
+    where: { slug: "uncategorized" },
+    update: {
+      isActive: true,
+    },
+    create: {
+      name: "Uncategorized",
+      slug: "uncategorized",
+      description: "Fallback bucket for courses that need reassignment before being categorized.",
+      color: "#64748b",
+      isActive: true,
+    },
+  });
 }
 
 function uniqueStrings(values: string[]) {
@@ -589,6 +664,7 @@ async function syncCourseCurriculum(
   sections: Array<z.output<typeof sectionSchema>>
 ) {
   await ensureLessonPreviewColumns();
+  await ensureLessonAssetsTable();
 
   const existingModules = await prisma.module.findMany({
     where: { courseId },
@@ -597,6 +673,12 @@ async function syncCourseCurriculum(
         select: {
           id: true,
           assetPath: true,
+          lessonAssets: {
+            select: {
+              id: true,
+              assetPath: true,
+            },
+          },
         },
       },
     },
@@ -611,7 +693,10 @@ async function syncCourseCurriculum(
       module.lessons.map((lesson) => lesson.id)
     );
     const lessonAssetPaths = modulesToDelete.flatMap((module) =>
-      module.lessons.map((lesson) => lesson.assetPath)
+      module.lessons.flatMap((lesson) => [
+        lesson.assetPath,
+        ...lesson.lessonAssets.map((asset) => asset.assetPath),
+      ])
     );
 
     await prisma.$transaction(async (tx) => {
@@ -664,54 +749,102 @@ async function syncCourseCurriculum(
         });
       });
 
-      await deleteAdminStorageObjects(lessonsToDelete.map((lesson) => lesson.assetPath));
+      await deleteAdminStorageObjects(
+        lessonsToDelete.flatMap((lesson) => [
+          lesson.assetPath,
+          ...lesson.lessonAssets.map((asset) => asset.assetPath),
+        ])
+      );
     }
 
     for (const [lessonIndex, lesson] of section.lessons.entries()) {
+      const hasExplicitAssets = Array.isArray(lesson.assets);
+      const normalizedAssets = hasExplicitAssets ? normalizeLessonAssetRecords(lesson.assets) : [];
+      const primaryAsset = normalizedAssets[0];
+      const inferredPrimaryType = inferPrimaryLessonTypeFromAsset(primaryAsset);
+      const lessonType =
+        inferredPrimaryType && lesson.type !== "QUIZ" && lesson.type !== "TEXT" && lesson.type !== "ASSIGNMENT" && lesson.type !== "PROJECT"
+          ? inferredPrimaryType
+          : lesson.type;
       const lessonPayload = {
         title: lesson.title.trim(),
         description: optionalString(lesson.description),
-        type: lesson.type as LessonType,
+        type: lessonType as LessonType,
         videoUrl:
-          lesson.type === "VIDEO" || lesson.type === "LIVE"
-            ? nullableString(lesson.assetUrl)
+          lessonType === "VIDEO" || lessonType === "LIVE"
+            ? primaryAsset?.assetUrl ?? nullableString(lesson.assetUrl)
             : null,
-        assetUrl: nullableString(lesson.assetUrl),
-        assetPath: nullableString(lesson.assetPath),
+        assetUrl: primaryAsset?.assetUrl ?? nullableString(lesson.assetUrl),
+        assetPath: primaryAsset?.assetPath ?? nullableString(lesson.assetPath),
         duration: optionalNumber(lesson.duration),
         content: optionalString(lesson.content),
         isPreview: Boolean(lesson.isPreview),
         previewPages:
-          lesson.isPreview && lesson.type === "PDF"
+          lesson.isPreview && lessonType === "PDF"
             ? optionalNumber(lesson.previewPages)
             : null,
         previewMinutes:
-          lesson.isPreview && (lesson.type === "VIDEO" || lesson.type === "AUDIO" || lesson.type === "LIVE")
+          lesson.isPreview && (lessonType === "VIDEO" || lessonType === "AUDIO" || lessonType === "LIVE")
             ? optionalNumber(lesson.previewMinutes)
             : null,
-        allowDownload: Boolean(lesson.allowDownload),
         sellSeparately: Boolean(lesson.sellSeparately),
         order: lessonIndex,
       };
 
       const existingLesson = lesson.id ? existingLessonsById.get(lesson.id) : null;
 
-      if (existingLesson?.assetPath && existingLesson.assetPath !== lessonPayload.assetPath) {
-        await deleteAssetPath(existingLesson.assetPath);
+      const lessonRecord = existingLesson
+        ? await prisma.lesson.update({
+            where: { id: existingLesson.id },
+            data: lessonPayload,
+          })
+        : await prisma.lesson.create({
+            data: {
+              moduleId: moduleRecord.id,
+              ...lessonPayload,
+            },
+          });
+
+      if (hasExplicitAssets && existingLesson) {
+        const incomingAssetIds = new Set(normalizedAssets.map((asset) => asset.id).filter(Boolean));
+        const assetsToDelete = existingLesson.lessonAssets.filter((asset) => !incomingAssetIds.has(asset.id));
+
+        if (assetsToDelete.length > 0) {
+          await prisma.lessonAsset.deleteMany({
+            where: {
+              id: { in: assetsToDelete.map((asset) => asset.id) },
+            },
+          });
+          await deleteAdminStorageObjects(assetsToDelete.map((asset) => asset.assetPath));
+        }
       }
 
-      if (existingLesson) {
-        await prisma.lesson.update({
-          where: { id: existingLesson.id },
-          data: lessonPayload,
-        });
-      } else {
-        await prisma.lesson.create({
-          data: {
-            moduleId: moduleRecord.id,
-            ...lessonPayload,
-          },
-        });
+      if (hasExplicitAssets) {
+        for (const [assetIndex, asset] of normalizedAssets.entries()) {
+          const assetPayload = {
+            lessonId: lessonRecord.id,
+            assetType: asset.assetType,
+            assetUrl: asset.assetUrl,
+            assetPath: asset.assetPath,
+            fileName: asset.fileName,
+            mimeType: asset.mimeType,
+            sizeBytes: asset.sizeBytes ?? null,
+            title: asset.title,
+            isPrimary: assetIndex === 0,
+            sortOrder: assetIndex,
+          };
+
+          if (asset.id) {
+            await prisma.lessonAsset.update({
+              where: { id: asset.id },
+              data: assetPayload,
+            });
+          } else {
+            await prisma.lessonAsset.create({
+              data: assetPayload,
+            });
+          }
+        }
       }
     }
   }
@@ -788,6 +921,42 @@ export async function deleteCategoryAction(id: string) {
     ["/admin", "/admin/categories", "/courses", "/blog", "/"],
     async () => prisma.category.delete({ where: { id } }),
     "Category deleted successfully."
+  );
+}
+
+export async function removeCourseFromCategoryAction(input: {
+  categoryId: string;
+  courseId: string;
+}) {
+  return runAdminAction(
+    "removeCourseFromCategory",
+    ["/admin", "/admin/categories", "/admin/courses", "/courses", "/"],
+    async () => {
+      const fallbackCategory = await ensureFallbackCategory();
+      const course = await prisma.course.findUnique({
+        where: { id: input.courseId },
+        select: {
+          id: true,
+          categoryId: true,
+        },
+      });
+
+      if (!course) {
+        throw new Error("That course could not be found.");
+      }
+
+      if (course.categoryId !== input.categoryId) {
+        return course;
+      }
+
+      return prisma.course.update({
+        where: { id: input.courseId },
+        data: {
+          categoryId: fallbackCategory.id,
+        },
+      });
+    },
+    "Course moved to Uncategorized."
   );
 }
 
@@ -1223,6 +1392,7 @@ export async function saveCourseAction(input: z.input<typeof courseSchema>) {
     "saveCourse",
     ["/admin", "/admin/courses", "/courses", "/"],
     async (values) => {
+      await ensureLessonAssetsTable();
       const instructorId = await resolveCourseInstructorId({
         instructorId: values.instructorId,
         instructorName: values.instructorName,
@@ -1297,6 +1467,7 @@ export async function deleteCourseAction(id: string) {
     "deleteCourse",
     ["/admin", "/admin/courses", "/courses", "/"],
     async () => {
+      await ensureLessonAssetsTable();
       const course = await prisma.course.findUnique({
         where: { id },
         include: {
@@ -1304,8 +1475,12 @@ export async function deleteCourseAction(id: string) {
           modules: {
             include: {
               lessons: {
-                select: {
-                  assetPath: true,
+                include: {
+                  lessonAssets: {
+                    select: {
+                      assetPath: true,
+                    },
+                  },
                 },
               },
             },
@@ -1317,7 +1492,12 @@ export async function deleteCourseAction(id: string) {
         course?.imagePath,
         course?.thumbnailPath,
         ...((course?.assets || []).map((asset) => asset.storagePath) ?? []),
-        ...((course?.modules || []).flatMap((module) => module.lessons.map((lesson) => lesson.assetPath)) ?? []),
+        ...((course?.modules || []).flatMap((module) =>
+          module.lessons.flatMap((lesson) => [
+            lesson.assetPath,
+            ...lesson.lessonAssets.map((asset) => asset.assetPath),
+          ])
+        ) ?? []),
       ]);
 
       return prisma.course.delete({ where: { id } });
@@ -1467,8 +1647,15 @@ export async function saveBlogAction(input: z.input<typeof blogSchema>) {
       const slug = slugify(values.slug || values.title);
       const status = values.status as ContentStatus;
       const publishedAt = status === "PUBLISHED" ? new Date() : null;
+      const ogImagePath = optionalString(values.ogImagePath);
       const existing = values.id
-        ? await prisma.blogPost.findUnique({ where: { id: values.id } })
+        ? await prisma.blogPost.findUnique({
+            where: { id: values.id },
+            select: {
+              publishedAt: true,
+              ogImagePath: true,
+            },
+          })
         : null;
 
       const post = await prisma.blogPost.upsert({
@@ -1484,6 +1671,15 @@ export async function saveBlogAction(input: z.input<typeof blogSchema>) {
           categoryId: nullableString(values.categoryId),
           tags: uniqueStrings(values.tags),
           status,
+          metaTitle: optionalString(values.metaTitle),
+          metaDescription: optionalString(values.metaDescription),
+          focusKeyword: optionalString(values.focusKeyword),
+          ogTitle: optionalString(values.ogTitle),
+          ogDescription: optionalString(values.ogDescription),
+          ogImageUrl: optionalString(values.ogImageUrl),
+          ogImagePath,
+          canonicalUrl: optionalString(values.canonicalUrl),
+          noIndex: Boolean(values.noIndex),
           isPublished: status === "PUBLISHED",
           publishedAt: status === "PUBLISHED" ? existing?.publishedAt || publishedAt : null,
         },
@@ -1498,10 +1694,23 @@ export async function saveBlogAction(input: z.input<typeof blogSchema>) {
           categoryId: nullableString(values.categoryId),
           tags: uniqueStrings(values.tags),
           status,
+          metaTitle: optionalString(values.metaTitle),
+          metaDescription: optionalString(values.metaDescription),
+          focusKeyword: optionalString(values.focusKeyword),
+          ogTitle: optionalString(values.ogTitle),
+          ogDescription: optionalString(values.ogDescription),
+          ogImageUrl: optionalString(values.ogImageUrl),
+          ogImagePath,
+          canonicalUrl: optionalString(values.canonicalUrl),
+          noIndex: Boolean(values.noIndex),
           isPublished: status === "PUBLISHED",
           publishedAt,
         },
       });
+
+      if (existing?.ogImagePath && existing.ogImagePath !== ogImagePath) {
+        await deleteAssetPath(existing.ogImagePath);
+      }
 
       revalidatePath(`/blog/${slug}`);
       return post;
@@ -1517,6 +1726,7 @@ export async function deleteBlogAction(id: string) {
     async () => {
       const post = await prisma.blogPost.findUnique({ where: { id } });
       await deleteAssetPath(post?.coverImagePath);
+      await deleteAssetPath(post?.ogImagePath);
       return prisma.blogPost.delete({ where: { id } });
     },
     "Blog post deleted successfully."

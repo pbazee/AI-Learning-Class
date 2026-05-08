@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, FileAudio, FileText, FileVideo, GripVertical, ListChecks, Plus, ScrollText, Trash2 } from "lucide-react";
-import { MediaUploader, type UploadedAsset } from "@/components/admin/media-uploader";
+import {
+  LessonAssetsUploader,
+  type LessonAssetDraft,
+} from "@/components/admin/lesson-assets-uploader";
 import {
   AdminButton,
   AdminCard,
-  AdminCheckbox,
   AdminInput,
   AdminSelect,
   AdminSwitch,
@@ -14,6 +16,7 @@ import {
   FieldLabel,
   StatusPill,
 } from "@/components/admin/ui";
+import { inferPrimaryLessonTypeFromAsset } from "@/lib/lesson-assets";
 
 export type CourseLessonDraft = {
   id?: string;
@@ -28,9 +31,9 @@ export type CourseLessonDraft = {
   isPreview: boolean;
   previewPages: string;
   previewMinutes: string;
-  allowDownload: boolean;
   sellSeparately: boolean;
   isExpanded: boolean;
+  assets: LessonAssetDraft[];
 };
 
 export type CourseSectionDraft = {
@@ -64,9 +67,9 @@ export function createEmptyLesson(): CourseLessonDraft {
     isPreview: false,
     previewPages: "",
     previewMinutes: "",
-    allowDownload: false,
     sellSeparately: false,
     isExpanded: true,
+    assets: [],
   };
 }
 
@@ -156,6 +159,24 @@ export function normalizeLessonType(type: CourseLessonDraft["type"]) {
   return type;
 }
 
+function syncPrimaryAssetFields(
+  lesson: CourseLessonDraft,
+  assets: LessonAssetDraft[]
+): Partial<CourseLessonDraft> {
+  const primaryAsset = assets[0];
+  const inferredType = inferPrimaryLessonTypeFromAsset(primaryAsset);
+
+  return {
+    assets,
+    assetUrl: primaryAsset?.assetUrl || "",
+    assetPath: primaryAsset?.assetPath || "",
+    type:
+      inferredType && lesson.type !== "QUIZ" && lesson.type !== "TEXT" && lesson.type !== "ASSIGNMENT" && lesson.type !== "PROJECT"
+        ? inferredType
+        : lesson.type,
+  };
+}
+
 export function CourseStructureBuilder({
   courseId,
   sections,
@@ -166,6 +187,8 @@ export function CourseStructureBuilder({
   onChange: (sections: CourseSectionDraft[]) => void;
 }) {
   const [dragState, setDragState] = useState<DragState>(null);
+  const [bulkLessonInputs, setBulkLessonInputs] = useState<Record<string, string>>({});
+  const [bulkLessonOpenSections, setBulkLessonOpenSections] = useState<Record<string, boolean>>({});
 
   function updateSection(sectionLocalId: string, patch: Partial<CourseSectionDraft>) {
     onChange(
@@ -191,6 +214,58 @@ export function CourseStructureBuilder({
           : section
       )
     );
+  }
+
+  function toggleBulkLessons(sectionLocalId: string) {
+    setBulkLessonOpenSections((current) => ({
+      ...current,
+      [sectionLocalId]: !current[sectionLocalId],
+    }));
+  }
+
+  function updateBulkLessonInput(sectionLocalId: string, value: string) {
+    setBulkLessonInputs((current) => ({
+      ...current,
+      [sectionLocalId]: value,
+    }));
+  }
+
+  function addBulkLessons(sectionLocalId: string) {
+    const titles = (bulkLessonInputs[sectionLocalId] ?? "")
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    if (titles.length === 0) {
+      return;
+    }
+
+    const nextLessons = titles.map((title) => ({
+      ...createEmptyLesson(),
+      title,
+      isExpanded: false,
+    }));
+
+    onChange(
+      sections.map((section) =>
+        section.localId === sectionLocalId
+          ? {
+              ...section,
+              isExpanded: true,
+              lessons: [...section.lessons, ...nextLessons],
+            }
+          : section
+      )
+    );
+
+    setBulkLessonInputs((current) => ({
+      ...current,
+      [sectionLocalId]: "",
+    }));
+    setBulkLessonOpenSections((current) => ({
+      ...current,
+      [sectionLocalId]: false,
+    }));
   }
 
   function updateLesson(
@@ -312,6 +387,13 @@ export function CourseStructureBuilder({
                     </AdminButton>
                     <AdminButton
                       type="button"
+                      variant="secondary"
+                      onClick={() => toggleBulkLessons(section.localId)}
+                    >
+                      Bulk Add Lessons
+                    </AdminButton>
+                    <AdminButton
+                      type="button"
                       variant="ghost"
                       icon={section.isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       onClick={() => updateSection(section.localId, { isExpanded: !section.isExpanded })}
@@ -352,6 +434,46 @@ export function CourseStructureBuilder({
                   </div>
 
                   <div className="space-y-3">
+                    {bulkLessonOpenSections[section.localId] ? (
+                      <AdminCard className="border border-primary-blue/20 bg-primary-blue/5 p-4">
+                        <div className="flex flex-col gap-4">
+                          <div>
+                            <p className="text-sm font-semibold text-white">Bulk add lesson titles</p>
+                            <p className="mt-1 text-xs text-slate-400">
+                              Enter one lesson title per line. New lessons will be created as video lessons with empty descriptions and durations.
+                            </p>
+                          </div>
+                          <AdminTextarea
+                            rows={6}
+                            value={bulkLessonInputs[section.localId] ?? ""}
+                            onChange={(event) => updateBulkLessonInput(section.localId, event.target.value)}
+                            placeholder={"Introduction to AI\nWhat is Machine Learning?\nNeural Networks Explained"}
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <AdminButton
+                              type="button"
+                              onClick={() => addBulkLessons(section.localId)}
+                              disabled={!((bulkLessonInputs[section.localId] ?? "").trim())}
+                            >
+                              Add All
+                            </AdminButton>
+                            <AdminButton
+                              type="button"
+                              variant="ghost"
+                              onClick={() => {
+                                setBulkLessonOpenSections((current) => ({
+                                  ...current,
+                                  [section.localId]: false,
+                                }));
+                              }}
+                            >
+                              Cancel
+                            </AdminButton>
+                          </div>
+                        </div>
+                      </AdminCard>
+                    ) : null}
+
                     {section.lessons.map((lesson) => {
                       const LessonIcon = getLessonIcon(lesson.type);
                       const lessonOptions = [
@@ -406,8 +528,6 @@ export function CourseStructureBuilder({
                                 <div className="mt-1 flex flex-wrap items-center gap-2">
                                   <StatusPill tone="info">{normalizeLessonType(lesson.type)}</StatusPill>
                                   {lesson.isPreview ? <StatusPill tone="success">Preview enabled</StatusPill> : null}
-                                  {lesson.allowDownload ? <StatusPill tone="success">Downloadable</StatusPill> : null}
-                                  {lesson.sellSeparately ? <StatusPill tone="warning">Sell separately</StatusPill> : null}
                                 </div>
                               </div>
                             </div>
@@ -557,43 +677,15 @@ export function CourseStructureBuilder({
                               {lesson.type === "QUIZ" ? null : (
                                 <div className="md:col-span-2">
                                   {courseId ? (
-                                    <MediaUploader
-                                      label="Lesson Asset"
-                                      hint="Upload the primary video, audio, PDF, or assignment file for this lesson."
-                                      folder={`courses/lessons/${courseId}`}
-                                      accept={
-                                        lesson.type === "VIDEO"
-                                          ? "video/*"
-                                          : lesson.type === "AUDIO"
-                                            ? "audio/*"
-                                            : lesson.type === "PDF"
-                                              ? "application/pdf"
-                                              : ".pdf,.doc,.docx,.zip,.ppt,.pptx"
-                                      }
-                                      value={{
-                                        url: lesson.assetUrl,
-                                        path: lesson.assetPath,
-                                        fileName: lesson.title || "Lesson asset",
-                                        mimeType:
-                                          lesson.type === "VIDEO"
-                                            ? "video/*"
-                                            : lesson.type === "AUDIO"
-                                              ? "audio/*"
-                                              : lesson.type === "PDF"
-                                                ? "application/pdf"
-                                                : undefined,
-                                      }}
-                                      onUploaded={(file: UploadedAsset) =>
-                                        updateLesson(section.localId, lesson.localId, {
-                                          assetUrl: file.url,
-                                          assetPath: file.path,
-                                        })
-                                      }
-                                      onRemoved={() =>
-                                        updateLesson(section.localId, lesson.localId, {
-                                          assetUrl: "",
-                                          assetPath: "",
-                                        })
+                                    <LessonAssetsUploader
+                                      courseId={courseId}
+                                      assets={lesson.assets}
+                                      onChange={(assets) =>
+                                        updateLesson(
+                                          section.localId,
+                                          lesson.localId,
+                                          syncPrimaryAssetFields(lesson, assets)
+                                        )
                                       }
                                     />
                                   ) : (
@@ -627,29 +719,6 @@ export function CourseStructureBuilder({
                                     })
                                   }
                                   placeholder="Add learner instructions, embedded notes, or quiz prompts."
-                                />
-                              </div>
-
-                              <div className="md:col-span-2 grid gap-3 lg:grid-cols-2">
-                                <AdminCheckbox
-                                  checked={lesson.allowDownload}
-                                  onChange={(value) =>
-                                    updateLesson(section.localId, lesson.localId, {
-                                      allowDownload: value,
-                                    })
-                                  }
-                                  label="Allow Download"
-                                  hint="Keep files locked to the platform by leaving this off."
-                                />
-                                <AdminCheckbox
-                                  checked={lesson.sellSeparately}
-                                  onChange={(value) =>
-                                    updateLesson(section.localId, lesson.localId, {
-                                      sellSeparately: value,
-                                    })
-                                  }
-                                  label="Sell Separately"
-                                  hint="Flag this lesson for future chapter-by-chapter commerce."
                                 />
                               </div>
                             </div>

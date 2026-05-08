@@ -71,6 +71,10 @@ export function CourseCard({
     setWishlisted(isWishlisted);
   }, [isWishlisted]);
 
+  useEffect(() => {
+    router.prefetch(`/courses/${course.slug}`);
+  }, [course.slug, router]);
+
   async function resolveActiveViewerId() {
     if (viewerId) {
       return viewerId;

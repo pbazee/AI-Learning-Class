@@ -5,6 +5,7 @@ import { resolveMediaUrl } from "@/lib/media";
 import { prisma } from "@/lib/prisma";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
+import { ensureLessonAssetsTable } from "@/lib/lesson-assets-table";
 
 function isPdfSource(sourceUrl?: string | null, lessonType?: string | null) {
   if (lessonType?.trim().toUpperCase() === "PDF") {
@@ -34,6 +35,9 @@ export async function GET(
 ) {
   try {
     const { lessonId } = await params;
+    const requestUrl = new URL(request.url);
+    const requestedAssetId = requestUrl.searchParams.get("assetId")?.trim() || null;
+    await ensureLessonAssetsTable();
     const lesson = await prisma.lesson.findUnique({
       where: { id: lessonId },
       select: {
@@ -43,6 +47,16 @@ export async function GET(
         assetUrl: true,
         assetPath: true,
         isPreview: true,
+        lessonAssets: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            isPrimary: true,
+            assetType: true,
+            assetUrl: true,
+            assetPath: true,
+          },
+        },
         module: {
           select: {
             courseId: true,
@@ -75,14 +89,28 @@ export async function GET(
       }
     }
 
+    const selectedAsset =
+      lesson.lessonAssets.find((asset) => asset.id === requestedAssetId) ??
+      [...lesson.lessonAssets].sort((left, right) => {
+        if (left.isPrimary !== right.isPrimary) {
+          return left.isPrimary ? -1 : 1;
+        }
+
+        return 0;
+      })[0] ??
+      null;
+
     const sourceUrl =
       resolveMediaUrl({
-        url: lesson.assetUrl || lesson.videoUrl,
-        path: lesson.assetPath,
+        url: selectedAsset?.assetUrl || lesson.assetUrl || lesson.videoUrl,
+        path: selectedAsset?.assetPath || lesson.assetPath,
         fallback: "",
       }) || null;
 
-    if (!sourceUrl || !isPdfSource(sourceUrl, lesson.type)) {
+    if (
+      !sourceUrl ||
+      !isPdfSource(sourceUrl, selectedAsset?.assetType === "PDF" ? "PDF" : lesson.type)
+    ) {
       return NextResponse.json(
         { error: "This lesson does not have a classroom-ready PDF asset." },
         { status: 400 }

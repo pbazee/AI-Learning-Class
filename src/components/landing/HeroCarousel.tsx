@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -21,7 +21,7 @@ type HeroStat = {
   label: string;
 };
 
-const statIcons = [Users, BookOpen, Star];
+const statIcons = [Users, Star, BookOpen];
 
 function getMobileCtaText(label?: string) {
   const fallback = "Courses";
@@ -71,6 +71,7 @@ export function HeroCarousel({
 }) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [loadedSlides, setLoadedSlides] = useState<Record<string, boolean>>({});
   const slideCount = slides.length;
 
   const next = useCallback(() => {
@@ -90,9 +91,14 @@ export function HeroCarousel({
   }, [slideCount]);
 
   const currentSlide = slides[current] ?? slides[0];
+  const currentSlideLoaded = loadedSlides[currentSlide?.id ?? ""] ?? false;
   const intervalMs = ((currentSlide?.autoSlideInterval ?? globalInterval) || 6) * 1000;
   const learnerStat = stats[0] ?? null;
   const lowerStats = stats.slice(1, 3);
+  const prioritizedSlideUrls = useMemo(
+    () => slides.slice(0, Math.min(3, slides.length)).map((slide) => slide.imageUrl),
+    [slides]
+  );
 
   useEffect(() => {
     if (paused || slideCount <= 1) {
@@ -103,22 +109,33 @@ export function HeroCarousel({
     return () => window.clearInterval(timer);
   }, [intervalMs, next, paused, slideCount]);
 
+  useEffect(() => {
+    prioritizedSlideUrls.forEach((imageUrl) => {
+      const preloadImage = new window.Image();
+      preloadImage.src = imageUrl;
+    });
+  }, [prioritizedSlideUrls]);
+
   if (slideCount === 0) {
     return null;
   }
 
   return (
     <section
-      className="relative overflow-hidden [min-height:38rem] sm:[min-height:42rem] lg:[min-height:calc(100svh-var(--announcement-height)-var(--navbar-height)-var(--mobile-bottom-nav-height))] lg:[height:calc(100dvh-var(--announcement-height)-var(--navbar-height)-var(--mobile-bottom-nav-height))]"
+      className="relative overflow-hidden bg-[#020617] [min-height:38rem] sm:[min-height:42rem] lg:[min-height:calc(100svh-var(--announcement-height)-var(--navbar-height)-var(--mobile-bottom-nav-height))] lg:[height:calc(100dvh-var(--announcement-height)-var(--navbar-height)-var(--mobile-bottom-nav-height))]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <AnimatePresence mode="sync">
+      <div className="absolute inset-0 bg-[#020617]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,86,210,0.2),transparent_40%)]" />
+      <div className="absolute inset-0 bg-gradient-to-r from-[#020617] via-[#020617]/92 to-[#020617]/70" />
+
+      <AnimatePresence mode="sync" initial={false}>
         <motion.div
           key={`hero-background-${current}`}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          initial={{ opacity: 0.3, scale: 1.02 }}
+          animate={{ opacity: currentSlideLoaded ? 1 : 0.55, scale: 1 }}
+          exit={{ opacity: 0.92 }}
           transition={{ duration: 0.6 }}
           className="absolute inset-0"
         >
@@ -130,6 +147,13 @@ export function HeroCarousel({
             quality={75}
             placeholder="blur"
             blurDataURL={IMAGE_BLUR_DATA_URL}
+            unoptimized={currentSlide.imageUrl.startsWith("data:")}
+            onLoad={() =>
+              setLoadedSlides((previous) => ({
+                ...previous,
+                [currentSlide.id]: true,
+              }))
+            }
             className="object-cover object-[58%_center] sm:object-center"
             sizes="100vw"
           />

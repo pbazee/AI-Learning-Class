@@ -5,6 +5,7 @@ export type Role = "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPER_ADMIN";
 export type OrderStatus = "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
 export type EnrollmentStatus = "ACTIVE" | "COMPLETED" | "SUSPENDED" | "EXPIRED";
 export type CourseAssetType = "AUDIO" | "VIDEO" | "PDF";
+export type LessonAssetType = "VIDEO" | "PDF" | "FILE";
 export type ContentStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type PopupShowOn = "HOMEPAGE_ONLY" | "COURSE_PAGES" | "BLOG_PAGES" | "ALL_PAGES";
 export type ContactMessageStatus = "UNREAD" | "READ" | "REPLIED";
@@ -124,9 +125,23 @@ export interface Lesson {
   isPreview: boolean;
   previewPages?: number;
   previewMinutes?: number;
-  allowDownload?: boolean;
   sellSeparately?: boolean;
   order: number;
+  assets?: LessonAsset[];
+}
+
+export interface LessonAsset {
+  id: string;
+  lessonId?: string;
+  assetType: LessonAssetType;
+  assetUrl: string;
+  assetPath?: string;
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  title?: string;
+  isPrimary: boolean;
+  sortOrder: number;
 }
 
 export interface CourseAsset {
@@ -312,6 +327,15 @@ export interface BlogPost {
   excerpt?: string;
   content?: string;
   coverImage?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  focusKeyword?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImageUrl?: string;
+  ogImagePath?: string;
+  canonicalUrl?: string;
+  noIndex?: boolean;
   categoryName?: string;
   status?: ContentStatus;
   authorName?: string;
@@ -319,4 +343,5 @@ export interface BlogPost {
   publishedAt?: string;
   publishedAtIso?: string;
   readTime?: string;
+  readingTimeMinutes?: number;
 }

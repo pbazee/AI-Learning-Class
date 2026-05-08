@@ -2,14 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
+import { BlogSharePopover } from "@/components/blog/BlogSharePopover";
 import { Footer } from "@/components/layout/Footer";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { Clock, ArrowLeft, Tag, BookOpen, Share2 } from "lucide-react";
+import { Clock, ArrowLeft, Tag, BookOpen } from "lucide-react";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { getBlogPostBySlug, getBlogPosts } from "@/lib/data";
 import { buildBlogPostJsonLd } from "@/lib/seo";
-import { buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
+import { resolveMediaUrl } from "@/lib/media";
+import { absoluteUrl, buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 
 export async function generateMetadata({
   params,
@@ -26,10 +27,34 @@ export async function generateMetadata({
     });
   }
 
+  const canonicalUrl = post.canonicalUrl?.trim() || undefined;
+  const shareImage =
+    resolveMediaUrl({
+      url: post.ogImageUrl || post.coverImage,
+      path: post.ogImagePath,
+      fallback: post.coverImage || "",
+    }) || undefined;
+  const metadataTitle = post.metaTitle?.trim() || `${post.title} | AI Genius Lab Journal`;
+  const metadataDescription =
+    post.metaDescription?.trim() || post.excerpt || post.content?.slice(0, 160) || post.title;
+
   return buildSiteMetadata(`/blog/${post.slug}`, {
-    title: `${post.title} | AI Genius Lab Journal`,
-    description: post.excerpt || post.content?.slice(0, 160) || post.title,
-    image: post.coverImage || undefined,
+    title: metadataTitle,
+    description: metadataDescription,
+    image: shareImage,
+    canonicalUrl,
+    openGraphTitle: post.ogTitle?.trim() || post.metaTitle?.trim() || post.title,
+    openGraphDescription: post.ogDescription?.trim() || metadataDescription,
+    robots: post.noIndex
+      ? {
+          index: false,
+          follow: true,
+          googleBot: {
+            index: false,
+            follow: true,
+          },
+        }
+      : undefined,
   });
 }
 
@@ -44,6 +69,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   const related = (await getBlogPosts(6)).filter((entry) => entry.slug !== slug).slice(0, 2);
   const content = (post.content || post.excerpt || "").trim();
   const branding = await getSiteBranding();
+  const canonicalUrl = post.canonicalUrl?.trim() || absoluteUrl(`/blog/${post.slug}`);
   const articleJsonLd = buildBlogPostJsonLd(post, branding);
 
   return (
@@ -104,9 +130,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                   {post.readTime}
                 </span>
                 <span>{post.publishedAt}</span>
-                <button className="ml-auto flex items-center gap-1 opacity-60 transition-opacity hover:opacity-100">
-                  <Share2 className="h-4 w-4" />
-                </button>
+                <BlogSharePopover canonicalUrl={canonicalUrl} title={post.ogTitle || post.metaTitle || post.title} />
               </div>
             </div>
           </div>
@@ -181,7 +205,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             {post.tags.map((tag) => (
               <Link
                 key={tag}
-                href={`/blog?tag=${tag}`}
+                href={`/blog?tag=${encodeURIComponent(tag)}`}
                 className="rounded-lg border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground transition-all hover:border-blue-300 hover:text-blue-600 dark:hover:border-blue-700 dark:hover:text-blue-400"
               >
                 {tag}

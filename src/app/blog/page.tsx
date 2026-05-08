@@ -16,10 +16,21 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-export default async function BlogPage() {
+export default async function BlogPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tag?: string }>;
+}) {
   const posts = await getBlogPosts();
-  const allTags = Array.from(new Set(posts.flatMap((post) => post.tags)));
-  const [featured, ...rest] = posts;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const selectedTag = decodeURIComponent(resolvedSearchParams?.tag?.trim() ?? "");
+  const allTags = Array.from(new Set(posts.flatMap((post) => post.tags))).sort((left, right) =>
+    left.localeCompare(right)
+  );
+  const filteredPosts = selectedTag
+    ? posts.filter((post) => post.tags.some((tag) => tag.toLowerCase() === selectedTag.toLowerCase()))
+    : posts;
+  const [featured, ...rest] = filteredPosts;
 
   if (!featured) {
     return (
@@ -29,7 +40,9 @@ export default async function BlogPage() {
           <div className="mx-auto max-w-4xl px-4 py-24 text-center sm:px-6 lg:px-8">
             <h1 className="mb-3 text-3xl font-black text-foreground">The AI Journal is empty right now</h1>
             <p className="text-muted-foreground">
-              Publish your first database-backed blog post to populate this page.
+              {selectedTag
+                ? `No blog posts are tagged "${selectedTag}" yet.`
+                : "Publish your first database-backed blog post to populate this page."}
             </p>
           </div>
         </div>
@@ -54,6 +67,19 @@ export default async function BlogPage() {
             <p className="max-w-2xl text-muted-foreground">
               Deep dives on LLMs, ML research breakdowns, career guides, and tutorials from leading AI practitioners.
             </p>
+            {selectedTag ? (
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                  Filtering by: {selectedTag}
+                </span>
+                <Link
+                  href="/blog"
+                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-blue-600 dark:hover:text-blue-400"
+                >
+                  Clear topic filter
+                </Link>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -172,8 +198,12 @@ export default async function BlogPage() {
                   {allTags.map((tag) => (
                     <Link
                       key={tag}
-                      href={`/blog?tag=${tag}`}
-                      className="rounded-lg border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground transition-all hover:border-blue-300 hover:text-blue-600 dark:hover:border-blue-700 dark:hover:text-blue-400"
+                      href={`/blog?tag=${encodeURIComponent(tag)}`}
+                      className={`rounded-lg border px-3 py-1.5 text-xs transition-all ${
+                        selectedTag.toLowerCase() === tag.toLowerCase()
+                          ? "border-blue-300 bg-blue-50 font-semibold text-blue-600 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-400"
+                          : "border-border bg-muted text-muted-foreground hover:border-blue-300 hover:text-blue-600 dark:hover:border-blue-700 dark:hover:text-blue-400"
+                      }`}
                     >
                       {tag}
                     </Link>
@@ -199,7 +229,7 @@ export default async function BlogPage() {
               <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
                 <h3 className="mb-4 text-sm font-bold text-foreground">Popular Posts</h3>
                 <div className="space-y-4">
-                  {posts.map((post, index) => (
+                  {filteredPosts.map((post, index) => (
                     <Link key={post.id} href={`/blog/${post.slug}`} className="group flex items-start gap-3">
                       <span className="w-6 shrink-0 text-2xl font-black text-muted/40">{index + 1}</span>
                       <div>

@@ -134,14 +134,20 @@ export async function buildSiteMetadata(
     title?: string;
     description?: string;
     image?: string | null;
+    canonicalUrl?: string;
+    openGraphTitle?: string;
+    openGraphDescription?: string;
+    robots?: Metadata["robots"];
   }
 ): Promise<Metadata> {
   const branding = await getSiteBranding();
   const title = overrides?.title || `${branding.siteName} | Practical AI Education`;
   const description = overrides?.description || DEFAULT_SITE_DESCRIPTION;
   const image = overrides?.image || branding.logoUrl || undefined;
-  const canonical = absoluteUrl(path);
+  const canonical = overrides?.canonicalUrl || absoluteUrl(path);
   const iconUrl = `/icon${branding.assetVersion ? `?v=${branding.assetVersion}` : ""}`;
+  const openGraphTitle = overrides?.openGraphTitle || title;
+  const openGraphDescription = overrides?.openGraphDescription || description;
 
   return {
     metadataBase: getMetadataBase(),
@@ -152,28 +158,29 @@ export async function buildSiteMetadata(
     alternates: {
       canonical,
     },
+    robots: overrides?.robots,
     openGraph: {
       type: "website",
       locale: "en_US",
       url: canonical,
       siteName: branding.siteName,
-      title,
-      description,
+      title: openGraphTitle,
+      description: openGraphDescription,
       images: image
         ? [
             {
               url: image,
               width: 1200,
               height: 630,
-              alt: title,
+              alt: openGraphTitle,
             },
           ]
         : undefined,
     },
     twitter: {
       card: image ? "summary_large_image" : "summary",
-      title,
-      description,
+      title: openGraphTitle,
+      description: openGraphDescription,
       images: image ? [image] : undefined,
     },
     icons: {

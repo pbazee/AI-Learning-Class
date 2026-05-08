@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import {
@@ -45,6 +46,9 @@ interface MediaPlayerProps {
   onLoadedMetadata?: (duration: number) => void;
   onPause?: (snapshot: MediaPlayerSnapshot) => void;
   onEnded?: (snapshot: MediaPlayerSnapshot) => void;
+  fullscreenActions?: ReactNode;
+  fullscreenOverlay?: ReactNode;
+  onFullscreenChange?: (isFullscreen: boolean) => void;
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
@@ -72,6 +76,9 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
     onLoadedMetadata,
     onPause,
     onEnded,
+    fullscreenActions,
+    fullscreenOverlay,
+    onFullscreenChange,
   },
   ref
 ) {
@@ -170,11 +177,13 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const nextIsFullscreen = Boolean(document.fullscreenElement === containerRef.current);
+      setIsFullscreen(nextIsFullscreen);
+      onFullscreenChange?.(nextIsFullscreen);
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
+  }, [onFullscreenChange]);
 
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current;
@@ -318,6 +327,8 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
           ref={mediaRef as RefObject<HTMLAudioElement>}
           src={src}
           preload="auto"
+          controlsList="nodownload"
+          disableRemotePlayback
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
           onLoadStart={() => setIsLoading(true)}
@@ -326,6 +337,7 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
           onPause={handlePause}
           onEnded={handleEnded}
           onError={() => { setError("Failed to load audio"); setIsLoading(false); }}
+          onContextMenu={(event) => event.preventDefault()}
         />
 
         {/* Album art placeholder */}
@@ -440,6 +452,9 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
         className="h-full w-full object-contain"
         preload="auto"
         playsInline
+        controlsList="nodownload"
+        disablePictureInPicture
+        disableRemotePlayback
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onLoadStart={() => setIsLoading(true)}
@@ -449,6 +464,7 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
         onEnded={handleEnded}
         onError={() => { setError("Failed to load video"); setIsLoading(false); }}
         onClick={togglePlay}
+        onContextMenu={(event) => event.preventDefault()}
         style={{ cursor: isLocked ? "not-allowed" : "pointer" }}
       />
 
@@ -638,6 +654,23 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
       )}
 
       {/* ── Preview locked badge ── */}
+      {isFullscreen && fullscreenActions ? (
+        <div
+          className={cn(
+            "absolute right-4 top-4 z-30 flex items-center gap-2 transition-opacity duration-300",
+            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+          )}
+        >
+          {fullscreenActions}
+        </div>
+      ) : null}
+
+      {isFullscreen && fullscreenOverlay ? (
+        <div className="absolute inset-y-4 right-4 z-30 w-[min(24rem,calc(100%-2rem))]">
+          {fullscreenOverlay}
+        </div>
+      ) : null}
+
       {isLocked && (
         <div className="absolute right-4 top-4 z-30 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-300 backdrop-blur-sm">
           Preview Limited

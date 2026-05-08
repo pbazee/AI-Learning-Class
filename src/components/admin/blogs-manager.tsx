@@ -1,14 +1,16 @@
 "use client";
 
-import { startTransition, useState } from "react";
-import { Edit3, ImageIcon, Trash2 } from "lucide-react";
+import { startTransition, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Edit3, ImageIcon, Sparkles, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { deleteBlogAction, saveBlogAction } from "@/app/admin/actions";
+import { BlogAiAssistantDrawer } from "@/components/admin/blog-ai-assistant-drawer";
 import { MediaUploader } from "@/components/admin/media-uploader";
-import { RichTextEditor } from "@/components/admin/rich-text-editor";
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/admin/rich-text-editor";
 import {
   AdminButton,
   AdminCard,
+  AdminCheckbox,
   AdminInput,
   AdminModal,
   AdminPageIntro,
@@ -22,6 +24,7 @@ import {
   StatusPill,
 } from "@/components/admin/ui";
 import { useToast } from "@/components/ui/ToastProvider";
+import { estimateReadingTimeMinutes } from "@/lib/reading-time";
 
 type BlogRow = {
   id: string;
@@ -31,6 +34,15 @@ type BlogRow = {
   content: string;
   coverImage?: string | null;
   coverImagePath?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  focusKeyword?: string | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  ogImageUrl?: string | null;
+  ogImagePath?: string | null;
+  canonicalUrl?: string | null;
+  noIndex: boolean;
   authorId: string;
   authorName: string;
   categoryId?: string | null;
@@ -38,6 +50,29 @@ type BlogRow = {
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   tags: string[];
   publishedAt?: string | null;
+};
+
+type BlogFormState = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  coverImage: string;
+  coverImagePath: string;
+  metaTitle: string;
+  metaDescription: string;
+  focusKeyword: string;
+  ogTitle: string;
+  ogDescription: string;
+  ogImageUrl: string;
+  ogImagePath: string;
+  canonicalUrl: string;
+  noIndex: boolean;
+  authorId: string;
+  categoryId: string;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  tagsText: string;
 };
 
 function toLines(values: string[]) {
@@ -51,6 +86,70 @@ function fromLines(value: string) {
     .filter(Boolean);
 }
 
+function buildEmptyForm(authorId: string): BlogFormState {
+  return {
+    id: "",
+    title: "",
+    slug: "",
+    excerpt: "",
+    content: "<p></p>",
+    coverImage: "",
+    coverImagePath: "",
+    metaTitle: "",
+    metaDescription: "",
+    focusKeyword: "",
+    ogTitle: "",
+    ogDescription: "",
+    ogImageUrl: "",
+    ogImagePath: "",
+    canonicalUrl: "",
+    noIndex: false,
+    authorId,
+    categoryId: "",
+    status: "DRAFT",
+    tagsText: "",
+  };
+}
+
+function mapPostToForm(post: BlogRow): BlogFormState {
+  return {
+    id: post.id,
+    title: post.title,
+    slug: post.slug,
+    excerpt: post.excerpt || "",
+    content: post.content,
+    coverImage: post.coverImage || "",
+    coverImagePath: post.coverImagePath || "",
+    metaTitle: post.metaTitle || "",
+    metaDescription: post.metaDescription || "",
+    focusKeyword: post.focusKeyword || "",
+    ogTitle: post.ogTitle || "",
+    ogDescription: post.ogDescription || "",
+    ogImageUrl: post.ogImageUrl || "",
+    ogImagePath: post.ogImagePath || "",
+    canonicalUrl: post.canonicalUrl || "",
+    noIndex: post.noIndex,
+    authorId: post.authorId,
+    categoryId: post.categoryId || "",
+    status: post.status,
+    tagsText: toLines(post.tags),
+  };
+}
+
+function CharacterCounter({
+  current,
+  limit,
+}: {
+  current: number;
+  limit: number;
+}) {
+  return (
+    <span className={current > limit ? "text-rose-400" : "text-slate-500"}>
+      {current}/{limit}
+    </span>
+  );
+}
+
 export function BlogsManager({
   posts,
   categoryOptions,
@@ -62,54 +161,61 @@ export function BlogsManager({
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({
-    id: "",
-    title: "",
-    slug: "",
-    excerpt: "",
-    content: "<p></p>",
-    coverImage: "",
-    coverImagePath: "",
-    authorId: authorOptions[0]?.value || "",
-    categoryId: "",
-    status: "DRAFT" as "DRAFT" | "PUBLISHED" | "ARCHIVED",
-    tagsText: "",
-  });
+  const [seoOpen, setSeoOpen] = useState(true);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [selectedTextSnapshot, setSelectedTextSnapshot] = useState("");
+  const [ogTitleDirty, setOgTitleDirty] = useState(false);
+  const [ogDescriptionDirty, setOgDescriptionDirty] = useState(false);
+  const [form, setForm] = useState<BlogFormState>(() => buildEmptyForm(authorOptions[0]?.value || ""));
+  const editorRef = useRef<RichTextEditorHandle | null>(null);
   const router = useRouter();
   const { toast } = useToast();
 
+  const readingTimeMinutes = useMemo(() => estimateReadingTimeMinutes(form.content), [form.content]);
+
   function openCreate() {
-    setForm({
-      id: "",
-      title: "",
-      slug: "",
-      excerpt: "",
-      content: "<p></p>",
-      coverImage: "",
-      coverImagePath: "",
-      authorId: authorOptions[0]?.value || "",
-      categoryId: "",
-      status: "DRAFT",
-      tagsText: "",
-    });
+    setForm(buildEmptyForm(authorOptions[0]?.value || ""));
+    setSeoOpen(true);
+    setOgTitleDirty(false);
+    setOgDescriptionDirty(false);
+    setAiOpen(false);
     setOpen(true);
   }
 
   function openEdit(post: BlogRow) {
-    setForm({
-      id: post.id,
-      title: post.title,
-      slug: post.slug,
-      excerpt: post.excerpt || "",
-      content: post.content,
-      coverImage: post.coverImage || "",
-      coverImagePath: post.coverImagePath || "",
-      authorId: post.authorId,
-      categoryId: post.categoryId || "",
-      status: post.status,
-      tagsText: toLines(post.tags),
-    });
+    setForm(mapPostToForm(post));
+    setSeoOpen(true);
+    setOgTitleDirty(Boolean(post.ogTitle && post.ogTitle !== (post.metaTitle || "")));
+    setOgDescriptionDirty(Boolean(post.ogDescription && post.ogDescription !== (post.metaDescription || "")));
+    setAiOpen(false);
     setOpen(true);
+  }
+
+  function closeModal() {
+    setOpen(false);
+    setAiOpen(false);
+  }
+
+  function handleMetaTitleChange(nextValue: string) {
+    setForm((current) => ({
+      ...current,
+      metaTitle: nextValue,
+      ogTitle:
+        !ogTitleDirty || !current.ogTitle || current.ogTitle === current.metaTitle
+          ? nextValue
+          : current.ogTitle,
+    }));
+  }
+
+  function handleMetaDescriptionChange(nextValue: string) {
+    setForm((current) => ({
+      ...current,
+      metaDescription: nextValue,
+      ogDescription:
+        !ogDescriptionDirty || !current.ogDescription || current.ogDescription === current.metaDescription
+          ? nextValue
+          : current.ogDescription,
+    }));
   }
 
   function handleSave() {
@@ -123,6 +229,15 @@ export function BlogsManager({
         content: form.content,
         coverImage: form.coverImage,
         coverImagePath: form.coverImagePath,
+        metaTitle: form.metaTitle,
+        metaDescription: form.metaDescription,
+        focusKeyword: form.focusKeyword,
+        ogTitle: form.ogTitle,
+        ogDescription: form.ogDescription,
+        ogImageUrl: form.ogImageUrl,
+        ogImagePath: form.ogImagePath,
+        canonicalUrl: form.canonicalUrl,
+        noIndex: form.noIndex,
         authorId: form.authorId,
         categoryId: form.categoryId || null,
         status: form.status,
@@ -131,7 +246,7 @@ export function BlogsManager({
       setBusy(false);
       toast(result.message, result.success ? "success" : "error");
       if (result.success) {
-        setOpen(false);
+        closeModal();
         router.refresh();
       }
     });
@@ -152,11 +267,22 @@ export function BlogsManager({
     });
   }
 
+  function openAiDrawer() {
+    const selectedText = editorRef.current?.getSelectedText() || "";
+    setSelectedTextSnapshot(selectedText);
+    setAiOpen(true);
+  }
+
+  function applyMetaDescription(value: string) {
+    handleMetaDescriptionChange(value.slice(0, 160));
+    toast("Meta description updated.", "success");
+  }
+
   return (
     <div className="space-y-6">
       <AdminPageIntro
         title="Blogs"
-        description="Publish research breakdowns, career articles, and launch content with rich text, authors, and featured images."
+        description="Publish research breakdowns, career articles, and launch content with rich text, structured SEO metadata, and AI-assisted editorial workflows."
         actions={<CreateButton onClick={openCreate}>New Blog Post</CreateButton>}
       />
 
@@ -168,7 +294,11 @@ export function BlogsManager({
       </AdminStatGrid>
 
       {posts.length === 0 ? (
-        <EmptyState title="No posts yet" description="Write your first article to populate the storefront blog and homepage journal section." action={<CreateButton onClick={openCreate}>Create Blog Post</CreateButton>} />
+        <EmptyState
+          title="No posts yet"
+          description="Write your first article to populate the storefront blog and homepage journal section."
+          action={<CreateButton onClick={openCreate}>Create Blog Post</CreateButton>}
+        />
       ) : (
         <AdminCard className="overflow-hidden">
           <div className="overflow-x-auto">
@@ -219,13 +349,15 @@ export function BlogsManager({
 
       <AdminModal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeModal}
         title={form.id ? "Edit Blog Post" : "Create Blog Post"}
-        description="Draft rich content, choose the author and category, then publish when it is ready."
-        size="xl"
+        description="Draft rich content, add metadata for search and social sharing, then publish when the post is ready."
+        size="2xl"
+        scrollBody
+        stickyFooter
         footer={
           <div className="flex justify-end gap-3">
-            <AdminButton type="button" variant="secondary" onClick={() => setOpen(false)}>
+            <AdminButton type="button" variant="secondary" onClick={closeModal}>
               Cancel
             </AdminButton>
             <AdminButton type="button" busy={busy} onClick={handleSave}>
@@ -299,12 +431,205 @@ export function BlogsManager({
             </div>
           </div>
 
-          <div>
-            <FieldLabel>Content</FieldLabel>
-            <RichTextEditor value={form.content} onChange={(value) => setForm((current) => ({ ...current, content: value }))} />
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <FieldLabel>Content</FieldLabel>
+                <p className="text-xs text-slate-500">
+                  Reading time: {readingTimeMinutes} min at roughly 200 words per minute.
+                </p>
+              </div>
+              <AdminButton
+                type="button"
+                variant="secondary"
+                icon={<Sparkles className="h-4 w-4" />}
+                onClick={openAiDrawer}
+              >
+                Ask AI
+              </AdminButton>
+            </div>
+            <RichTextEditor
+              ref={editorRef}
+              value={form.content}
+              onChange={(value) => setForm((current) => ({ ...current, content: value }))}
+              toolbarExtras={
+                <AdminButton
+                  type="button"
+                  variant="secondary"
+                  icon={<Sparkles className="h-4 w-4" />}
+                  onClick={openAiDrawer}
+                >
+                  Ask AI
+                </AdminButton>
+              }
+            />
           </div>
+
+          <AdminCard className="overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setSeoOpen((current) => !current)}
+              className="flex w-full items-center justify-between gap-4 border-b border-white/10 px-5 py-4 text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-white">SEO &amp; Metadata</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Control search snippets, social sharing cards, canonical URLs, and indexing behavior.
+                </p>
+              </div>
+              {seoOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+            </button>
+
+            {seoOpen ? (
+              <div className="grid gap-5 p-5 md:grid-cols-2">
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <FieldLabel>Meta Title</FieldLabel>
+                    <CharacterCounter current={form.metaTitle.length} limit={60} />
+                  </div>
+                  <AdminInput
+                    maxLength={60}
+                    value={form.metaTitle}
+                    onChange={(event) => handleMetaTitleChange(event.target.value)}
+                    placeholder="Optimized search title"
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Focus Keyword</FieldLabel>
+                  <AdminInput
+                    value={form.focusKeyword}
+                    onChange={(event) => setForm((current) => ({ ...current, focusKeyword: event.target.value }))}
+                    placeholder="Primary keyword target"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <FieldLabel>Meta Description</FieldLabel>
+                    <CharacterCounter current={form.metaDescription.length} limit={160} />
+                  </div>
+                  <AdminTextarea
+                    rows={4}
+                    maxLength={160}
+                    value={form.metaDescription}
+                    onChange={(event) => handleMetaDescriptionChange(event.target.value)}
+                    placeholder="A concise search result summary"
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <FieldLabel>OG Title</FieldLabel>
+                    <CharacterCounter current={form.ogTitle.length} limit={60} />
+                  </div>
+                  <AdminInput
+                    maxLength={60}
+                    value={form.ogTitle}
+                    onChange={(event) => {
+                      setOgTitleDirty(true);
+                      setForm((current) => ({ ...current, ogTitle: event.target.value }));
+                    }}
+                    placeholder="Defaults from Meta Title"
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-blue">
+                    Reading Time
+                  </p>
+                  <p className="mt-2 text-3xl font-black text-white">{readingTimeMinutes} min</p>
+                  <p className="mt-2 text-sm text-slate-400">
+                    Auto-calculated from the current word count at roughly 200 WPM.
+                  </p>
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <FieldLabel>OG Description</FieldLabel>
+                    <CharacterCounter current={form.ogDescription.length} limit={160} />
+                  </div>
+                  <AdminTextarea
+                    rows={4}
+                    maxLength={160}
+                    value={form.ogDescription}
+                    onChange={(event) => {
+                      setOgDescriptionDirty(true);
+                      setForm((current) => ({ ...current, ogDescription: event.target.value }));
+                    }}
+                    placeholder="Defaults from Meta Description"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <MediaUploader
+                    label="OG Image"
+                    hint="Separate social share image. Recommended size: 1200 x 630px."
+                    folder="blogs/og"
+                    accept="image/*"
+                    value={{
+                      url: form.ogImageUrl,
+                      path: form.ogImagePath,
+                      fileName: form.title || "Open Graph image",
+                      mimeType: "image/*",
+                    }}
+                    onUploaded={(file) => setForm((current) => ({ ...current, ogImageUrl: file.url, ogImagePath: file.path }))}
+                    onRemoved={() => setForm((current) => ({ ...current, ogImageUrl: "", ogImagePath: "" }))}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <FieldLabel>Canonical URL</FieldLabel>
+                  <AdminInput
+                    value={form.canonicalUrl}
+                    onChange={(event) => setForm((current) => ({ ...current, canonicalUrl: event.target.value }))}
+                    placeholder="Leave blank to use this post's own URL"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <AdminCheckbox
+                    checked={form.noIndex}
+                    onChange={(value) => setForm((current) => ({ ...current, noIndex: value }))}
+                    label="Exclude this post from search engines"
+                    hint="Adds a noindex robots directive while still allowing the post to exist on the site."
+                  />
+                </div>
+              </div>
+            ) : null}
+          </AdminCard>
         </div>
       </AdminModal>
+
+      <BlogAiAssistantDrawer
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title={form.title}
+        excerpt={form.excerpt}
+        content={form.content}
+        focusKeyword={form.focusKeyword}
+        metaTitle={form.metaTitle}
+        metaDescription={form.metaDescription}
+        selectedText={selectedTextSnapshot}
+        onApplyTitle={(value) => {
+          setForm((current) => ({ ...current, title: value }));
+          toast("Post title updated from AI suggestion.", "success");
+        }}
+        onApplyMetaTitle={(value) => {
+          handleMetaTitleChange(value.slice(0, 60));
+          toast("Meta title updated from AI suggestion.", "success");
+        }}
+        onApplyMetaDescription={applyMetaDescription}
+        onApplyTags={(values) => {
+          setForm((current) => ({ ...current, tagsText: values.join("\n") }));
+          toast("Tags updated from AI suggestion.", "success");
+        }}
+        onReplaceSelection={(value) => {
+          editorRef.current?.replaceSelection(value);
+          setSelectedTextSnapshot("");
+          toast("Selected text replaced with the AI suggestion.", "success");
+        }}
+      />
     </div>
   );
 }

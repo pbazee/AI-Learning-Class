@@ -8,6 +8,7 @@ import { AskAI } from "@/components/courses/AskAI";
 import { ExpiredSubscriptionNotice } from "@/components/courses/ExpiredSubscriptionNotice";
 import { CoursePreviewModal } from "@/components/courses/CoursePreviewModal";
 import { CourseReviewsSection } from "@/components/courses/CourseReviewsSection";
+import { CourseSharePopover } from "@/components/courses/CourseSharePopover";
 import { useToast } from "@/components/ui/ToastProvider";
 import { DEFAULT_ASK_AI_NAME } from "@/lib/site";
 import {
@@ -46,6 +47,45 @@ import type { Course, CourseAccessState, CoursePreviewState } from "@/types";
 const thumbnailFallback =
   "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop";
 
+function getPrimaryLessonAsset(lesson: NonNullable<Course["modules"]>[number]["lessons"][number]) {
+  const assets = lesson.assets ?? [];
+  if (assets.length === 0) {
+    return null;
+  }
+
+  return (
+    [...assets].sort((left, right) => {
+      if (left.isPrimary !== right.isPrimary) {
+        return left.isPrimary ? -1 : 1;
+      }
+
+      return left.sortOrder - right.sortOrder;
+    })[0] ?? null
+  );
+}
+
+function getPrimaryAssetBadge(lesson: NonNullable<Course["modules"]>[number]["lessons"][number]) {
+  const primaryAsset = getPrimaryLessonAsset(lesson);
+
+  if (primaryAsset) {
+    return primaryAsset.assetType;
+  }
+
+  return lesson.type === "VIDEO" || lesson.type === "AUDIO" || lesson.type === "PDF"
+    ? lesson.type
+    : null;
+}
+
+function getSupplementaryAssetCount(lesson: NonNullable<Course["modules"]>[number]["lessons"][number]) {
+  const assets = lesson.assets ?? [];
+  if (assets.length <= 1) {
+    return 0;
+  }
+
+  const primaryAsset = getPrimaryLessonAsset(lesson);
+  return assets.filter((asset) => asset.id !== primaryAsset?.id).length;
+}
+
 export function CourseDetailClient({
   course,
   viewer,
@@ -53,6 +93,7 @@ export function CourseDetailClient({
   previewState,
   askAiEnabled,
   askAiAssistantLabel = DEFAULT_ASK_AI_NAME,
+  shareUrl,
   expiredAccess,
 }: {
   course: Course;
@@ -61,6 +102,7 @@ export function CourseDetailClient({
   previewState?: CoursePreviewState | null;
   askAiEnabled: boolean;
   askAiAssistantLabel?: string;
+  shareUrl: string;
   expiredAccess?: {
     expiredAt?: string | null;
     planSlug?: string | null;
@@ -71,10 +113,14 @@ export function CourseDetailClient({
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const modules = course.modules ?? [];
+  const requirements = (course.requirements ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean);
   const autoEnrollTriggeredRef = useRef(false);
   const [expandedModule, setExpandedModule] = useState<string | null>(modules[0]?.id ?? null);
   const [askAiOpen, setAskAiOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLessonId, setPreviewLessonId] = useState<string | null>(null);
   const [enrolling, setEnrolling] = useState(false);
   const { addItem, isInCart, removeItem } = useCartStore();
   const inCart = isInCart(course.id);
@@ -187,6 +233,11 @@ export function CourseDetailClient({
     router.push(classroomHref);
   }
 
+  function openPreviewForLesson(lessonId?: string | null) {
+    setPreviewLessonId(lessonId ?? null);
+    setPreviewOpen(true);
+  }
+
   const discount =
     course.originalPrice && course.originalPrice > course.price
       ? Math.round((1 - course.price / course.originalPrice) * 100)
@@ -196,7 +247,7 @@ export function CourseDetailClient({
     return (
       <button
         type="button"
-        onClick={() => setPreviewOpen(true)}
+        onClick={() => openPreviewForLesson(null)}
         disabled={!hasPreviewContent}
         className={cn(
           "group relative flex aspect-video w-full items-center justify-center overflow-hidden bg-slate-950 transition-all",
@@ -264,6 +315,10 @@ export function CourseDetailClient({
                     <p className="mt-3 text-base leading-7 text-muted-foreground">
                       {course.shortDescription || course.description}
                     </p>
+                  </div>
+
+                  <div className="flex justify-start">
+                    <CourseSharePopover shareUrl={shareUrl} title={course.title} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-sm text-muted-foreground">
@@ -403,6 +458,28 @@ export function CourseDetailClient({
                 </div>
               </details>
 
+              {requirements.length > 0 ? (
+                <details className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm" open>
+                  <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-left">
+                    <div>
+                      <p className="text-lg font-bold text-foreground">Requirements</p>
+                      <p className="mt-1 text-sm text-muted-foreground">What learners should have before starting this course.</p>
+                    </div>
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  </summary>
+                  <div className="border-t border-border px-5 py-4">
+                    <ul className="space-y-3 text-sm text-muted-foreground">
+                      {requirements.map((item) => (
+                        <li key={item} className="flex items-start gap-3">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-blue" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </details>
+              ) : null}
+
               <details className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm" open>
                 <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-left">
                   <div>
@@ -433,41 +510,64 @@ export function CourseDetailClient({
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           </summary>
                           <div className="border-t border-border">
-                            {module.lessons.map((lesson) => (
-                              <div
-                                key={lesson.id}
-                                className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0"
-                              >
-                                <div className="flex min-w-0 items-center gap-3">
-                                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted">
-                                    {lesson.type === "QUIZ" ? (
-                                      <BarChart3 className="h-3.5 w-3.5 text-primary-blue" />
-                                    ) : lesson.type === "PROJECT" || lesson.type === "ASSIGNMENT" ? (
-                                      <Award className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                                    ) : lesson.type === "PDF" || lesson.type === "TEXT" ? (
-                                      <FileText className="h-3.5 w-3.5 text-primary-blue" />
-                                    ) : (
-                                      <Play className="h-3.5 w-3.5 text-muted-foreground" />
-                                    )}
+                            {module.lessons.map((lesson) => {
+                              const primaryAssetBadge = getPrimaryAssetBadge(lesson);
+                              const supplementaryAssetCount = getSupplementaryAssetCount(lesson);
+
+                              return (
+                                <div
+                                  key={lesson.id}
+                                  className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted">
+                                      {lesson.type === "QUIZ" ? (
+                                        <BarChart3 className="h-3.5 w-3.5 text-primary-blue" />
+                                      ) : lesson.type === "PROJECT" || lesson.type === "ASSIGNMENT" ? (
+                                        <Award className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                      ) : lesson.type === "PDF" || lesson.type === "TEXT" ? (
+                                        <FileText className="h-3.5 w-3.5 text-primary-blue" />
+                                      ) : (
+                                        <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm text-foreground">{lesson.title}</span>
+                                        {primaryAssetBadge ? (
+                                          <span className="rounded-full border border-primary-blue/20 bg-primary-blue/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                                            {primaryAssetBadge}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      {supplementaryAssetCount > 0 ? (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          + {supplementaryAssetCount} resource{supplementaryAssetCount === 1 ? "" : "s"}
+                                        </p>
+                                      ) : null}
+                                    </div>
                                   </div>
-                                  <span className="text-sm text-foreground">{lesson.title}</span>
+                                  <div className="flex items-center gap-2">
+                                    {lesson.isPreview ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openPreviewForLesson(lesson.id)}
+                                        className="rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-xs font-semibold text-primary-blue transition hover:bg-primary-blue/15"
+                                      >
+                                        Preview
+                                      </button>
+                                    ) : (
+                                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                                    )}
+                                    {(lesson.duration ?? 0) > 0 ? (
+                                      <span className="text-xs text-muted-foreground">
+                                        {Math.floor((lesson.duration ?? 0) / 60)}m
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  {lesson.isPreview ? (
-                                    <span className="rounded-full bg-primary-blue/10 px-2 py-0.5 text-xs text-primary-blue">
-                                      Preview
-                                    </span>
-                                  ) : (
-                                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                                  )}
-                                  {(lesson.duration ?? 0) > 0 ? (
-                                    <span className="text-xs text-muted-foreground">
-                                      {Math.floor((lesson.duration ?? 0) / 60)}m
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </details>
                       ))}
@@ -564,6 +664,7 @@ export function CourseDetailClient({
                   <span className="flex items-center gap-1 text-slate-400">
                     <Globe className="h-4 w-4" /> {course.language || "English"}
                   </span>
+                  <CourseSharePopover shareUrl={shareUrl} title={course.title} className="ml-auto" />
                 </div>
 
                 <div className="mb-6 flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -612,6 +713,20 @@ export function CourseDetailClient({
                     {course.description}
                   </div>
                 </div>
+
+                {requirements.length > 0 ? (
+                  <div>
+                    <h2 className="mb-5 text-2xl font-black text-foreground">Requirements</h2>
+                    <ul className="max-w-4xl space-y-3 text-base text-muted-foreground">
+                      {requirements.map((item) => (
+                        <li key={item} className="flex items-start gap-3">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-blue" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
 
                 <div>
                   <h2 className="mb-5 text-2xl font-black text-foreground">What You&apos;ll Learn</h2>
@@ -666,40 +781,64 @@ export function CourseDetailClient({
 
                           {expandedModule === module.id && (
                             <div className="border-t border-border">
-                              {module.lessons.map((lesson) => (
-                                <div
-                                  key={lesson.id}
-                                  className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0"
-                                >
-                                  <div className="flex min-w-0 items-center gap-3">
-                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted">
-                                      {lesson.type === "QUIZ" ? (
-                                        <BarChart3 className="h-3.5 w-3.5 text-primary-blue" />
-                                      ) : lesson.type === "PROJECT" || lesson.type === "ASSIGNMENT" ? (
-                                        <Award className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                                      ) : lesson.type === "PDF" || lesson.type === "TEXT" ? (
-                                        <FileText className="h-3.5 w-3.5 text-primary-blue" />
+                              {module.lessons.map((lesson) => {
+                                const primaryAssetBadge = getPrimaryAssetBadge(lesson);
+                                const supplementaryAssetCount = getSupplementaryAssetCount(lesson);
+
+                                return (
+                                  <div
+                                    key={lesson.id}
+                                    className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0"
+                                  >
+                                    <div className="flex min-w-0 items-center gap-3">
+                                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted">
+                                        {lesson.type === "QUIZ" ? (
+                                          <BarChart3 className="h-3.5 w-3.5 text-primary-blue" />
+                                        ) : lesson.type === "PROJECT" || lesson.type === "ASSIGNMENT" ? (
+                                          <Award className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                        ) : lesson.type === "PDF" || lesson.type === "TEXT" ? (
+                                          <FileText className="h-3.5 w-3.5 text-primary-blue" />
+                                        ) : (
+                                          <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <span className="truncate text-sm text-foreground">{lesson.title}</span>
+                                          {primaryAssetBadge ? (
+                                            <span className="rounded-full border border-primary-blue/20 bg-primary-blue/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                                              {primaryAssetBadge}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        {supplementaryAssetCount > 0 ? (
+                                          <p className="mt-1 text-xs text-muted-foreground">
+                                            + {supplementaryAssetCount} resource{supplementaryAssetCount === 1 ? "" : "s"}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {lesson.isPreview ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => openPreviewForLesson(lesson.id)}
+                                          className="rounded-full border border-primary-blue/20 bg-primary-blue/10 px-3 py-1 text-xs font-semibold text-primary-blue transition hover:bg-primary-blue/15"
+                                        >
+                                          Preview
+                                        </button>
                                       ) : (
-                                        <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                                      )}
+                                      {(lesson.duration ?? 0) > 0 && (
+                                        <span className="text-xs text-muted-foreground">
+                                          {Math.floor((lesson.duration ?? 0) / 60)}m
+                                        </span>
                                       )}
                                     </div>
-                                    <span className="truncate text-sm text-foreground">{lesson.title}</span>
-                                    {lesson.isPreview && (
-                                      <span className="rounded-full bg-primary-blue/10 px-2 py-0.5 text-xs text-primary-blue">
-                                        Preview
-                                      </span>
-                                    )}
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    {!lesson.isPreview && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
-                                    {(lesson.duration ?? 0) > 0 && (
-                                      <span className="text-xs text-muted-foreground">
-                                        {Math.floor((lesson.duration ?? 0) / 60)}m
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -813,7 +952,7 @@ export function CourseDetailClient({
                       {[
                         `${formatDuration(course.totalDuration)} on-demand video`,
                         `${course.totalLessons} lessons & exercises`,
-                        "Downloadable resources & code",
+                        "Guided resources & code walk-throughs",
                         `${askAiAssistantLabel} learning assistant`,
                         "Certificate of completion",
                         "Lifetime access",
@@ -836,6 +975,7 @@ export function CourseDetailClient({
         accessActionLabel={previewAccessActionLabel}
         course={course}
         hasAccess={hasAccess}
+        initialPreviewLessonId={previewLessonId}
         lockedActionLabel={previewLockedActionLabel}
         lockedActionPending={enrolling}
         lockedActionVariant={!isFreeCourse && inCart ? "cart" : "primary"}

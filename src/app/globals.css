@@ -163,6 +163,30 @@ select {
   @apply rounded-md border border-input bg-transparent px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
 }
 
+.auth-label {
+  color: #334155;
+}
+
+.auth-helper-text {
+  color: #334155;
+}
+
+.auth-input {
+  color: #0f172a;
+}
+
+.auth-input::placeholder {
+  color: #475569;
+  opacity: 1;
+}
+
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover,
+.auth-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #0f172a;
+  box-shadow: inset 0 0 0 1000px #f8fafc;
+}
+
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

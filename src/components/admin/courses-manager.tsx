@@ -1,9 +1,9 @@
 "use client";
 
-import { startTransition, useMemo, useState } from "react";
-import { ChevronDown, Edit3, FileAudio, FileText, FileVideo, Filter, Search, Trash2, UploadCloud, X } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { deleteCourseAction, deleteCourseAssetAction, saveCourseAction, saveCourseAssetAction } from "@/app/admin/actions";
+import { startTransition, useEffect, useMemo, useState } from "react";
+import { ChevronDown, Edit3, Filter, Search, Trash2, UploadCloud, X } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { deleteCourseAction, saveCourseAction } from "@/app/admin/actions";
 import { CourseBulkImportModal } from "@/components/admin/course-bulk-import-modal";
 import {
   CourseStructureBuilder,
@@ -11,7 +11,8 @@ import {
   normalizeLessonType,
   type CourseSectionDraft,
 } from "@/components/admin/course-structure-builder";
-import { MediaUploader, type UploadedAsset } from "@/components/admin/media-uploader";
+import { MediaUploader } from "@/components/admin/media-uploader";
+import type { LessonAssetDraft } from "@/components/admin/lesson-assets-uploader";
 import {
   AdminButton,
   AdminCard,
@@ -31,17 +32,6 @@ import {
 import { useToast } from "@/components/ui/ToastProvider";
 import { formatPrice, levelLabel } from "@/lib/utils";
 
-type CourseAssetRow = {
-  id: string;
-  type: "AUDIO" | "VIDEO" | "PDF";
-  title: string;
-  fileName: string;
-  url: string;
-  storagePath: string;
-  mimeType?: string | null;
-  sizeBytes?: number | null;
-};
-
 type CourseLessonRow = {
   id: string;
   title: string;
@@ -54,9 +44,9 @@ type CourseLessonRow = {
   isPreview: boolean;
   previewPages?: number | null;
   previewMinutes?: number | null;
-  allowDownload: boolean;
   sellSeparately: boolean;
   order: number;
+  assets?: LessonAssetDraft[];
 };
 
 type CourseSectionRow = {
@@ -95,7 +85,16 @@ type CourseRow = {
   tags: string[];
   whatYouLearn: string[];
   requirements: string[];
-  assets: CourseAssetRow[];
+  assets: Array<{
+    id: string;
+    type: "AUDIO" | "VIDEO" | "PDF";
+    title: string;
+    fileName: string;
+    url: string;
+    storagePath: string;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
+  }>;
   curriculum: CourseSectionRow[];
   hasSubscriptionAccess: boolean;
 };
@@ -141,12 +140,6 @@ function fromLines(value: string) {
     .split(/\r?\n|,/)
     .map((entry) => entry.trim())
     .filter(Boolean);
-}
-
-function getAssetIcon(type: CourseAssetRow["type"]) {
-  if (type === "AUDIO") return FileAudio;
-  if (type === "VIDEO") return FileVideo;
-  return FileText;
 }
 
 function getClientErrorMessage(error: unknown) {
@@ -240,9 +233,9 @@ function mapCourseToForm(course: CourseRow): CourseFormState {
                   isPreview: lesson.isPreview,
                   previewPages: lesson.previewPages != null ? String(lesson.previewPages) : "",
                   previewMinutes: lesson.previewMinutes != null ? String(lesson.previewMinutes) : "",
-                  allowDownload: lesson.allowDownload,
                   sellSeparately: lesson.sellSeparately,
                   isExpanded: false,
+                  assets: lesson.assets ?? [],
                 })),
             }))
         : [createEmptySection()],
@@ -276,7 +269,7 @@ export function CoursesManager({
   const [editorOpen, setEditorOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<"details" | "structure" | "downloads">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "structure">("details");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("ALL");
   const [levelFilter, setLevelFilter] = useState<LevelFilter>("ALL");
@@ -284,23 +277,43 @@ export function CoursesManager({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [form, setForm] = useState<CourseFormState>(() => buildEmptyForm(categoryOptions));
-  const [assetDraft, setAssetDraft] = useState({
-    title: "",
-    type: "VIDEO" as "AUDIO" | "VIDEO" | "PDF",
-  });
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+
+    if (!editId || (editorOpen && form.id === editId)) {
+      return;
+    }
+
+    const course = courses.find((entry) => entry.id === editId);
+    if (!course) {
+      return;
+    }
+
+    setForm(mapCourseToForm(course));
+    setActiveTab("details");
+    setEditorOpen(true);
+  }, [courses, editorOpen, form.id, searchParams]);
+
+  function closeEditor() {
+    setEditorOpen(false);
+
+    if (searchParams.get("edit")) {
+      router.replace("/admin/courses");
+    }
+  }
 
   function openCreate() {
     setForm(buildEmptyForm(categoryOptions));
-    setAssetDraft({ title: "", type: "VIDEO" });
     setActiveTab("details");
     setEditorOpen(true);
   }
 
   function openEdit(course: CourseRow) {
     setForm(mapCourseToForm(course));
-    setAssetDraft({ title: "", type: "VIDEO" });
     setActiveTab("details");
     setEditorOpen(true);
   }
@@ -356,8 +369,19 @@ export function CoursesManager({
               isPreview: lesson.isPreview,
               previewPages: lesson.previewPages ? Number(lesson.previewPages) : undefined,
               previewMinutes: lesson.previewMinutes ? Number(lesson.previewMinutes) : undefined,
-              allowDownload: lesson.allowDownload,
               sellSeparately: lesson.sellSeparately,
+              assets: lesson.assets.map((asset, assetIndex) => ({
+                id: asset.id || undefined,
+                assetType: asset.assetType,
+                assetUrl: asset.assetUrl,
+                assetPath: asset.assetPath,
+                fileName: asset.fileName,
+                mimeType: asset.mimeType,
+                sizeBytes: asset.sizeBytes,
+                title: asset.title,
+                isPrimary: assetIndex === 0,
+                sortOrder: assetIndex,
+              })),
               order: lessonIndex,
             })),
           })),
@@ -365,7 +389,7 @@ export function CoursesManager({
 
         toast(result.message, result.success ? "success" : "error");
         if (result.success) {
-          setEditorOpen(false);
+          closeEditor();
           router.refresh();
         }
       } catch (error) {
@@ -395,61 +419,6 @@ export function CoursesManager({
       }
     });
   }
-
-  function handleDeleteAsset(id: string) {
-    const confirmed = window.confirm("Delete this uploaded course asset?");
-    if (!confirmed) return;
-
-    setBusy(true);
-    startTransition(async () => {
-      try {
-        const result = await deleteCourseAssetAction(id);
-        toast(result.message, result.success ? "success" : "error");
-        if (result.success) {
-          router.refresh();
-        }
-      } catch (error) {
-        toast(getClientErrorMessage(error), "error");
-      } finally {
-        setBusy(false);
-      }
-    });
-  }
-
-  function handleAssetUploaded(file: UploadedAsset) {
-    if (!form.id) {
-      toast("Save the course first, then upload downloadable assets.", "error");
-      return;
-    }
-
-    setBusy(true);
-    startTransition(async () => {
-      try {
-        const result = await saveCourseAssetAction({
-          courseId: form.id,
-          type: assetDraft.type,
-          title: assetDraft.title || file.fileName,
-          fileName: file.fileName,
-          storagePath: file.path,
-          url: file.url,
-          mimeType: file.mimeType,
-          sizeBytes: file.sizeBytes,
-          order: 0,
-        });
-        toast(result.message, result.success ? "success" : "error");
-        if (result.success) {
-          setAssetDraft({ title: "", type: "VIDEO" });
-          router.refresh();
-        }
-      } catch (error) {
-        toast(getClientErrorMessage(error), "error");
-      } finally {
-        setBusy(false);
-      }
-    });
-  }
-
-  const activeCourse = courses.find((course) => course.id === form.id);
 
   const filteredCourses = useMemo(() => {
     return courses.filter((course) => {
@@ -734,16 +703,16 @@ export function CoursesManager({
 
       <AdminModal
         open={editorOpen}
-        onClose={() => setEditorOpen(false)}
+        onClose={closeEditor}
         title={form.id ? "Course Editor" : "Create Course"}
-        description="Configure the course details, build the curriculum, and manage supplemental downloads from one workspace."
+        description="Configure the course details and build the curriculum from one workspace."
         size="xl"
         scrollBody
         stickyFooter
         bodyClassName="pb-8"
         footer={
           <div className="flex flex-wrap justify-end gap-3">
-            <AdminButton type="button" variant="secondary" onClick={() => setEditorOpen(false)}>
+            <AdminButton type="button" variant="secondary" onClick={closeEditor}>
               Cancel
             </AdminButton>
             <AdminButton type="button" busy={busy} onClick={handleSave}>
@@ -755,14 +724,14 @@ export function CoursesManager({
         <div className="space-y-6">
           <div className="-mx-2 sticky top-0 z-10 rounded-[28px] border border-white/10 bg-[#04070d]/95 p-2 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.95)] backdrop-blur-xl">
             <div className="flex flex-wrap gap-2">
-              {(["details", "structure", "downloads"] as const).map((tab) => (
+              {(["details", "structure"] as const).map((tab) => (
                 <AdminButton
                   key={tab}
                   type="button"
                   variant={activeTab === tab ? "primary" : "secondary"}
                   onClick={() => setActiveTab(tab)}
                 >
-                  {tab === "details" ? "Details" : tab === "structure" ? "Course Structure" : "Course Assets"}
+                  {tab === "details" ? "Details" : "Course Structure"}
                 </AdminButton>
               ))}
             </div>
@@ -993,84 +962,7 @@ export function CoursesManager({
               sections={form.curriculum}
               onChange={(curriculum) => setForm((current) => ({ ...current, curriculum }))}
             />
-          ) : (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-lg font-black text-white">Course Assets</h3>
-                <p className="mt-1 text-sm text-slate-400">
-                  Upload supplemental downloads that sit alongside the lesson curriculum.
-                </p>
-              </div>
-
-              {!form.id ? (
-                <AdminCard className="border-dashed p-6">
-                  <p className="text-sm text-slate-400">Save the course first to unlock the supplemental asset manager.</p>
-                </AdminCard>
-              ) : (
-                <>
-                  <div className="grid gap-5 md:grid-cols-3">
-                    <div>
-                      <FieldLabel>Asset Type</FieldLabel>
-                      <AdminSelect value={assetDraft.type} onChange={(event) => setAssetDraft((current) => ({ ...current, type: event.target.value as CourseAssetRow["type"] }))}>
-                        <option value="VIDEO">Video</option>
-                        <option value="AUDIO">Audio</option>
-                        <option value="PDF">PDF</option>
-                      </AdminSelect>
-                    </div>
-                    <div className="md:col-span-2">
-                      <FieldLabel>Asset Title</FieldLabel>
-                      <AdminInput value={assetDraft.title} onChange={(event) => setAssetDraft((current) => ({ ...current, title: event.target.value }))} placeholder="Introduction PDF" />
-                    </div>
-                    <div className="md:col-span-3">
-                      <MediaUploader
-                        label="Upload Asset"
-                        hint="The file will attach immediately after upload."
-                        folder={`courses/assets/${form.id}`}
-                        accept="audio/*,video/*,application/pdf"
-                        onUploaded={handleAssetUploaded}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4">
-                    {(activeCourse?.assets || []).length === 0 ? (
-                      <AdminCard className="border-dashed p-6">
-                        <p className="text-sm text-slate-400">No supplemental assets uploaded yet for this course.</p>
-                      </AdminCard>
-                    ) : (
-                      activeCourse?.assets.map((asset) => {
-                        const Icon = getAssetIcon(asset.type);
-                        return (
-                          <AdminCard key={asset.id} className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300">
-                                <Icon className="h-5 w-5" />
-                              </div>
-                              <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="font-semibold text-white">{asset.title}</p>
-                                  <StatusPill tone="info">{asset.type}</StatusPill>
-                                </div>
-                                <p className="mt-1 text-xs text-slate-400">{asset.fileName}</p>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <AdminButton type="button" variant="secondary" onClick={() => window.open(asset.url, "_blank")}>
-                                Open
-                              </AdminButton>
-                              <AdminButton type="button" variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => handleDeleteAsset(asset.id)}>
-                                Delete
-                              </AdminButton>
-                            </div>
-                          </AdminCard>
-                        );
-                      })
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          ) : null}
         </div>
       </AdminModal>
 

@@ -1,11 +1,9 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { type SyntheticEvent, useEffect, useMemo, useRef, useState } from "react";
-import ReactPlayer from "react-player";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   FileText,
   Lock,
@@ -13,13 +11,27 @@ import {
   Volume2,
   X,
 } from "lucide-react";
+import { MediaPlayer, type MediaPlayerSnapshot } from "@/components/learn/MediaPlayer";
 import { cn, formatPrice } from "@/lib/utils";
 import type { Course, CoursePreviewLessonState, CoursePreviewState } from "@/types";
+
+const LessonPdfViewer = dynamic(
+  () => import("@/components/learn/LessonPdfViewer"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-[420px] items-center justify-center bg-[#02040a]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-blue border-t-transparent" />
+      </div>
+    ),
+  }
+);
 
 type CoursePreviewModalProps = {
   accessActionLabel: string;
   course: Course;
   hasAccess: boolean;
+  initialPreviewLessonId?: string | null;
   lockedActionLabel: string;
   lockedActionPending?: boolean;
   lockedActionVariant?: "primary" | "cart";
@@ -29,22 +41,6 @@ type CoursePreviewModalProps = {
   open: boolean;
   previewState?: CoursePreviewState | null;
 };
-
-function buildPdfViewerUrl(sourceUrl: string, pageNumber: number, lockedPreview: boolean) {
-  const baseUrl = sourceUrl.split("#")[0];
-  const hashParams = new URLSearchParams({
-    page: String(pageNumber),
-    view: "FitH",
-  });
-
-  if (lockedPreview) {
-    hashParams.set("toolbar", "0");
-    hashParams.set("navpanes", "0");
-    hashParams.set("scrollbar", "0");
-  }
-
-  return `${baseUrl}#${hashParams.toString()}`;
-}
 
 function formatPreviewCountdown(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -74,6 +70,7 @@ export function CoursePreviewModal({
   accessActionLabel,
   course,
   hasAccess,
+  initialPreviewLessonId = null,
   lockedActionLabel,
   lockedActionPending = false,
   lockedActionVariant = "primary",
@@ -83,7 +80,6 @@ export function CoursePreviewModal({
   open,
   previewState,
 }: CoursePreviewModalProps) {
-  const playerRef = useRef<HTMLVideoElement | null>(null);
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
   const [previewElapsedSeconds, setPreviewElapsedSeconds] = useState(0);
   const [timedPreviewLocked, setTimedPreviewLocked] = useState(false);
@@ -118,8 +114,13 @@ export function CoursePreviewModal({
       return;
     }
 
-    setActivePreviewId(previewLessons[0]?.id ?? null);
-  }, [open, previewLessons]);
+    const requestedPreview =
+      initialPreviewLessonId && previewLessons.some((lesson) => lesson.id === initialPreviewLessonId)
+        ? initialPreviewLessonId
+        : previewLessons[0]?.id ?? null;
+
+    setActivePreviewId(requestedPreview);
+  }, [initialPreviewLessonId, open, previewLessons]);
 
   useEffect(() => {
     setPreviewElapsedSeconds(0);
@@ -127,35 +128,15 @@ export function CoursePreviewModal({
     setPdfPage(1);
   }, [activePreviewId]);
 
-  function clampTimedPreview(nextTime: number) {
+  function handlePreviewMediaSnapshot(snapshot: MediaPlayerSnapshot) {
+    setPreviewElapsedSeconds(snapshot.currentTime);
+
     if (!timedPreviewLimitSeconds || hasAccess) {
-      setPreviewElapsedSeconds(nextTime);
       return;
     }
 
-    const clampedTime = Math.min(nextTime, timedPreviewLimitSeconds);
-    setPreviewElapsedSeconds(clampedTime);
-
-    if (nextTime >= timedPreviewLimitSeconds && playerRef.current) {
-      playerRef.current.currentTime = timedPreviewLimitSeconds;
-      playerRef.current.pause();
+    if (snapshot.currentTime >= timedPreviewLimitSeconds) {
       setTimedPreviewLocked(true);
-    }
-  }
-
-  function handleMediaTimeUpdate(event: SyntheticEvent<HTMLVideoElement>) {
-    clampTimedPreview(event.currentTarget.currentTime);
-  }
-
-  function handleMediaSeeking(event: SyntheticEvent<HTMLVideoElement>) {
-    if (!timedPreviewLimitSeconds || hasAccess) {
-      return;
-    }
-
-    const nextTime = event.currentTarget.currentTime;
-
-    if (nextTime > timedPreviewLimitSeconds) {
-      event.currentTarget.currentTime = Math.min(previewElapsedSeconds, timedPreviewLimitSeconds);
     }
   }
 
@@ -189,22 +170,14 @@ export function CoursePreviewModal({
       return (
         <div className="overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-[0_30px_90px_-50px_rgba(15,23,42,0.95)]">
           <div className="aspect-video bg-black">
-            <ReactPlayer
-              ref={playerRef}
+            <MediaPlayer
               src={activePreview.sourceUrl}
-              controls
-              width="100%"
-              height="100%"
-              playing={open && !timedPreviewLocked}
-              playsInline
-              onTimeUpdate={handleMediaTimeUpdate}
-              onSeeking={handleMediaSeeking}
-              onEnded={() => {
-                if (!hasAccess && timedPreviewLimitSeconds > 0) {
-                  setTimedPreviewLocked(true);
-                }
-              }}
-              style={{ backgroundColor: "#000" }}
+              type={activePreview.type === "AUDIO" ? "audio" : "video"}
+              maxDuration={timedPreviewLimitSeconds || undefined}
+              isLocked={timedPreviewLocked}
+              onTimeUpdate={handlePreviewMediaSnapshot}
+              onPause={handlePreviewMediaSnapshot}
+              onEnded={handlePreviewMediaSnapshot}
             />
           </div>
 
@@ -241,11 +214,6 @@ export function CoursePreviewModal({
 
     if (activePreview.type === "PDF" && activePreview.sourceUrl) {
       const lockedPdfPreview = !hasAccess && Boolean(pdfPreviewPageLimit);
-      const pdfViewerUrl = buildPdfViewerUrl(
-        activePreview.sourceUrl,
-        pdfPage,
-        lockedPdfPreview
-      );
 
       return (
         <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.03] shadow-[0_30px_90px_-50px_rgba(15,23,42,0.95)]">
@@ -263,65 +231,26 @@ export function CoursePreviewModal({
               </p>
             </div>
 
-            {effectivePdfLimit && !hasAccess ? (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPdfPage((current) => Math.max(1, current - 1))}
-                  disabled={pdfPage <= 1}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-white/72 hover:border-primary-blue/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPdfPage((current) =>
-                      effectivePdfLimit ? Math.min(effectivePdfLimit, current + 1) : current
-                    )
-                  }
-                  disabled={!effectivePdfLimit || pdfPage >= effectivePdfLimit}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-white/72 hover:border-primary-blue/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            ) : null}
+            <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/68">
+              Scroll vertically to browse pages
+            </div>
           </div>
 
           <div className="bg-slate-950/96 px-3 py-4 sm:px-6 sm:py-6">
             <div className="overflow-hidden rounded-[24px] border border-white/10 bg-white shadow-[0_24px_70px_-44px_rgba(15,23,42,0.85)]">
-              <iframe
-                key={`${activePreview.id}-${pdfPage}-${lockedPdfPreview ? "locked" : "interactive"}`}
-                src={pdfViewerUrl}
-                title={`${activePreview.title} PDF preview`}
-                className={cn(
-                  "h-[72vh] w-full bg-white transition-opacity duration-300",
-                  lockedPdfPreview && "pointer-events-none",
-                  // On mobile, native iframes for PDF often fail or allow downloading full doc
-                  "hidden sm:block"
-                )}
+              <LessonPdfViewer
+                file={activePreview.sourceUrl}
+                lessonId={`preview-${activePreview.id}`}
+                viewportWidth={1200}
+                initialPage={1}
+                maxPages={lockedPdfPreview ? effectivePdfLimit ?? undefined : undefined}
+                onProgress={(_, currentPage) => setPdfPage(currentPage)}
               />
-              <div className="flex sm:hidden flex-col items-center justify-center bg-white p-8 text-center min-h-[40vh]">
-                 <div className="rounded-full bg-primary-blue/10 p-4 mb-4">
-                    <FileText className="h-8 w-8 text-primary-blue" />
-                 </div>
-                 <h4 className="text-slate-900 font-bold mb-2">Mobile PDF Preview</h4>
-                 <p className="text-slate-600 text-sm mb-6 max-w-[240px]">
-                   Interactive PDF previews are optimized for desktop. On mobile, you can view the first {effectivePdfLimit} pages by enrolling.
-                 </p>
-                 <button
-                   onClick={() => void onLockedAction()}
-                   className="rounded-xl bg-primary-blue px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary-blue/30"
-                 >
-                   {lockedActionLabel}
-                 </button>
-              </div>
             </div>
             <p className="mt-3 text-xs leading-5 text-white/54">
               {lockedPdfPreview
-                ? "Preview pages stay inside the approved admin limit, so navigation is handled by the buttons above."
-                : "If the browser PDF viewer takes a second to render, keep the modal open and it will appear in place."}
+                ? "Preview pages stay inside the approved admin limit, and the document is rendered inside the protected canvas reader."
+                : "The document is rendered inside the protected canvas reader with native browser download controls removed."}
             </p>
           </div>
 

@@ -70,6 +70,7 @@ type UpsertLessonProgressInput = {
   lessonType: LessonType;
   contentType?: LessonProgressContentType | CourseAssetType | null;
   touchOnly?: boolean;
+  resetProgress?: boolean;
   isCompleted?: boolean;
   manualCompletionState?: "COMPLETE" | "INCOMPLETE";
   progressPercent?: number;
@@ -428,6 +429,7 @@ export async function upsertLessonProgressEntry({
   lessonType,
   contentType,
   touchOnly,
+  resetProgress,
   isCompleted,
   manualCompletionState,
   progressPercent,
@@ -524,36 +526,36 @@ export async function upsertLessonProgressEntry({
   const fallbackLastPosition = existingProgress?.lastPosition ?? existingProgress?.watchedSeconds ?? 0;
   const fallbackLastPage = existingProgress?.lastPage ?? existingProgress?.lastPdfPage ?? null;
   const isManualIncomplete = manualCompletionState === "INCOMPLETE";
+  const shouldResetProgress = Boolean(resetProgress);
   const nextIsCompleted =
     manualCompletionState === "COMPLETE"
       ? true
-      : isManualIncomplete
+      : isManualIncomplete || shouldResetProgress
         ? false
         : isCompleted === true
           ? true
           : isCompleted === false
             ? false
             : (requestedProgressPercent ?? existingProgress?.progressPercent ?? 0) >= 100 || existingProgress?.isCompleted === true;
-  // When manually marking incomplete, always reset to 0% so getCourseProgressState
-  // no longer counts this lesson as completed (it checks both isCompleted AND progressPercent >= 100).
+  const existingProgressPercent = clampPercentage(existingProgress?.progressPercent ?? 0);
   const nextProgressPercent = nextIsCompleted
     ? 100
-    : isManualIncomplete
+    : isManualIncomplete || shouldResetProgress
       ? 0
-      : requestedProgressPercent ?? clampPercentage(existingProgress?.progressPercent ?? 0);
+      : Math.max(existingProgressPercent, requestedProgressPercent ?? 0);
   const nextLastPosition =
     storedContentType === "VIDEO" || storedContentType === "AUDIO"
       ? nextIsCompleted
         ? null
-        : isManualIncomplete
+        : isManualIncomplete || shouldResetProgress
           ? null
-          : requestedLastPosition ?? fallbackLastPosition
+          : Math.max(fallbackLastPosition, requestedLastPosition ?? 0)
       : null;
   const nextLastPage =
     storedContentType === "PDF"
-      ? isManualIncomplete
+      ? isManualIncomplete || shouldResetProgress
         ? null
-        : requestedLastPage ?? fallbackLastPage
+        : Math.max(fallbackLastPage ?? 1, requestedLastPage ?? 1)
       : null;
 
   const row = await prisma.lessonProgress.upsert({
@@ -663,6 +665,32 @@ export async function createLessonNote(userId: string, lessonId: string, content
     if (isPrismaConnectionError(error)) {
       console.error("[lesson-player] Unable to save lesson notes right now.", error);
       return null;
+    }
+
+    throw error;
+  }
+}
+
+export async function deleteLessonNote(userId: string, lessonId: string, noteId: string) {
+  const notesTableReady = await ensureLessonNotesTable();
+
+  if (!notesTableReady) {
+    return false;
+  }
+
+  try {
+    const result = await prisma.$executeRaw(Prisma.sql`
+      DELETE FROM lesson_notes
+      WHERE id = ${BigInt(noteId)}
+        AND user_id = ${userId}
+        AND lesson_id = ${lessonId}
+    `);
+
+    return result > 0;
+  } catch (error) {
+    if (isPrismaConnectionError(error)) {
+      console.error("[lesson-player] Unable to delete lesson note right now.", error);
+      return false;
     }
 
     throw error;
