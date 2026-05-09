@@ -280,7 +280,7 @@ export function CourseDetailClient({
     <div className="min-h-screen">
 
       {expiredAccess ? (
-        <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 sm:pt-6 lg:px-8">
           <ExpiredSubscriptionNotice
             renewHref={`/checkout?plan=${expiredAccess.planSlug === "teams" ? "teams" : "pro"}&billing=${expiredAccess.billingCycle ?? "monthly"}`}
           />
@@ -288,7 +288,7 @@ export function CourseDetailClient({
       ) : null}
 
       <div className="border-b border-primary-blue/10 bg-gradient-to-b from-primary-blue/10 via-white to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-950">
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:items-start">
             <div className="space-y-5 lg:hidden">
               <div className="overflow-hidden rounded-[28px] border border-border bg-card shadow-sm">

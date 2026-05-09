@@ -175,6 +175,9 @@ export interface User {
   role: Role;
   bio?: string;
   country?: string;
+  onboardingQuizAnswers?: Record<string, number>;
+  onboardingRecommendations?: string[];
+  onboardingCompletedAt?: string | null;
 }
 
 export interface CartItem {

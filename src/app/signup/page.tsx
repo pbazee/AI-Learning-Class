@@ -1,66 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, ArrowRight, Check, Eye, EyeOff, Lock, Mail, Sparkles, User } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  Check,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  Sparkles,
+  User,
+} from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import {
   buildAuthCallbackUrl,
   DEFAULT_AFTER_AUTH,
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
+import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { logger } from "@/lib/logger";
+import { onboardingQuizQuestions as quizQuestions } from "@/lib/onboarding";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { getSupabaseClient } from "@/lib/supabase";
+import type { Course } from "@/types";
 
-const quizQuestions = [
-  {
-    id: "q1",
-    question: "What's your current AI experience level?",
-    options: [
-      "Complete beginner",
-      "Some coding experience",
-      "Data science background",
-      "Experienced ML practitioner",
-    ],
-  },
-  {
-    id: "q2",
-    question: "What's your primary goal?",
-    options: [
-      "Land an AI job",
-      "Build AI products",
-      "Research & academia",
-      "Understand AI for my business",
-    ],
-  },
-  {
-    id: "q3",
-    question: "How much time can you dedicate weekly?",
-    options: ["1-3 hours", "4-7 hours", "8-15 hours", "15+ hours"],
-  },
-  {
-    id: "q4",
-    question: "Which AI domain excites you most?",
-    options: [
-      "Generative AI & LLMs",
-      "Machine Learning",
-      "Computer Vision",
-      "AI Engineering & MLOps",
-    ],
-  },
+type SignupStep = "account" | "quiz" | "roadmap";
+
+const stepConfig: Array<{ id: SignupStep; label: string }> = [
+  { id: "account", label: "Account" },
+  { id: "quiz", label: "Quiz" },
+  { id: "roadmap", label: "Learning Path" },
 ];
-
-const roadmapSuggestions: Record<string, string[]> = {
-  default: [
-    "AI for Everyone: Non-Technical Bootcamp",
-    "Complete Machine Learning Mastery",
-    "LLM Engineering: Build Production AI Apps",
-    "MLOps: Production ML Systems at Scale",
-  ],
-};
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -90,11 +65,14 @@ export default function SignupPage() {
   const searchParams = useSearchParams();
   const referralCode = searchParams.get("ref") || "";
   const redirectPath = sanitizeAuthRedirectPath(searchParams.get("redirect"));
-  const [step, setStep] = useState<"account" | "quiz" | "roadmap">("account");
+  const requestedStep = searchParams.get("step");
+  const [step, setStep] = useState<SignupStep>(requestedStep === "quiz" ? "quiz" : "account");
   const [showPassword, setShowPassword] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(false);
+  const [onboardingLoading, setOnboardingLoading] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -105,6 +83,13 @@ export default function SignupPage() {
     siteName: DEFAULT_SITE_NAME,
     logoUrl: "",
   });
+
+  const currentQuizQuestion = quizQuestions[quizStep];
+  const currentStepIndex = stepConfig.findIndex((entry) => entry.id === step);
+  const roadmapCourses = useMemo(
+    () => recommendedCourses.slice(0, 4),
+    [recommendedCourses]
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -136,6 +121,64 @@ export default function SignupPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadOnboardingState() {
+      try {
+        const response = await fetch("/api/account/onboarding", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json().catch(() => null);
+
+        if (!mounted || !payload) {
+          return;
+        }
+
+        const savedAnswers =
+          payload.answers && typeof payload.answers === "object" ? payload.answers : {};
+        const savedRecommendations = Array.isArray(payload.recommendations)
+          ? payload.recommendations
+          : [];
+
+        setAnswers(savedAnswers);
+        setRecommendedCourses(savedRecommendations);
+
+        if (payload.completed) {
+          router.replace(redirectPath === DEFAULT_AFTER_AUTH ? "/dashboard" : redirectPath);
+          return;
+        }
+
+        if (savedRecommendations.length > 0) {
+          setStep("roadmap");
+          setQuizStep(quizQuestions.length - 1);
+          return;
+        }
+
+        if (requestedStep === "quiz" || Object.keys(savedAnswers).length > 0) {
+          setStep("quiz");
+          const nextQuizIndex = quizQuestions.findIndex(
+            (question) => typeof savedAnswers[question.id] !== "number"
+          );
+          setQuizStep(nextQuizIndex === -1 ? quizQuestions.length - 1 : nextQuizIndex);
+        }
+      } catch {
+        // If onboarding state fails to load we keep the local flow usable.
+      }
+    }
+
+    void loadOnboardingState();
+
+    return () => {
+      mounted = false;
+    };
+  }, [redirectPath, requestedStep, router]);
+
   async function syncNewsletterPreference(nextEmail: string, nextName?: string) {
     if (!newsletterOptIn || !nextEmail.trim()) {
       return;
@@ -157,11 +200,14 @@ export default function SignupPage() {
     setLoading(true);
     const supabase = getSupabaseClient();
     await syncNewsletterPreference(email, name);
-    logger.debug("[signup] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
+    logger.debug(
+      "[signup] Starting Google OAuth, redirectTo:",
+      buildAuthCallbackUrl("/signup?step=quiz")
+    );
 
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: buildAuthCallbackUrl(redirectPath) },
+      options: { redirectTo: buildAuthCallbackUrl("/signup?step=quiz") },
     });
 
     if (oauthError) {
@@ -189,7 +235,7 @@ export default function SignupPage() {
       password,
       options: {
         data: { full_name: name },
-        emailRedirectTo: buildAuthCallbackUrl(redirectPath),
+        emailRedirectTo: buildAuthCallbackUrl("/signup?step=quiz"),
       },
     });
 
@@ -236,11 +282,65 @@ export default function SignupPage() {
   function handleAnswer(questionId: string, answerIdx: number) {
     const nextAnswers = { ...answers, [questionId]: answerIdx };
     setAnswers(nextAnswers);
+    setError(null);
 
     if (quizStep < quizQuestions.length - 1) {
-      setTimeout(() => setQuizStep((previous) => previous + 1), 300);
-    } else {
-      setTimeout(() => setStep("roadmap"), 500);
+      window.setTimeout(() => setQuizStep((previous) => previous + 1), 300);
+      return;
+    }
+
+    setOnboardingLoading(true);
+    window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/account/onboarding", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers: nextAnswers }),
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Unable to build your learning path.");
+        }
+
+        setRecommendedCourses(Array.isArray(payload?.recommendations) ? payload.recommendations : []);
+        setStep("roadmap");
+      } catch (quizError) {
+        setError(
+          quizError instanceof Error
+            ? quizError.message
+            : "Unable to build your learning path right now."
+        );
+      } finally {
+        setOnboardingLoading(false);
+      }
+    }, 350);
+  }
+
+  async function completeOnboarding(destination: string) {
+    setOnboardingLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/account/onboarding", {
+        method: "PATCH",
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to finish onboarding.");
+      }
+
+      router.push(destination);
+      router.refresh();
+    } catch (completionError) {
+      setError(
+        completionError instanceof Error
+          ? completionError.message
+          : "Unable to finish onboarding right now."
+      );
+    } finally {
+      setOnboardingLoading(false);
     }
   }
 
@@ -253,29 +353,41 @@ export default function SignupPage() {
       subtitle="Open a polished workspace for courses, guided onboarding, and the production-focused paths your team can actually use."
     >
       <div className="w-full">
-        <div className="mb-8 flex items-center gap-2">
-          {["account", "quiz", "roadmap"].map((currentStep, index) => (
-            <div key={currentStep} className="flex flex-1 items-center gap-2">
-              <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
-                  step === currentStep
-                    ? "bg-slate-950 text-white"
-                    : ["account", "quiz", "roadmap"].indexOf(step) > index
-                      ? "bg-sky-100 text-sky-700"
-                      : "bg-white/10 text-slate-200"
-                }`}
-              >
-                {["account", "quiz", "roadmap"].indexOf(step) > index ? <Check className="h-4 w-4" /> : index + 1}
-              </div>
-              {index < 2 ? (
-                <div
-                  className={`h-0.5 flex-1 transition-all ${
-                    ["account", "quiz", "roadmap"].indexOf(step) > index ? "bg-sky-500" : "bg-slate-200"
-                  }`}
-                />
-              ) : null}
-            </div>
-          ))}
+        <div className="mb-8">
+          <div className="flex items-start gap-2">
+            {stepConfig.map((entry, index) => {
+              const isComplete = currentStepIndex > index;
+              const isActive = step === entry.id;
+
+              return (
+                <div key={entry.id} className="flex flex-1 items-start gap-2">
+                  <div className="flex flex-col items-center gap-2">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold transition-all ${
+                        isComplete
+                          ? "border-sky-400 bg-sky-500 text-white"
+                          : isActive
+                            ? "border-sky-400 bg-primary-blue text-white shadow-[0_0_0_6px_rgba(56,189,248,0.16)]"
+                            : "border-white/30 bg-transparent text-white/80"
+                      }`}
+                    >
+                      {isComplete ? <Check className="h-4 w-4" /> : index + 1}
+                    </div>
+                    <span className="text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-200">
+                      {entry.label}
+                    </span>
+                  </div>
+                  {index < stepConfig.length - 1 ? (
+                    <div
+                      className={`mt-5 h-0.5 flex-1 transition-all ${
+                        isComplete ? "bg-sky-500" : "bg-white/20"
+                      }`}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <AnimatePresence mode="wait">
@@ -341,7 +453,7 @@ export default function SignupPage() {
 
                   <form onSubmit={handleAccountSubmit} className="space-y-4">
                     <div>
-                      <label className="auth-label mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
                         Full name
                       </label>
                       <div className="relative">
@@ -352,13 +464,13 @@ export default function SignupPage() {
                           onChange={(event) => setName(event.target.value)}
                           required
                           placeholder="Your name"
-                          className="auth-input h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                          className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="auth-label mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
                         Email address
                       </label>
                       <div className="relative">
@@ -369,13 +481,13 @@ export default function SignupPage() {
                           onChange={(event) => setEmail(event.target.value)}
                           required
                           placeholder="you@example.com"
-                          className="auth-input h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                          className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="auth-label mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
                         Password
                       </label>
                       <div className="relative">
@@ -386,7 +498,7 @@ export default function SignupPage() {
                           onChange={(event) => setPassword(event.target.value)}
                           required
                           placeholder="Min 8 characters"
-                          className="auth-input h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-11 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                          className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-11 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
                         />
                         <button
                           type="button"
@@ -405,7 +517,7 @@ export default function SignupPage() {
                         onChange={(event) => setNewsletterOptIn(event.target.checked)}
                         className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-blue focus:ring-primary-blue"
                       />
-                      <span className="auth-helper-text text-xs leading-5 text-slate-800">
+                      <span className="text-xs leading-5 text-slate-800">
                         Get notified on more offers, discounts, and new AI trends.
                       </span>
                     </label>
@@ -425,7 +537,7 @@ export default function SignupPage() {
                       )}
                     </button>
 
-                    <p className="auth-helper-text text-center text-xs text-slate-800">
+                    <p className="text-center text-xs text-slate-800">
                       By signing up you agree to our{" "}
                       <Link href="/terms" className="font-semibold text-slate-950 transition hover:text-sky-700">
                         Terms
@@ -440,7 +552,7 @@ export default function SignupPage() {
                 </div>
               )}
 
-              <p className="auth-helper-text mt-6 text-center text-sm text-slate-200">
+              <p className="mt-6 text-center text-sm text-slate-100">
                 Already have an account?{" "}
                 <Link
                   href={
@@ -448,7 +560,7 @@ export default function SignupPage() {
                       ? `/login?redirect=${encodeURIComponent(redirectPath)}`
                       : "/login"
                   }
-                  className="font-semibold text-slate-950 transition hover:text-sky-700"
+                  className="font-semibold text-white transition hover:text-sky-300"
                 >
                   Sign in
                 </Link>
@@ -491,20 +603,27 @@ export default function SignupPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                   >
+                    {error ? (
+                      <div className="mb-5 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>{error}</span>
+                      </div>
+                    ) : null}
                     <p className="mb-1 text-sm text-slate-700">
                       Question {quizStep + 1} of {quizQuestions.length}
                     </p>
                     <h3 className="mb-6 text-lg font-bold text-slate-950">
-                      {quizQuestions[quizStep].question}
+                      {currentQuizQuestion.question}
                     </h3>
                     <div className="space-y-3">
-                      {quizQuestions[quizStep].options.map((option, index) => (
+                      {currentQuizQuestion.options.map((option, index) => (
                         <button
                           key={index}
                           type="button"
-                          onClick={() => handleAnswer(quizQuestions[quizStep].id, index)}
+                          onClick={() => handleAnswer(currentQuizQuestion.id, index)}
+                          disabled={onboardingLoading}
                           className={`w-full rounded-xl border px-5 py-4 text-left text-sm transition-all ${
-                            answers[quizQuestions[quizStep].id] === index
+                            answers[currentQuizQuestion.id] === index
                               ? "border-sky-300 bg-sky-50 text-slate-950"
                               : "border-slate-200 bg-slate-50 text-slate-950 hover:border-sky-200 hover:bg-white"
                           }`}
@@ -516,6 +635,11 @@ export default function SignupPage() {
                         </button>
                       ))}
                     </div>
+                    {onboardingLoading ? (
+                      <p className="mt-5 text-sm font-medium text-slate-600">
+                        Building your recommended learning path...
+                      </p>
+                    ) : null}
                   </motion.div>
                 </AnimatePresence>
               </div>
@@ -539,45 +663,84 @@ export default function SignupPage() {
                 </p>
               </div>
 
+              {error ? (
+                <div className="mb-4 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : null}
+
               <div className="mb-4 rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)]">
-                <div className="space-y-3">
-                  {roadmapSuggestions.default.map((course, index) => (
-                    <div key={index} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-sm font-black ${
-                          index === 0
-                            ? "bg-sky-100 text-sky-700"
-                            : index === 1
-                              ? "bg-indigo-100 text-indigo-700"
-                              : index === 2
-                                ? "bg-rose-100 text-rose-700"
-                                : "bg-amber-100 text-amber-700"
-                        }`}
-                      >
-                        {index + 1}
+                <div className="mb-5">
+                  <h3 className="text-lg font-black text-slate-950">Your Learning Path</h3>
+                  <p className="text-sm text-slate-700">
+                    Start with the courses that best fit your experience, goals, and interests.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {roadmapCourses.map((course) => (
+                    <div
+                      key={course.id}
+                      className="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50"
+                    >
+                      <div className="relative aspect-[16/10] bg-slate-200">
+                        <Image
+                          src={course.imageUrl || course.thumbnailUrl || "/trusted-logos/openai.svg"}
+                          alt={course.title}
+                          fill
+                          quality={75}
+                          placeholder="blur"
+                          blurDataURL={IMAGE_BLUR_DATA_URL}
+                          sizes="(min-width: 640px) 30vw, 100vw"
+                          className="object-cover"
+                        />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="line-clamp-1 text-sm font-medium text-slate-950">{course}</p>
-                        <p className="text-xs text-slate-700">
-                          {["Start here", "Level up", "Advanced", "Production"][index]}
-                        </p>
+                      <div className="space-y-3 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+                            {course.level.replace("_", " ")}
+                          </span>
+                          <span className="text-xs font-medium text-slate-500">{course.categoryName}</span>
+                        </div>
+                        <div>
+                          <p className="line-clamp-2 text-base font-bold text-slate-950">{course.title}</p>
+                          <p className="mt-2 line-clamp-2 text-sm text-slate-700">
+                            {course.shortDescription || course.description}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void completeOnboarding(`/courses/${course.slug}`)}
+                          disabled={onboardingLoading}
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-blue px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-blue/90 disabled:opacity-70"
+                        >
+                          Start Learning
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
                       </div>
-                      <Check className="h-4 w-4 shrink-0 text-sky-700" />
                     </div>
                   ))}
                 </div>
               </div>
 
-              <Link
-                href="/dashboard"
-                className="block w-full rounded-2xl bg-slate-950 py-4 text-center text-sm font-bold text-white transition hover:bg-slate-800"
-              >
-                Go to My Dashboard -&gt;
-              </Link>
               <button
                 type="button"
-                onClick={() => setStep("quiz")}
-                className="mt-3 block w-full text-center text-sm text-slate-700 transition hover:text-slate-950"
+                onClick={() => void completeOnboarding("/dashboard")}
+                disabled={onboardingLoading}
+                className="block w-full rounded-2xl bg-slate-950 py-4 text-center text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-70"
+              >
+                Go to Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecommendedCourses([]);
+                  setStep("quiz");
+                  setQuizStep(0);
+                  setError(null);
+                }}
+                className="mt-3 block w-full text-center text-sm text-slate-200 transition hover:text-white"
               >
                 Retake quiz
               </button>

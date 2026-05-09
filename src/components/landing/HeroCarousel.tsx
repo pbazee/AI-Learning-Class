@@ -163,8 +163,8 @@ export function HeroCarousel({
         </motion.div>
       </AnimatePresence>
 
-      <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-between px-4 pb-6 pt-8 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-        <div className="flex min-h-0 flex-1 items-start pt-4 sm:items-center sm:pt-0">
+      <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-between px-4 pb-6 pt-0 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className="flex min-h-0 flex-1 items-start pt-0 sm:items-center sm:pt-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={`hero-copy-${current}`}

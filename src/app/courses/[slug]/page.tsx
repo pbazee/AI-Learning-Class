@@ -33,11 +33,11 @@ export async function generateMetadata({
   });
 
   return buildSiteMetadata(`/courses/${course.slug}`, {
-    title: `${course.title} | AI GENIUS LAB`,
+    title: course.title,
     description: course.shortDescription || course.description,
     image: courseImage || undefined,
     canonicalUrl: absoluteUrl(`/courses/${course.slug}`),
-    openGraphTitle: `${course.title} | AI GENIUS LAB`,
+    openGraphTitle: course.title,
     openGraphDescription: course.shortDescription || course.description,
   });
 }

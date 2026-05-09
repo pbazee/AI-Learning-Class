@@ -55,7 +55,18 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (user) {
-      return syncAuthenticatedUser(user);
+      const profile = await syncAuthenticatedUser(user);
+
+      return profile
+        ? {
+            role: profile.role,
+            createdAt: profile.createdAt,
+            onboardingCompletedAt:
+              typeof user.user_metadata?.onboarding_completed_at === "string"
+                ? user.user_metadata.onboarding_completed_at
+                : null,
+          }
+        : null;
     }
 
     return null;
@@ -67,7 +78,7 @@ export async function GET(request: NextRequest) {
     if (!error) {
       const profile = await syncUserProfile();
       return NextResponse.redirect(
-        `${origin}${resolvePostAuthDestination(next, profile?.role)}`
+        `${origin}${resolvePostAuthDestination(next, profile)}`
       );
     }
 
@@ -84,7 +95,7 @@ export async function GET(request: NextRequest) {
 
       const profile = await syncUserProfile();
       return NextResponse.redirect(
-        `${origin}${resolvePostAuthDestination(next, profile?.role)}`
+        `${origin}${resolvePostAuthDestination(next, profile)}`
       );
     }
 

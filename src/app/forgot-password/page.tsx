@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Mail } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
@@ -11,6 +11,40 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [branding, setBranding] = useState({
+    siteName: DEFAULT_SITE_NAME,
+    logoUrl: "",
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadBranding() {
+      try {
+        const response = await fetch("/api/settings?keys=siteName,logoUrl", {
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!mounted || !response.ok || !payload) {
+          return;
+        }
+
+        setBranding({
+          siteName: payload.siteName?.trim() || DEFAULT_SITE_NAME,
+          logoUrl: payload.logoUrl || "",
+        });
+      } catch {
+        // The auth shell fallback branding is fine if settings are unavailable.
+      }
+    }
+
+    void loadBranding();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,7 +73,8 @@ export default function ForgotPasswordPage() {
       badge="Account Recovery"
       backHref="/login"
       backLabel="Back to login"
-      siteName={DEFAULT_SITE_NAME}
+      siteName={branding.siteName}
+      logoUrl={branding.logoUrl || undefined}
       subtitle="Enter the email tied to your account and we will send a secure link to choose a new password."
       title="Reset your password"
     >
@@ -48,7 +83,7 @@ export default function ForgotPasswordPage() {
           <div>
             <label
               htmlFor="forgot-password-email"
-              className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
+              className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700"
             >
               Email address
             </label>
@@ -61,7 +96,7 @@ export default function ForgotPasswordPage() {
                 onChange={(event) => setEmail(event.target.value)}
                 required
                 placeholder="you@example.com"
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-500 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
               />
             </div>
           </div>

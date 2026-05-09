@@ -111,7 +111,7 @@ export function BlogSharePopover({
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-20 mt-3 w-72 rounded-2xl border border-border bg-card p-3 shadow-2xl">
+        <div className="absolute left-0 top-auto z-[120] mt-0 w-72 max-w-[calc(100vw-32px)] rounded-2xl border border-border bg-card p-3 shadow-2xl max-sm:bottom-full max-sm:mb-3 sm:left-auto sm:right-0 sm:top-full sm:mt-3">
           <div className="mb-3 flex items-center justify-between gap-3 px-1">
             <p className="text-sm font-semibold text-foreground">Share this post</p>
             <button

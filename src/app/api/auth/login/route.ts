@@ -79,7 +79,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      nextPath: resolvePostAuthDestination(redirectPath, profile.role),
+      nextPath: resolvePostAuthDestination(redirectPath, {
+        role: profile.role,
+        createdAt: profile.createdAt,
+        onboardingCompletedAt:
+          typeof data.user.user_metadata?.onboarding_completed_at === "string"
+            ? data.user.user_metadata.onboarding_completed_at
+            : null,
+      }),
       user: {
         id: profile.id,
         email: profile.email,

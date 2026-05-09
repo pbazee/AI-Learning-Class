@@ -195,19 +195,19 @@ export function CoursesCatalog({
           <div className="bg-primary-blue">
             <div className="mx-auto max-w-5xl px-4 py-10 text-center sm:px-6 lg:px-8">
               <h1 className="mb-2 text-3xl font-black text-white">
-                All AI Courses
+                Build Real Skills. Ship Real Work.
               </h1>
-              <p className="text-white/82">
-                {filtered.length} course{filtered.length !== 1 ? "s" : ""} ready for hands-on AI building, career growth, and practical LLM mastery
+              <p className="text-white">
+                Every course is built for execution, not just theory. Go from curious to capable — with AI skills that actually pay off.
               </p>
             </div>
           </div>
           <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
             <h2 className="mb-2 text-3xl font-black text-foreground">
-              Explore by search, level, category, and price
+              Find Your Next Unfair Advantage
             </h2>
             <p className="text-muted-foreground">
-              Filter the catalog instantly to find the right learning path for your next AI milestone.
+              Filter by skill level, category, or price. Every path here was designed to get you building faster than you thought possible.
             </p>
           </div>
         </div>

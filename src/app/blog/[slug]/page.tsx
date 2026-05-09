@@ -34,17 +34,16 @@ export async function generateMetadata({
       path: post.ogImagePath,
       fallback: post.coverImage || "",
     }) || undefined;
-  const metadataTitle = post.metaTitle?.trim() || `${post.title} | AI Genius Lab Journal`;
   const metadataDescription =
     post.metaDescription?.trim() || post.excerpt || post.content?.slice(0, 160) || post.title;
 
   return buildSiteMetadata(`/blog/${post.slug}`, {
-    title: metadataTitle,
+    title: post.title,
     description: metadataDescription,
     image: shareImage,
     canonicalUrl,
-    openGraphTitle: post.ogTitle?.trim() || post.metaTitle?.trim() || post.title,
-    openGraphDescription: post.ogDescription?.trim() || metadataDescription,
+    openGraphTitle: post.title,
+    openGraphDescription: post.excerpt || post.ogDescription?.trim() || metadataDescription,
     robots: post.noIndex
       ? {
           index: false,
@@ -93,7 +92,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             </div>
           )}
           <div className={post.coverImage ? "absolute inset-x-0 bottom-0" : "border-b border-border bg-card"}>
-            <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
               <Link
                 href="/blog"
                 className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -136,7 +135,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           </div>
         </div>
 
-        <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
           {post.excerpt && (
             <p className="mb-8 border-b border-border pb-8 text-lg font-medium leading-relaxed text-muted-foreground">
               {post.excerpt}

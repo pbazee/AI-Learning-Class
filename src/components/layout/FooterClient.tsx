@@ -34,6 +34,8 @@ const quickLinks = [
   { label: "Pricing", href: "/pricing" },
   { label: "Contact Us", href: "/contact" },
   { label: "FAQs", href: "/faqs" },
+  { label: "Terms of Service", href: "/terms" },
+  { label: "Privacy Policy", href: "/privacy" },
 ];
 
 const learnLinks = [
