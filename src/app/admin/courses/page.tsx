@@ -153,6 +153,10 @@ export default async function AdminCoursesPage() {
                                 assetUrl: lesson.assetUrl,
                               }) === "VIDEO"
                               ? "VIDEO"
+                              : inferLessonAssetKind({
+                                  assetUrl: lesson.assetUrl,
+                                }) === "IMAGE"
+                                ? "IMAGE"
                               : "FILE",
                         assetUrl: lesson.assetUrl,
                         assetPath: lesson.assetPath ?? "",

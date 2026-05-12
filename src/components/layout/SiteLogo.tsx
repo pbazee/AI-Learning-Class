@@ -17,13 +17,15 @@ export function SiteLogo({
   textClassName?: string;
   compact?: boolean;
 }) {
+  const safeSiteName = siteName?.trim() || "AI GENIUS LAB";
+  const safeLogoUrl = logoUrl?.trim();
   const iconShellClassName = cn(
     "relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-white/95 shadow-[0_16px_34px_-26px_rgba(15,23,42,0.35)] dark:border-slate-800 dark:bg-slate-950/90",
     compact ? "h-[3rem] w-[3rem]" : "h-[3.75rem] w-[3.75rem]",
     iconClassName
   );
 
-  if (logoUrl) {
+  if (safeLogoUrl) {
     return (
       <div className={cn("flex items-center gap-2.5", className)}>
         <span className={cn(
@@ -32,8 +34,8 @@ export function SiteLogo({
           iconClassName
         )}>
           <Image
-            src={logoUrl}
-            alt={siteName}
+            src={safeLogoUrl}
+            alt={safeSiteName}
             fill
             quality={75}
             sizes={compact ? "48px" : "60px"}
@@ -42,7 +44,7 @@ export function SiteLogo({
           />
         </span>
         <span className={cn("text-sm font-black uppercase tracking-[0.16em]", textClassName)}>
-          {siteName}
+          {safeSiteName}
         </span>
       </div>
     );
@@ -54,7 +56,7 @@ export function SiteLogo({
         <Brain className={cn("h-5 w-5", compact && "h-4 w-4")} />
       </div>
       <span className={cn("text-sm font-black uppercase tracking-[0.16em]", textClassName)}>
-        {siteName}
+        {safeSiteName}
       </span>
     </div>
   );

@@ -21,7 +21,7 @@ export default async function CertificatesPage() {
 
       <main>
         <div className="border-b border-border bg-card">
-          <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-4xl px-4 py-3 sm:px-6 sm:py-10 lg:px-8">
             <div className="mb-2 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950/40">
                 <Award className="h-5 w-5 text-amber-600 dark:text-amber-400" />
@@ -34,7 +34,7 @@ export default async function CertificatesPage() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl px-4 py-3 sm:px-6 sm:py-10 lg:px-8">
           {certificates.length === 0 ? (
             <div className="py-20 text-center">
               <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted">

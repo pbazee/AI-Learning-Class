@@ -1,0 +1,5 @@
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "quizAnswers" JSONB,
+  ADD COLUMN IF NOT EXISTS "onboardingRecommendations" TEXT[] DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "onboardingCompleted" BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS "onboardingCompletedAt" TIMESTAMP(3);

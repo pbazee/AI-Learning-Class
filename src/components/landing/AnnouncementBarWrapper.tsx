@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { AnnouncementBar } from "./AnnouncementBar";
 
 export function AnnouncementBarWrapper() {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
 
   useEffect(() => {
     if (pathname.startsWith("/admin")) {

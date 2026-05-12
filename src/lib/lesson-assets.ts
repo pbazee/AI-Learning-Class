@@ -1,4 +1,4 @@
-export type ResolvedLessonAssetKind = "VIDEO" | "AUDIO" | "PDF" | "FILE";
+export type ResolvedLessonAssetKind = "VIDEO" | "AUDIO" | "PDF" | "IMAGE" | "FILE";
 
 type LessonAssetLike = {
   assetType?: string | null;
@@ -10,6 +10,7 @@ type LessonAssetLike = {
 
 const audioExtensions = [".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus"];
 const videoExtensions = [".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv", ".m3u8", ".mpd"];
+const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 
 function hasMatchingExtension(value: string, extensions: string[]) {
   return extensions.some((extension) => value.endsWith(extension));
@@ -43,6 +44,14 @@ export function inferLessonAssetKind(asset: LessonAssetLike): ResolvedLessonAsse
 
   if (assetType === "PDF" || mimeType === "application/pdf" || reference.endsWith(".pdf")) {
     return "PDF";
+  }
+
+  if (
+    assetType === "IMAGE" ||
+    mimeType.startsWith("image/") ||
+    hasMatchingExtension(reference, imageExtensions)
+  ) {
+    return "IMAGE";
   }
 
   if (

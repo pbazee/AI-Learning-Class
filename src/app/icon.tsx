@@ -62,7 +62,9 @@ export default async function Icon() {
         }
       }
     } catch (e) {
-      console.error("[icon] Failed to pre-fetch branding image", e);
+      if ((e as { name?: string })?.name !== "AbortError") {
+        console.error("[icon] Failed to pre-fetch branding image", e);
+      }
     }
   }
 

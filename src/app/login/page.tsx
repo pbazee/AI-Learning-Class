@@ -214,7 +214,7 @@ function LoginPageInner() {
       subtitle="Access your courses, saved progress, protected previews, and team workspace from one polished entry point."
     >
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)] sm:p-7">
+        <div className="rounded-[28px] border border-white/20 bg-primary-blue p-6 text-white shadow-[0_20px_50px_-38px_rgba(37,99,235,0.42)] sm:p-7">
           {successMessage ? (
             <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
@@ -233,7 +233,7 @@ function LoginPageInner() {
             type="button"
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="mb-6 flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 py-3.5 text-sm font-medium text-slate-950 transition hover:bg-slate-100 disabled:opacity-60"
+            className="mb-6 flex w-full items-center justify-center gap-3 rounded-2xl border border-white/60 bg-white py-3.5 text-sm font-medium text-primary-blue transition hover:bg-white/90 disabled:opacity-60"
           >
             {loading && !magicSent ? (
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" />
@@ -244,12 +244,12 @@ function LoginPageInner() {
           </button>
 
           <div className="mb-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs uppercase tracking-[0.16em] text-slate-400">or</span>
-            <div className="h-px flex-1 bg-slate-200" />
+            <div className="h-px flex-1 bg-white/35" />
+            <span className="text-xs uppercase tracking-[0.16em] text-white/55">or</span>
+            <div className="h-px flex-1 bg-white/35" />
           </div>
 
-          <div className="mb-6 flex gap-1 rounded-2xl bg-slate-100 p-1">
+          <div className="mb-6 flex gap-1 rounded-2xl bg-white/10 p-1">
             {(["password", "magic"] as const).map((currentMode) => (
               <button
                 key={currentMode}
@@ -261,8 +261,8 @@ function LoginPageInner() {
                 }}
                 className={`flex-1 rounded-[14px] py-2.5 text-xs font-semibold uppercase tracking-[0.14em] transition-colors ${
                   mode === currentMode
-                    ? "bg-white text-slate-950 shadow-sm"
-                    : "text-slate-500 hover:text-slate-900"
+                    ? "bg-white text-primary-blue shadow-sm"
+                    : "text-white/70 hover:text-white"
                 }`}
               >
                 {currentMode === "magic" ? "Magic Link" : "Password"}
@@ -275,14 +275,14 @@ function LoginPageInner() {
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-sky-100">
                 <Mail className="h-8 w-8 text-sky-700" />
               </div>
-              <h3 className="mb-2 text-lg font-bold text-slate-950">Check your email</h3>
-              <p className="mb-4 text-sm text-slate-800">
-                We sent a magic link to <strong className="text-slate-950">{email}</strong>. Click it to sign in instantly.
+              <h3 className="mb-2 text-lg font-bold text-white">Check your email</h3>
+              <p className="mb-4 text-sm text-white/85">
+                We sent a magic link to <strong className="text-white">{email}</strong>. Click it to sign in instantly.
               </p>
               <button
                 type="button"
                 onClick={() => setMagicSent(false)}
-                className="text-xs font-semibold text-slate-950 transition hover:text-sky-700"
+                className="text-xs font-semibold text-white transition hover:text-white/80"
               >
                 Use a different email
               </button>
@@ -290,18 +290,18 @@ function LoginPageInner() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="auth-label mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                    <label className="auth-label mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-white">
                   Email address
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" />
                   <input
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     required
                     placeholder="you@example.com"
-                    className="auth-input h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                    className="auth-input h-12 w-full rounded-2xl border border-white/40 bg-white/10 pl-11 pr-4 text-sm text-white placeholder:text-white/70 outline-none transition focus:border-white focus:bg-white/15 focus:ring-4 focus:ring-white/15"
                   />
                 </div>
               </div>
@@ -309,10 +309,10 @@ function LoginPageInner() {
               {mode === "password" ? (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <label className="auth-label text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                    <label className="auth-label text-xs font-semibold uppercase tracking-[0.14em] text-white">
                       Password
                     </label>
-                    <Link href="/forgot-password" className="text-xs font-semibold text-slate-900 transition hover:text-sky-700">
+                    <Link href="/forgot-password" className="text-xs font-semibold text-white/70 transition hover:text-white">
                       Forgot password
                     </Link>
                   </div>
@@ -337,14 +337,14 @@ function LoginPageInner() {
                 </div>
               ) : null}
 
-              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+              <label className="flex items-start gap-3 rounded-2xl border border-white/25 bg-white/10 px-4 py-3.5">
                 <input
                   type="checkbox"
                   checked={newsletterOptIn}
                   onChange={(event) => setNewsletterOptIn(event.target.checked)}
                   className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-blue focus:ring-primary-blue"
                 />
-                <span className="auth-helper-text text-xs leading-5 text-slate-800">
+                <span className="auth-helper-text text-xs leading-5 text-white">
                   Get notified on more offers, discounts, and new AI trends.
                 </span>
               </label>
@@ -367,7 +367,7 @@ function LoginPageInner() {
           )}
         </div>
 
-        <p className="auth-helper-text mt-6 text-center text-sm text-slate-200">
+        <p className="auth-helper-text mt-6 text-center text-sm text-[#1e293b]">
           Don&apos;t have an account?{" "}
           <Link
             href={
@@ -375,7 +375,7 @@ function LoginPageInner() {
                 ? `/signup?redirect=${encodeURIComponent(redirectPath)}`
                 : "/signup"
             }
-            className="font-semibold text-slate-950 transition hover:text-sky-700"
+            className="font-bold text-[#2563eb] transition hover:text-[#1d4ed8]"
           >
             Sign up
           </Link>

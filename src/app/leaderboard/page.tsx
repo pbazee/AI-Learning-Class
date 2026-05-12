@@ -59,7 +59,7 @@ export default async function LeaderboardPage() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-12 lg:px-8">
           {leaders.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-12 text-center">
               <h2 className="mb-2 text-xl font-black text-foreground">No leaderboard data yet</h2>

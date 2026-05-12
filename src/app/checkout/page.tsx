@@ -330,7 +330,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="site-shell overflow-x-hidden">
-      <div className="pb-16 pt-6 sm:pt-8">
+      <div className="pb-16 pt-2 sm:pt-8">
         <div className="section-frame">
           <div className="mb-8">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary-blue/20 bg-primary-blue/10 px-4 py-2 text-sm font-semibold text-primary-blue">

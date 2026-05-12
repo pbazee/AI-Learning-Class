@@ -7,6 +7,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
+import { isPrismaConnectionError, isPrismaSchemaMismatchError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
 import { buildSiteMetadata } from "@/lib/site-server";
 
 export const dynamic = "force-dynamic";
@@ -20,15 +21,30 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ContactPage() {
-  const settings = await prisma.siteSettings.findUnique({
-    where: { id: "singleton" },
-    select: {
-      supportEmail: true,
-      supportPhone: true,
-      supportAddress: true,
-      socialLinks: true,
-    },
-  });
+  let settings = null;
+
+  try {
+    settings = await prisma.siteSettings.findUnique({
+      where: { id: "singleton" },
+      select: {
+        supportEmail: true,
+        supportPhone: true,
+        supportAddress: true,
+        socialLinks: true,
+      },
+    });
+  } catch (error) {
+    if (!isPrismaConnectionError(error) && !isPrismaSchemaMismatchError(error)) {
+      throw error;
+    }
+
+    logPrismaConnectionEvent(
+      "contact-page:siteSettings",
+      "[contact-page] Failed to fetch site settings. Falling back to defaults.",
+      error,
+      "warn"
+    );
+  }
 
   const socialLinks =
     settings?.socialLinks &&

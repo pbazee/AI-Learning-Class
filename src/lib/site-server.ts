@@ -7,6 +7,7 @@ import { appendMediaVersion, resolveMediaUrl } from "@/lib/media";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_SITE_DESCRIPTION, normalizeSiteName } from "@/lib/site";
 import { PUBLIC_CACHE_TAGS } from "@/lib/cache-config";
+import { isPrismaConnectionError, isPrismaSchemaMismatchError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
 
 export type SiteBranding = {
   siteName: string;
@@ -78,9 +79,24 @@ export const getSiteBranding = unstable_cache(
 
 export const getFooterSettings = unstable_cache(
   async () => {
-    const settings = await prisma.siteSettings.findUnique({
-      where: { id: "singleton" },
-    });
+    let settings = null;
+
+    try {
+      settings = await prisma.siteSettings.findUnique({
+        where: { id: "singleton" },
+      });
+    } catch (error) {
+      if (!isPrismaConnectionError(error) && !isPrismaSchemaMismatchError(error)) {
+        throw error;
+      }
+
+      logPrismaConnectionEvent(
+        "site-server:getFooterSettings",
+        "[getFooterSettings] Failed to fetch footer settings. Returning defaults.",
+        error,
+        "warn"
+      );
+    }
 
     const socialLinks = normalizeSocialLinks(settings?.socialLinks);
     const assetVersion = settings?.updatedAt?.getTime();

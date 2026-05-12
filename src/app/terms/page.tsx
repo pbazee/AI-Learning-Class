@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function TermsPage() {
   return (
     <div className="min-h-screen bg-background">
-      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      <main className="mx-auto max-w-4xl px-4 py-3 sm:px-6 sm:py-12 lg:px-8">
         <div className="mb-10">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary-blue">
             Legal

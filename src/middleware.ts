@@ -280,6 +280,17 @@ export async function middleware(request: NextRequest) {
 
   const isAuthPage = authPaths.some((p) => pathname.startsWith(p));
   if (isAuthPage && user) {
+    const isOnboardingRoute =
+      (pathname === "/signup" || pathname === "/sign-up") &&
+      typeof user.user_metadata?.onboarding_completed_at !== "string";
+
+    if (isOnboardingRoute) {
+      if (rateLimitResult) {
+        applyRateLimitHeaders(response, rateLimitResult);
+      }
+      return response;
+    }
+
     const userEmail = normalizeEmail(user.email);
     const destination =
       userEmail === getPrimaryAdminEmail() || isAdminRole(getAuthRole(user))

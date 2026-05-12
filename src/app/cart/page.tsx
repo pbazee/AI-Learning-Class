@@ -23,7 +23,7 @@ export default function CartPage() {
 
   return (
     <div className="site-shell">
-      <div className="pb-20 pt-8">
+      <div className="pb-20 pt-3 sm:pt-8">
         <div className="section-frame">
           <div className="mb-8 flex items-end justify-between gap-4">
             <div>

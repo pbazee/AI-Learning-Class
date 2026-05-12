@@ -56,15 +56,21 @@ export async function GET(request: NextRequest) {
 
     if (user) {
       const profile = await syncAuthenticatedUser(user);
+      const onboardingProfile = profile as {
+        onboardingCompleted?: boolean | null;
+        onboardingCompletedAt?: Date | string | null;
+      } | null;
 
       return profile
         ? {
             role: profile.role,
             createdAt: profile.createdAt,
+            onboardingCompleted: Boolean(onboardingProfile?.onboardingCompleted),
             onboardingCompletedAt:
-              typeof user.user_metadata?.onboarding_completed_at === "string"
+              onboardingProfile?.onboardingCompletedAt ??
+              (typeof user.user_metadata?.onboarding_completed_at === "string"
                 ? user.user_metadata.onboarding_completed_at
-                : null,
+                : null),
           }
         : null;
     }
@@ -77,6 +83,9 @@ export async function GET(request: NextRequest) {
 
     if (!error) {
       const profile = await syncUserProfile();
+      if (profile && !profile.onboardingCompleted && !profile.onboardingCompletedAt) {
+        return NextResponse.redirect(new URL("/signup?step=quiz", request.url));
+      }
       return NextResponse.redirect(
         `${origin}${resolvePostAuthDestination(next, profile)}`
       );
@@ -94,6 +103,9 @@ export async function GET(request: NextRequest) {
       }
 
       const profile = await syncUserProfile();
+      if (profile && !profile.onboardingCompleted && !profile.onboardingCompletedAt) {
+        return NextResponse.redirect(new URL("/signup?step=quiz", request.url));
+      }
       return NextResponse.redirect(
         `${origin}${resolvePostAuthDestination(next, profile)}`
       );

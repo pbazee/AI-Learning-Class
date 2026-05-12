@@ -69,6 +69,10 @@ export async function POST(request: NextRequest) {
     }
 
     const profile = await syncAuthenticatedUser(data.user);
+    const onboardingProfile = profile as {
+      onboardingCompleted?: boolean | null;
+      onboardingCompletedAt?: Date | string | null;
+    } | null;
 
     if (!profile) {
       return NextResponse.json(
@@ -82,10 +86,12 @@ export async function POST(request: NextRequest) {
       nextPath: resolvePostAuthDestination(redirectPath, {
         role: profile.role,
         createdAt: profile.createdAt,
+        onboardingCompleted: Boolean(onboardingProfile?.onboardingCompleted),
         onboardingCompletedAt:
-          typeof data.user.user_metadata?.onboarding_completed_at === "string"
+          onboardingProfile?.onboardingCompletedAt ??
+          (typeof data.user.user_metadata?.onboarding_completed_at === "string"
             ? data.user.user_metadata.onboarding_completed_at
-            : null,
+            : null),
       }),
       user: {
         id: profile.id,

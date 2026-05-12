@@ -39,6 +39,7 @@ export type LessonProgressContentType = "video" | "audio" | "pdf";
 
 export type SerializedLessonProgress = {
   lessonId: string;
+  assetId?: string | null;
   contentType: LessonProgressContentType | null;
   progressPercent: number;
   lastPosition: number | null;
@@ -51,6 +52,7 @@ export type SerializedLessonProgress = {
 };
 
 type LessonProgressRow = {
+  id: string;
   lessonId: string;
   contentType: CourseAssetType | null;
   isCompleted: boolean;
@@ -68,6 +70,7 @@ type UpsertLessonProgressInput = {
   lessonId: string;
   courseId: string;
   lessonType: LessonType;
+  assetId?: string | null;
   contentType?: LessonProgressContentType | CourseAssetType | null;
   touchOnly?: boolean;
   resetProgress?: boolean;
@@ -207,6 +210,7 @@ function serializeLessonProgress(row: LessonProgressRow): SerializedLessonProgre
 
   return {
     lessonId: row.lessonId,
+    assetId: null,
     contentType: toSerializedContentType(row.contentType),
     progressPercent,
     lastPosition,
@@ -264,6 +268,14 @@ export async function ensureLessonProgressColumns() {
           ADD COLUMN IF NOT EXISTS "lastPage" INTEGER
         `);
         await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "LessonProgress"
+          ADD COLUMN IF NOT EXISTS "assetId" UUID
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "LessonProgress"
+          ADD COLUMN IF NOT EXISTS "courseId" TEXT
+        `);
+        await prisma.$executeRaw(Prisma.sql`
           UPDATE "LessonProgress"
           SET "progressPercent" = CASE WHEN "isCompleted" = TRUE THEN 100 ELSE COALESCE("progressPercent", 0) END
           WHERE "progressPercent" IS NULL OR ("isCompleted" = TRUE AND "progressPercent" < 100)
@@ -290,6 +302,14 @@ export async function ensureLessonProgressColumns() {
           FROM "Lesson" AS l
           WHERE lp."lessonId" = l.id
             AND lp."contentType" IS NULL
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          UPDATE "LessonProgress" AS lp
+          SET "courseId" = m."courseId"
+          FROM "Lesson" AS l
+          INNER JOIN "Module" AS m ON m.id = l."moduleId"
+          WHERE lp."lessonId" = l.id
+            AND lp."courseId" IS NULL
         `);
 
         lessonProgressColumnsAvailable = true;
@@ -323,10 +343,14 @@ export async function ensureLessonProgressColumns() {
 }
 
 export async function getCourseProgressState(userId: string, courseId: string) {
-  await ensureLessonProgressColumns();
+  try {
+    await ensureLessonProgressColumns();
+  } catch (error) {
+    console.warn("ensureLessonProgressColumns failed silently:", error);
+  }
 
-  const [lessons, progressRows] = await Promise.all([
-    prisma.lesson.findMany({
+  try {
+    const lessons = await prisma.lesson.findMany({
       where: {
         module: {
           courseId,
@@ -334,78 +358,150 @@ export async function getCourseProgressState(userId: string, courseId: string) {
       },
       select: {
         id: true,
-      },
-      orderBy: [{ module: { order: "asc" } }, { order: "asc" }],
-    }),
-    prisma.lessonProgress.findMany({
-      where: {
-        userId,
-        lesson: {
-          module: {
-            courseId,
+        lessonAssets: {
+          select: {
+            id: true,
           },
+          orderBy: { sortOrder: "asc" },
         },
       },
-      select: {
-        lessonId: true,
-        contentType: true,
-        isCompleted: true,
-        progressPercent: true,
-        watchedSeconds: true,
-        lastPosition: true,
-        lastPdfPage: true,
-        lastPage: true,
-        completedAt: true,
-        updatedAt: true,
-      },
-    }),
-  ]);
+      orderBy: [{ module: { order: "asc" } }, { order: "asc" }],
+    });
 
-  const lessonProgressByLessonId = Object.fromEntries(
-    progressRows.map((row) => [
-      row.lessonId,
-      serializeLessonProgress(row),
-    ])
-  );
+    const lessonIds = lessons.map((lesson) => lesson.id);
+    const progressRows =
+      lessonIds.length > 0
+        ? await (prisma.lessonProgress as any).findMany({
+            where: {
+              userId,
+              lessonId: {
+                in: lessonIds,
+              },
+            },
+            select: {
+              id: true,
+              lessonId: true,
+              contentType: true,
+              isCompleted: true,
+              progressPercent: true,
+              watchedSeconds: true,
+              lastPosition: true,
+              lastPdfPage: true,
+              lastPage: true,
+              completedAt: true,
+              updatedAt: true,
+            },
+          })
+        : [];
 
-  const completedLessonIds = lessons
-    .filter((lesson) => {
-      const progress = lessonProgressByLessonId[lesson.id];
-      return Boolean(progress?.isCompleted || (progress?.progressPercent ?? 0) >= 100);
-    })
-    .map((lesson) => lesson.id);
-  const completedCount = completedLessonIds.length;
-  const totalLessons = lessons.length;
-  const percentage =
-    totalLessons > 0
-      ? Math.round(
-          lessons.reduce(
-            (sum, lesson) => sum + (lessonProgressByLessonId[lesson.id]?.progressPercent ?? 0),
-            0
-          ) / totalLessons
-        )
-      : 0;
+    const assetProgressByKey = Object.fromEntries(
+      (progressRows as LessonProgressRow[]).map((row) => [
+        `${row.lessonId}:primary`,
+        serializeLessonProgress(row),
+      ])
+    );
 
-  return {
-    completedLessonIds,
-    completedCount,
-    totalLessons,
-    percentage,
-    lessonProgressByLessonId,
-  };
+    const lessonProgressByLessonId = Object.fromEntries(
+      lessons.map((lesson) => {
+        const assetIds = lesson.lessonAssets.length > 0 ? lesson.lessonAssets.map((asset) => asset.id) : [null];
+        const assetEntries = assetIds.map((assetId) => {
+          const key = `${lesson.id}:${assetId ?? "primary"}`;
+          return (
+            assetProgressByKey[`${lesson.id}:primary`] ?? {
+              lessonId: lesson.id,
+              assetId: null,
+              contentType: null,
+              progressPercent: 0,
+              lastPosition: null,
+              lastPage: null,
+              watchedSeconds: 0,
+              lastPdfPage: null,
+              isCompleted: false,
+              completedAt: null,
+              updatedAt: null,
+            }
+          );
+        });
+        const progressPercent =
+          assetEntries.length > 0
+            ? Math.round(assetEntries.reduce((sum, item) => sum + item.progressPercent, 0) / assetEntries.length)
+            : 0;
+        const isCompleted = assetEntries.length > 0 && assetEntries.every((item) => item.isCompleted);
+
+        return [
+          lesson.id,
+          {
+            lessonId: lesson.id,
+            assetId: null,
+            contentType: assetEntries[0]?.contentType ?? null,
+            progressPercent: isCompleted ? 100 : progressPercent,
+            lastPosition: null,
+            lastPage: null,
+            watchedSeconds: 0,
+            lastPdfPage: null,
+            isCompleted,
+            completedAt: isCompleted ? assetEntries[assetEntries.length - 1]?.completedAt ?? null : null,
+            updatedAt: assetEntries[assetEntries.length - 1]?.updatedAt ?? null,
+          },
+        ];
+      })
+    );
+
+    const completedLessonIds = lessons
+      .filter((lesson) => {
+        const progress = lessonProgressByLessonId[lesson.id];
+        return Boolean(progress?.isCompleted || (progress?.progressPercent ?? 0) >= 100);
+      })
+      .map((lesson) => lesson.id);
+    const completedCount = completedLessonIds.length;
+    const totalLessons = lessons.length;
+    const totalAssets = lessons.reduce((sum, lesson) => sum + Math.max(lesson.lessonAssets.length, 1), 0);
+    const completedAssetCount = Object.values(assetProgressByKey).filter((entry) => entry.isCompleted).length;
+    const percentage =
+      totalAssets > 0
+        ? Math.round(
+            lessons.reduce((sum, lesson) => {
+              const weight = Math.max(lesson.lessonAssets.length, 1);
+              return sum + (lessonProgressByLessonId[lesson.id]?.progressPercent ?? 0) * weight;
+            }, 0) / totalAssets
+          )
+        : 0;
+
+    return {
+      completedLessonIds,
+      completedCount,
+      totalLessons,
+      completedAssetCount,
+      totalAssetCount: totalAssets,
+      percentage,
+      lessonProgressByLessonId,
+      assetProgressByKey,
+    };
+  } catch (error) {
+    console.error("Progress state failed, continuing without it:", error);
+    return {
+      completedLessonIds: [],
+      completedCount: 0,
+      totalLessons: 0,
+      completedAssetCount: 0,
+      totalAssetCount: 0,
+      percentage: 0,
+      lessonProgressByLessonId: {},
+      assetProgressByKey: {},
+    };
+  }
 }
 
-export async function getLessonProgressEntry(userId: string, lessonId: string) {
+export async function getLessonProgressEntry(userId: string, lessonId: string, assetId?: string | null) {
   await ensureLessonProgressColumns();
 
-  const row = await prisma.lessonProgress.findUnique({
+  const row = await (prisma.lessonProgress as any).findFirst({
     where: {
-      userId_lessonId: {
-        userId,
-        lessonId,
-      },
+      userId,
+      lessonId,
     },
     select: {
+      id: true,
       lessonId: true,
       contentType: true,
       isCompleted: true,
@@ -427,6 +523,7 @@ export async function upsertLessonProgressEntry({
   lessonId,
   courseId,
   lessonType,
+  assetId,
   contentType,
   touchOnly,
   resetProgress,
@@ -438,14 +535,13 @@ export async function upsertLessonProgressEntry({
 }: UpsertLessonProgressInput) {
   await ensureLessonProgressColumns();
 
-  const existingProgress = await prisma.lessonProgress.findUnique({
+  const existingProgress = await (prisma.lessonProgress as any).findFirst({
     where: {
-      userId_lessonId: {
-        userId,
-        lessonId,
-      },
+      userId,
+      lessonId,
     },
     select: {
+      id: true,
       lessonId: true,
       contentType: true,
       isCompleted: true,
@@ -460,39 +556,51 @@ export async function upsertLessonProgressEntry({
   });
 
   if (touchOnly) {
-    const row = await prisma.lessonProgress.upsert({
-      where: {
-        userId_lessonId: {
-          userId,
-          lessonId,
-        },
-      },
-      update: {
-        watchedSeconds: {
-          increment: 0,
-        },
-      },
-      create: {
-        userId,
-        lessonId,
-        contentType: toStoredContentType(contentType, lessonType),
-        isCompleted: false,
-        progressPercent: 0,
-        completedAt: null,
-      },
-      select: {
-        lessonId: true,
-        contentType: true,
-        isCompleted: true,
-        progressPercent: true,
-        watchedSeconds: true,
-        lastPosition: true,
-        lastPdfPage: true,
-        lastPage: true,
-        completedAt: true,
-        updatedAt: true,
-      },
-    });
+    const row = existingProgress
+      ? await (prisma.lessonProgress as any).update({
+          where: { id: existingProgress.id },
+          data: {
+            watchedSeconds: {
+              increment: 0,
+            },
+          },
+          select: {
+            id: true,
+            lessonId: true,
+            contentType: true,
+            isCompleted: true,
+            progressPercent: true,
+            watchedSeconds: true,
+            lastPosition: true,
+            lastPdfPage: true,
+            lastPage: true,
+            completedAt: true,
+            updatedAt: true,
+          },
+        })
+      : await (prisma.lessonProgress as any).create({
+          data: {
+            userId,
+            lessonId,
+            contentType: toStoredContentType(contentType, lessonType),
+            isCompleted: false,
+            progressPercent: 0,
+            completedAt: null,
+          },
+          select: {
+            id: true,
+            lessonId: true,
+            contentType: true,
+            isCompleted: true,
+            progressPercent: true,
+            watchedSeconds: true,
+            lastPosition: true,
+            lastPdfPage: true,
+            lastPage: true,
+            completedAt: true,
+            updatedAt: true,
+          },
+        });
 
     const courseProgress = await getCourseProgressState(userId, courseId);
     await prisma.enrollment.updateMany({
@@ -558,48 +666,60 @@ export async function upsertLessonProgressEntry({
         : Math.max(fallbackLastPage ?? 1, requestedLastPage ?? 1)
       : null;
 
-  const row = await prisma.lessonProgress.upsert({
-    where: {
-      userId_lessonId: {
-        userId,
-        lessonId,
-      },
-    },
-    update: {
-      contentType: storedContentType,
-      isCompleted: nextIsCompleted,
-      progressPercent: nextProgressPercent,
-      watchedSeconds: nextLastPosition ?? 0,
-      lastPosition: nextLastPosition,
-      lastPdfPage: nextLastPage,
-      lastPage: nextLastPage,
-      completedAt: nextIsCompleted ? new Date() : null,
-    },
-    create: {
-      userId,
-      lessonId,
-      contentType: storedContentType,
-      isCompleted: nextIsCompleted,
-      progressPercent: nextProgressPercent,
-      watchedSeconds: nextLastPosition ?? 0,
-      lastPosition: nextLastPosition,
-      lastPdfPage: nextLastPage,
-      lastPage: nextLastPage,
-      completedAt: nextIsCompleted ? new Date() : null,
-    },
-    select: {
-      lessonId: true,
-      contentType: true,
-      isCompleted: true,
-      progressPercent: true,
-      watchedSeconds: true,
-      lastPosition: true,
-      lastPdfPage: true,
-      lastPage: true,
-      completedAt: true,
-      updatedAt: true,
-    },
-  });
+  const row = existingProgress
+    ? await (prisma.lessonProgress as any).update({
+        where: { id: existingProgress.id },
+        data: {
+          contentType: storedContentType,
+          isCompleted: nextIsCompleted,
+          progressPercent: nextProgressPercent,
+          watchedSeconds: nextLastPosition ?? 0,
+          lastPosition: nextLastPosition,
+          lastPdfPage: nextLastPage,
+          lastPage: nextLastPage,
+          completedAt: nextIsCompleted ? new Date() : null,
+        },
+        select: {
+          id: true,
+          lessonId: true,
+          contentType: true,
+          isCompleted: true,
+          progressPercent: true,
+          watchedSeconds: true,
+          lastPosition: true,
+          lastPdfPage: true,
+          lastPage: true,
+          completedAt: true,
+          updatedAt: true,
+        },
+      })
+    : await (prisma.lessonProgress as any).create({
+        data: {
+          userId,
+          lessonId,
+          contentType: storedContentType,
+          isCompleted: nextIsCompleted,
+          progressPercent: nextProgressPercent,
+          watchedSeconds: nextLastPosition ?? 0,
+          lastPosition: nextLastPosition,
+          lastPdfPage: nextLastPage,
+          lastPage: nextLastPage,
+          completedAt: nextIsCompleted ? new Date() : null,
+        },
+        select: {
+          id: true,
+          lessonId: true,
+          contentType: true,
+          isCompleted: true,
+          progressPercent: true,
+          watchedSeconds: true,
+          lastPosition: true,
+          lastPdfPage: true,
+          lastPage: true,
+          completedAt: true,
+          updatedAt: true,
+        },
+      });
 
   const courseProgress = await getCourseProgressState(userId, courseId);
   await prisma.enrollment.updateMany({

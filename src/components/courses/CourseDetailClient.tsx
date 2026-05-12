@@ -91,6 +91,7 @@ export function CourseDetailClient({
   viewer,
   courseAccess,
   previewState,
+  relatedCourses,
   askAiEnabled,
   askAiAssistantLabel = DEFAULT_ASK_AI_NAME,
   shareUrl,
@@ -100,6 +101,7 @@ export function CourseDetailClient({
   viewer: { id: string; name?: string | null } | null;
   courseAccess?: CourseAccessState;
   previewState?: CoursePreviewState | null;
+  relatedCourses: Course[];
   askAiEnabled: boolean;
   askAiAssistantLabel?: string;
   shareUrl: string;
@@ -242,6 +244,59 @@ export function CourseDetailClient({
     course.originalPrice && course.originalPrice > course.price
       ? Math.round((1 - course.price / course.originalPrice) * 100)
       : null;
+
+  function renderRelatedCourses() {
+    if (relatedCourses.length === 0) {
+      return null;
+    }
+
+    return (
+      <div>
+        <h3 className="mb-2 text-lg font-bold text-foreground">
+          Learners who enrolled in this course also enrolled in these courses
+        </h3>
+        <p className="mb-4 text-sm text-muted-foreground">
+          A few strong next picks based on this learning path.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {relatedCourses.map((relatedCourse) => (
+            <Link
+              key={relatedCourse.id}
+              href={`/courses/${relatedCourse.slug}`}
+              className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:-translate-y-0.5 hover:border-primary-blue/25 hover:shadow-md"
+            >
+              <div className="relative aspect-[16/10] bg-muted">
+                <Image
+                  src={relatedCourse.thumbnailUrl || relatedCourse.imageUrl || thumbnailFallback}
+                  alt={relatedCourse.title}
+                  fill
+                  quality={75}
+                  placeholder="blur"
+                  blurDataURL={IMAGE_BLUR_DATA_URL}
+                  sizes="(min-width: 1280px) 20vw, (min-width: 640px) 40vw, 100vw"
+                  className="object-cover"
+                />
+              </div>
+              <div className="space-y-2 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-primary-blue/20 bg-primary-blue/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-blue">
+                    {levelLabel(relatedCourse.level)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{relatedCourse.categoryName}</span>
+                </div>
+                <p className="line-clamp-2 text-sm font-semibold text-foreground">
+                  {relatedCourse.title}
+                </p>
+                <p className="line-clamp-2 text-xs text-muted-foreground">
+                  {relatedCourse.shortDescription || relatedCourse.description}
+                </p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   function renderPreviewTrigger(compact = false) {
     return (
@@ -615,6 +670,8 @@ export function CourseDetailClient({
                   </div>
                 </div>
               </details>
+
+              {renderRelatedCourses()}
             </div>
 
             <div className="hidden min-w-0 space-y-10 lg:block lg:col-span-2">
@@ -867,6 +924,8 @@ export function CourseDetailClient({
                     ))}
                   </div>
                 </div>
+
+                {renderRelatedCourses()}
               </div>
             </div>
 

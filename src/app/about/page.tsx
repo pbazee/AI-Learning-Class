@@ -39,7 +39,7 @@ export default async function AboutPage() {
   return (
     <div className="site-shell min-h-screen">
 
-      <main className="pb-20 pt-8 sm:pt-10">
+      <main className="pb-20 pt-3 sm:pt-10">
         <section className="section-frame">
           <div className="overflow-hidden rounded-[34px] border border-border bg-[radial-gradient(circle_at_top_right,rgba(0,86,210,0.18),transparent_42%),linear-gradient(135deg,#071121_0%,#0b1730_44%,#111b34_100%)] px-6 py-10 text-white shadow-[0_40px_120px_-64px_rgba(15,23,42,0.9)] sm:px-10 sm:py-14">
             <div className="max-w-3xl">

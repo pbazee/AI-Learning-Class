@@ -18,7 +18,7 @@ export default async function CategoriesPage() {
 
   return (
     <div className="min-h-screen">
-      <main className="pt-6 sm:pt-8">
+      <main className="pt-2 sm:pt-8">
         <CategoriesGrid categories={categories} />
       </main>
       <Footer />

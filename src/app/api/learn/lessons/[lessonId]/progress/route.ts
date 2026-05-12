@@ -4,6 +4,7 @@ import { getLessonProgressRequestContext, toLessonProgressErrorResponse } from "
 import { upsertLessonProgressEntry } from "@/lib/lesson-player";
 
 const progressPayloadSchema = z.object({
+  assetId: z.string().uuid().nullable().optional(),
   isCompleted: z.boolean().optional(),
   manualCompletionState: z.enum(["COMPLETE", "INCOMPLETE"]).optional(),
   touchOnly: z.boolean().optional(),
@@ -40,6 +41,7 @@ export async function POST(
       lessonId,
       courseId,
       lessonType: lesson.type,
+      assetId: payload.assetId,
       touchOnly: payload.touchOnly,
       resetProgress: payload.resetProgress,
       isCompleted: payload.isCompleted,

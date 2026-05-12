@@ -363,8 +363,8 @@ export function NavbarClient({
     const supabase = getSupabaseClient();
     await supabase.auth.signOut();
     setUserRole(null);
-    router.push("/");
-    router.refresh();
+    router.replace("/");
+    window.location.assign("/");
   }
 
   function submitSearch(query = searchQuery) {

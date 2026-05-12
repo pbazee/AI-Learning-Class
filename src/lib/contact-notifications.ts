@@ -4,6 +4,7 @@ import { getPrimaryAdminEmail, normalizeEmail } from "@/lib/admin-email";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { isPrismaConnectionError, isPrismaSchemaMismatchError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
 
 function escapeHtml(value: string) {
   return value
@@ -15,14 +16,29 @@ function escapeHtml(value: string) {
 }
 
 async function getNotificationContext() {
-  const settings = await prisma.siteSettings.findUnique({
-    where: { id: "singleton" },
-    select: {
-      siteName: true,
-      supportEmail: true,
-      adminEmail: true,
-    },
-  });
+  let settings = null;
+
+  try {
+    settings = await prisma.siteSettings.findUnique({
+      where: { id: "singleton" },
+      select: {
+        siteName: true,
+        supportEmail: true,
+        adminEmail: true,
+      },
+    });
+  } catch (error) {
+    if (!isPrismaConnectionError(error) && !isPrismaSchemaMismatchError(error)) {
+      throw error;
+    }
+
+    logPrismaConnectionEvent(
+      "contact-notifications:getNotificationContext",
+      "[contact] Failed to load notification settings. Using defaults.",
+      error,
+      "warn"
+    );
+  }
 
   const siteName = settings?.siteName?.trim() || "AI GENIUS LAB";
   const adminEmail = normalizeEmail(settings?.adminEmail) || getPrimaryAdminEmail();

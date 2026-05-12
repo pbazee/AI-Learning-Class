@@ -5,7 +5,7 @@ export type Role = "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPER_ADMIN";
 export type OrderStatus = "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
 export type EnrollmentStatus = "ACTIVE" | "COMPLETED" | "SUSPENDED" | "EXPIRED";
 export type CourseAssetType = "AUDIO" | "VIDEO" | "PDF";
-export type LessonAssetType = "VIDEO" | "PDF" | "FILE";
+export type LessonAssetType = "VIDEO" | "PDF" | "FILE" | "IMAGE";
 export type ContentStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 export type PopupShowOn = "HOMEPAGE_ONLY" | "COURSE_PAGES" | "BLOG_PAGES" | "ALL_PAGES";
 export type ContactMessageStatus = "UNREAD" | "READ" | "REPLIED";
@@ -167,6 +167,17 @@ export interface CourseReview {
   createdAt: string;
 }
 
+export type OnboardingQuizAnswers = {
+  experience: string;
+  goal: string;
+  time: string;
+  category_id: string;
+  experience_other?: string;
+  goal_other?: string;
+  time_other?: string;
+  category_other?: string;
+};
+
 export interface User {
   id: string;
   email: string;
@@ -175,7 +186,7 @@ export interface User {
   role: Role;
   bio?: string;
   country?: string;
-  onboardingQuizAnswers?: Record<string, number>;
+  onboardingQuizAnswers?: OnboardingQuizAnswers;
   onboardingRecommendations?: string[];
   onboardingCompletedAt?: string | null;
 }

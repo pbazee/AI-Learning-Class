@@ -9,6 +9,7 @@ import {
 } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
@@ -68,7 +69,7 @@ type LessonPlayerNote = {
 type CourseLesson = NonNullable<Course["modules"]>[number]["lessons"][number];
 type CourseLessonAsset = NonNullable<CourseLesson["assets"]>[number];
 type LessonRendererKind = "pdf" | "video" | "audio";
-type LessonResourceKind = LessonRendererKind | "file";
+type LessonResourceKind = LessonRendererKind | "image" | "file";
 
 type LessonProgressState = {
   contentType: LessonRendererKind | null;
@@ -111,7 +112,7 @@ type PdfScrollRequest = {
 
 type ResourceProgressState = {
   isCompleted: boolean;
-  kind: "media" | "pdf";
+  kind: "media" | "pdf" | "image";
   lastPage?: number;
   lastPosition?: number;
   progressPercent: number;
@@ -140,7 +141,14 @@ function normalizeResourceProgressMap(value: unknown) {
     }
 
     const resourceEntry = entry as Partial<ResourceProgressState>;
-    const kind = resourceEntry.kind === "pdf" ? "pdf" : resourceEntry.kind === "media" ? "media" : null;
+    const kind =
+      resourceEntry.kind === "pdf"
+        ? "pdf"
+        : resourceEntry.kind === "media"
+          ? "media"
+          : resourceEntry.kind === "image"
+            ? "image"
+            : null;
 
     if (!kind) {
       return [];
@@ -221,6 +229,8 @@ function resolveLessonAssets(lesson: CourseLesson): ResolvedLessonAsset[] {
                 ? "video"
                 : kind === "AUDIO"
                   ? "audio"
+                  : kind === "IMAGE"
+                    ? "image"
                   : "file",
           resolvedUrl,
         } satisfies ResolvedLessonAsset;
@@ -247,7 +257,8 @@ function resolveLessonAssets(lesson: CourseLesson): ResolvedLessonAsset[] {
     {
       id: `legacy-${lesson.id}`,
       lessonId: lesson.id,
-      assetType: kind === "PDF" ? "PDF" : kind === "VIDEO" ? "VIDEO" : "FILE",
+      assetType:
+        kind === "PDF" ? "PDF" : kind === "VIDEO" ? "VIDEO" : kind === "IMAGE" ? "IMAGE" : "FILE",
       assetUrl: fallbackUrl,
       assetPath: lesson.assetPath,
       fileName: getLessonAssetDisplayTitle({ assetUrl: fallbackUrl }),
@@ -264,6 +275,8 @@ function resolveLessonAssets(lesson: CourseLesson): ResolvedLessonAsset[] {
             ? "video"
             : kind === "AUDIO"
               ? "audio"
+              : kind === "IMAGE"
+                ? "image"
               : "file",
       resolvedUrl: fallbackUrl,
     },
@@ -276,7 +289,12 @@ function resolveLessonRenderer(
 ): ResolvedLessonRenderer {
   const primaryAssetUrl = lessonAssets[0]?.resolvedUrl ?? null;
   const assetTypeLabel = normalizeLessonAssetType(lesson);
-  const inferredRenderer = lessonAssets[0]?.kind === "file" ? null : lessonAssets[0]?.kind ?? inferLessonRendererFromUrl(primaryAssetUrl);
+  const inferredRenderer =
+    lessonAssets[0]?.kind === "pdf" ||
+    lessonAssets[0]?.kind === "video" ||
+    lessonAssets[0]?.kind === "audio"
+      ? lessonAssets[0].kind
+      : inferLessonRendererFromUrl(primaryAssetUrl);
 
   const missingAssetRenderer = {
     assetTypeLabel,
@@ -417,6 +435,20 @@ function getLessonSidebarIcon(lesson: CourseLesson) {
   }
 }
 
+function getLessonResourceBadge(asset: ResolvedLessonAsset) {
+  const url = asset.resolvedUrl.toLowerCase();
+  const mimeType = asset.mimeType?.toLowerCase() || "";
+
+  if (url.endsWith(".docx") || mimeType.includes("wordprocessingml")) return "DOCX";
+  if (url.endsWith(".xlsx") || mimeType.includes("spreadsheetml")) return "XLSX";
+  if (url.endsWith(".pptx") || mimeType.includes("presentationml")) return "PPTX";
+  if (url.endsWith(".pdf") || mimeType.includes("pdf") || asset.kind === "pdf") return "PDF";
+  if (asset.kind === "video") return "VIDEO";
+  if (asset.kind === "audio") return "AUDIO";
+  if (asset.kind === "image") return "IMAGE";
+  return "FILE";
+}
+
 function formatTimeLabel(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.round(totalSeconds));
   const minutes = Math.floor(safeSeconds / 60);
@@ -502,6 +534,7 @@ export function LessonPlayerClient({
   askAiEnabled: boolean;
   askAiAssistantLabel?: string;
 }) {
+  const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [askAiOpen, setAskAiOpen] = useState(false);
@@ -529,13 +562,18 @@ export function LessonPlayerClient({
   const [activeResourceStartTime, setActiveResourceStartTime] = useState(0);
   const [activeResourceInitialPage, setActiveResourceInitialPage] = useState(1);
   const [resourceResumePrompt, setResourceResumePrompt] = useState<ResumePromptState>(null);
+  const [currentLessonId, setCurrentLessonId] = useState(initialLessonId);
+  const [pendingLessonId, setPendingLessonId] = useState(initialLessonId);
+  const [isLessonNavigating, setIsLessonNavigating] = useState(false);
   const { toast } = useToast();
 
   const modules = course.modules ?? [];
   const allLessons = useMemo(() => modules.flatMap((module) => module.lessons), [modules]);
   const currentLesson =
-    allLessons.find((lesson) => lesson.id === initialLessonId) ?? allLessons[0];
+    allLessons.find((lesson) => lesson.id === currentLessonId) ?? allLessons[0];
   const currentIndex = allLessons.findIndex((lesson) => lesson.id === currentLesson.id);
+  const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
+  const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
   const lessonForRendering = useMemo(
     () =>
       fetchedLessonAssets === null
@@ -558,19 +596,27 @@ export function LessonPlayerClient({
   const currentContentType = resolvedLessonRenderer.kind;
   const primaryAssetUrl = resolvedLessonRenderer.primaryAssetUrl;
   const primaryLessonAsset = resolvedLessonAssets[0] ?? null;
-  const additionalLessonAssets = resolvedLessonAssets.slice(1);
+  const lessonAssetRows = resolvedLessonAssets;
   const activeResourceAsset =
-    additionalLessonAssets.find((asset) => asset.id === activeResourceId) ?? null;
+    lessonAssetRows.find((asset) => asset.id === activeResourceId) ?? null;
+  const mainImageAssets =
+    activeResourceId && activeResourceAsset?.kind === "image"
+      ? [activeResourceAsset]
+      : primaryLessonAsset?.kind === "image"
+        ? resolvedLessonAssets.filter((asset) => asset.kind === "image")
+        : [];
   const activeResourceProgress =
     activeResourceAsset
       ? resourceProgressMap[getResourceProgressKey(currentLesson.id, activeResourceAsset.id)] ?? null
       : null;
   const activeViewerAsset = activeResourceAsset ?? primaryLessonAsset;
   const activeViewerKind =
-    activeResourceAsset?.kind === "pdf" ||
-    activeResourceAsset?.kind === "video" ||
-    activeResourceAsset?.kind === "audio"
-      ? activeResourceAsset.kind
+    activeResourceAsset
+      ? activeResourceAsset.kind === "pdf" ||
+        activeResourceAsset.kind === "video" ||
+        activeResourceAsset.kind === "audio"
+        ? activeResourceAsset.kind
+        : null
       : currentContentType;
   const activeViewerUrl = activeResourceAsset?.resolvedUrl ?? primaryAssetUrl;
   const activeResourcePdfUrl = activeResourceAsset?.resolvedUrl ?? null;
@@ -590,6 +636,37 @@ export function LessonPlayerClient({
     () => calculateCourseProgress(allLessons, lessonProgressMap),
     [allLessons, lessonProgressMap]
   );
+  const currentLessonAssetsCompleted = useMemo(() => {
+    if (lessonAssetRows.length === 0) {
+      return currentLessonProgress.isCompleted;
+    }
+
+    return lessonAssetRows.every((asset, index) => {
+      if (index === 0) {
+        return currentLessonProgress.isCompleted;
+      }
+
+      return Boolean(resourceProgressMap[getResourceProgressKey(currentLesson.id, asset.id)]?.isCompleted);
+    });
+  }, [currentLesson.id, currentLessonProgress.isCompleted, lessonAssetRows, resourceProgressMap]);
+
+  useEffect(() => {
+    setCurrentLessonId(initialLessonId);
+    setPendingLessonId(initialLessonId);
+    setIsLessonNavigating(false);
+  }, [initialLessonId]);
+
+  useEffect(() => {
+    if (nextLesson) {
+      router.prefetch(`/learn/${course.slug}/${nextLesson.id}`);
+      void fetch(`/api/learn/lessons/${nextLesson.id}/assets`, { cache: "force-cache" }).catch(() => undefined);
+    }
+
+    if (prevLesson) {
+      router.prefetch(`/learn/${course.slug}/${prevLesson.id}`);
+      void fetch(`/api/learn/lessons/${prevLesson.id}/assets`, { cache: "force-cache" }).catch(() => undefined);
+    }
+  }, [course.slug, currentLesson.id, nextLesson, prevLesson, router]);
 
   const pdfViewportRef = useRef<HTMLDivElement | null>(null);
   const mediaPlayerRef = useRef<MediaPlayerHandle | null>(null);
@@ -611,6 +688,21 @@ export function LessonPlayerClient({
   const isLessonUnlocked = useCallback(
     (lesson: CourseLesson) => hasFullCourseAccess || lesson.isPreview,
     [hasFullCourseAccess]
+  );
+
+  const handleLessonSelect = useCallback(
+    (lessonId: string, assetId?: string | null) => {
+      setPendingLessonId(lessonId);
+      setIsLessonNavigating(true);
+      window.setTimeout(() => {
+        setCurrentLessonId(lessonId);
+        setActiveResourceId(assetId ?? null);
+        setIsLessonNavigating(false);
+        setPendingLessonId(lessonId);
+        router.replace(`/learn/${course.slug}/${initialLessonId}?lesson=${lessonId}`, { scroll: false });
+      }, 150);
+    },
+    [course.slug, initialLessonId, router]
   );
 
   useEffect(() => {
@@ -690,6 +782,7 @@ export function LessonPlayerClient({
       setActiveResourceStartTime(progressEntry.lastPosition ?? 0);
     }
   }, [activeResourceAsset, currentLesson.id, resourceProgressMap]);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -784,6 +877,68 @@ export function LessonPlayerClient({
     [currentLesson.id]
   );
 
+  useEffect(() => {
+    if (!viewerId || !hasFullCourseAccess || lessonAssetRows.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function hydrateAssetProgress() {
+      const responses = await Promise.all(
+        lessonAssetRows.map(async (asset) => {
+          if (asset.id === primaryLessonAsset?.id) {
+            return null;
+          }
+
+          try {
+            const response = await fetch(
+              `/api/progress?lessonId=${currentLesson.id}&assetId=${asset.id}`,
+              { cache: "no-store" }
+            );
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || !payload?.progress) {
+              return null;
+            }
+
+            return { asset, progress: payload.progress as Partial<LessonProgressState> };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      responses.forEach((entry) => {
+        if (!entry) {
+          return;
+        }
+
+        updateResourceProgress(entry.asset.id, {
+          kind:
+            entry.asset.kind === "pdf"
+              ? "pdf"
+              : entry.asset.kind === "image"
+                ? "image"
+                : "media",
+          isCompleted: Boolean(entry.progress.isCompleted),
+          lastPage: entry.progress.lastPage ?? undefined,
+          lastPosition: entry.progress.lastPosition ?? undefined,
+          progressPercent: entry.progress.progressPercent ?? 0,
+        });
+      });
+    }
+
+    void hydrateAssetProgress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentLesson.id, hasFullCourseAccess, lessonAssetRows, primaryLessonAsset?.id, updateResourceProgress, viewerId]);
+
   const handleActiveResourcePdfProgress = useCallback(
     (percent: number, currentPage: number, totalPages: number) => {
       if (!activeResourceAsset || activeResourceAsset.kind !== "pdf") {
@@ -796,8 +951,21 @@ export function LessonPlayerClient({
         lastPage: currentPage,
         progressPercent: percent,
       });
+      void fetch("/api/progress", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lessonId: currentLesson.id,
+          assetId: activeResourceAsset.id.startsWith("legacy-") ? null : activeResourceAsset.id,
+          contentType: "pdf",
+          progressPercent: percent,
+          lastPage: currentPage,
+          isCompleted: totalPages > 0 && currentPage >= totalPages,
+        }),
+        cache: "no-store",
+      }).catch(() => undefined);
     },
-    [activeResourceAsset, updateResourceProgress]
+    [activeResourceAsset, currentLesson.id, updateResourceProgress]
   );
 
   const handleActiveResourceMediaProgress = useCallback(
@@ -814,8 +982,25 @@ export function LessonPlayerClient({
         lastPosition: snapshot.currentTime,
         progressPercent: snapshot.progressPercent,
       });
+      if (Math.round(snapshot.currentTime) % 10 === 0 || snapshot.progressPercent >= 100) {
+        void fetch("/api/progress", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lessonId: currentLesson.id,
+            assetId: activeResourceAsset.id.startsWith("legacy-") ? null : activeResourceAsset.id,
+            contentType: activeResourceAsset.kind === "audio" ? "audio" : "video",
+            progressPercent: snapshot.progressPercent,
+            lastPosition: Math.round(snapshot.currentTime),
+            isCompleted:
+              snapshot.duration > 0 &&
+              snapshot.currentTime >= Math.max(snapshot.duration - 1, 0),
+          }),
+          cache: "no-store",
+        }).catch(() => undefined);
+      }
     },
-    [activeResourceAsset, updateResourceProgress]
+    [activeResourceAsset, currentLesson.id, updateResourceProgress]
   );
 
   const handleResourceResumePromptResume = useCallback(() => {
@@ -1002,6 +1187,45 @@ export function LessonPlayerClient({
       updateCurrentLessonProgress,
     ]
   );
+
+  const persistAssetProgress = useCallback(
+    async (
+      _asset: ResolvedLessonAsset,
+      _payload: {
+        progressPercent?: number;
+        lastPosition?: number | null;
+        lastPage?: number | null;
+        isCompleted?: boolean;
+      }
+    ) => {
+      // Per-resource resume is stored locally because the live LessonProgress model
+      // in production currently supports lesson-level persistence only.
+    },
+    []
+  );
+
+  useEffect(() => {
+    const imageAsset =
+      activeResourceAsset?.kind === "image"
+        ? activeResourceAsset
+        : !activeResourceAsset && primaryLessonAsset?.kind === "image"
+          ? primaryLessonAsset
+          : null;
+
+    if (!imageAsset) {
+      return;
+    }
+
+    updateResourceProgress(imageAsset.id, {
+      kind: "image",
+      isCompleted: true,
+      progressPercent: 100,
+    });
+    void persistAssetProgress(imageAsset, {
+      progressPercent: 100,
+      isCompleted: true,
+    });
+  }, [activeResourceAsset, persistAssetProgress, primaryLessonAsset, updateResourceProgress]);
 
   const flushProgressBeforeUnload = useCallback(() => {
     if (!canPersistProgress || !currentContentType) {
@@ -1804,18 +2028,23 @@ export function LessonPlayerClient({
                       </h3>
                       <div className="space-y-1">
                         {module.lessons.map((lesson) => {
-                          const isCurrentLesson = lesson.id === currentLesson.id;
+                          const isCurrentLesson = lesson.id === pendingLessonId;
                           const isUnlocked = isLessonUnlocked(lesson);
                           const lessonProgress = normalizeLessonProgressEntry(lessonProgressMap[lesson.id]);
                           const isCompleted = lessonProgress.isCompleted || lessonProgress.progressPercent === 100;
                           const LessonIcon = getLessonSidebarIcon(lesson);
+                          const lessonAssetsForSidebar = resolveLessonAssets(
+                            lesson.id === currentLesson.id ? lessonForRendering : lesson
+                          );
 
                           return (
                             <div key={lesson.id}>
-                              <Link
-                                href={`/learn/${course.slug}/${lesson.id}`}
+                              <button
+                                type="button"
+                                disabled={!isUnlocked}
+                                onClick={() => handleLessonSelect(lesson.id)}
                                 className={cn(
-                                  "group block rounded-lg px-3 py-2.5 text-xs font-medium transition-all duration-200",
+                                  "group block w-full rounded-lg px-3 py-2.5 text-left text-xs font-medium transition-all duration-200",
                                   isCurrentLesson
                                     ? "bg-gradient-to-r from-primary-blue to-primary-blue/80 text-white shadow-lg shadow-primary-blue/30"
                                     : "text-slate-300 hover:bg-white/10 hover:text-white",
@@ -1841,85 +2070,62 @@ export function LessonPlayerClient({
                                     </span>
                                   ) : null}
                                 </div>
-                              </Link>
+                              </button>
 
-                              {isCurrentLesson && additionalLessonAssets.length > 0 ? (
+                              {lessonAssetsForSidebar.length > 0 ? (
                                 <div className="ml-6 mt-2 space-y-1.5 border-l border-white/10 pl-3">
-                                  {additionalLessonAssets.map((asset) => {
+                                  {lessonAssetsForSidebar.map((asset, assetIndex) => {
                                     const progress =
-                                      resourceProgressMap[getResourceProgressKey(currentLesson.id, asset.id)];
-                                    const isActiveResource = activeResourceId === asset.id;
-                                    const resourceBadge =
-                                      asset.kind === "video"
-                                        ? "VIDEO"
-                                        : asset.kind === "audio"
-                                          ? "AUDIO"
-                                          : asset.kind === "pdf"
-                                            ? "PDF"
-                                            : "FILE";
+                                      lesson.id === currentLesson.id && asset.id === primaryLessonAsset?.id
+                                        ? currentLessonProgress
+                                        : resourceProgressMap[getResourceProgressKey(lesson.id, asset.id)];
+                                    const isActiveResource =
+                                      lesson.id === currentLesson.id &&
+                                      ((activeResourceId === asset.id) ||
+                                        (!activeResourceId && asset.id === primaryLessonAsset?.id));
+                                    const resourceBadge = getLessonResourceBadge(asset);
 
                                     return (
-                                      <div
+                                      <button
                                         key={asset.id}
+                                        type="button"
+                                        disabled={!isUnlocked || asset.kind === "file"}
+                                        onClick={() => handleLessonSelect(lesson.id, assetIndex === 0 ? null : asset.id)}
                                         className={cn(
-                                          "rounded-lg border px-3 py-2",
+                                          "w-full rounded-lg border px-3 py-2 text-left",
                                           isActiveResource
                                             ? "border-primary-blue/40 bg-primary-blue/12"
-                                            : "border-white/5 bg-white/[0.03]"
+                                            : "border-white/5 bg-white/[0.03]",
+                                          (!isUnlocked || asset.kind === "file") && "cursor-not-allowed opacity-70"
                                         )}
                                       >
-                                        {asset.kind === "file" ? (
-                                          <div className="w-full cursor-not-allowed text-left opacity-70">
-                                            <div className="flex items-center gap-2">
-                                              <FileText className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                                              <span className="truncate text-[11px] font-semibold text-slate-300">
-                                                {asset.displayTitle}
-                                              </span>
-                                            </div>
-                                            <div className="mt-1 flex items-center gap-2">
-                                              <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                                                {resourceBadge}
-                                              </span>
-                                              <span className="text-[10px] font-semibold text-slate-500">
-                                                Not viewable here
-                                              </span>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            onClick={() => setActiveResourceId(asset.id)}
-                                            className="w-full text-left"
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              {asset.kind === "video" ? (
-                                                <PlayCircle className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
-                                              ) : asset.kind === "audio" ? (
-                                                <Volume2 className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
-                                              ) : (
-                                                <FileText className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
-                                              )}
-                                              <span className="truncate text-[11px] font-semibold text-white">
-                                                {asset.displayTitle}
-                                              </span>
-                                            </div>
-                                            <div className="mt-1 flex items-center gap-2">
-                                              <span className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
-                                                {resourceBadge}
-                                              </span>
-                                              {progress?.isCompleted ? (
-                                                <span className="text-[10px] font-semibold text-emerald-300">
-                                                  Done
-                                                </span>
-                                              ) : progress?.progressPercent ? (
-                                                <span className="text-[10px] font-semibold text-primary-blue">
-                                                  {progress.progressPercent}%
-                                                </span>
-                                              ) : null}
-                                            </div>
-                                          </button>
-                                        )}
-                                      </div>
+                                        <div className="flex items-center gap-2">
+                                          {asset.kind === "video" ? (
+                                            <PlayCircle className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
+                                          ) : asset.kind === "audio" ? (
+                                            <Volume2 className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
+                                          ) : (
+                                            <FileText className="h-3.5 w-3.5 shrink-0 text-primary-blue" />
+                                          )}
+                                          <span className="truncate text-[11px] font-semibold text-white">
+                                            {asset.displayTitle}
+                                          </span>
+                                        </div>
+                                        <div className="mt-1 flex items-center gap-2">
+                                          <span className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                                            {resourceBadge}
+                                          </span>
+                                          {progress?.isCompleted ? (
+                                            <span className="text-[10px] font-semibold text-emerald-300">
+                                              Done
+                                            </span>
+                                          ) : progress?.progressPercent ? (
+                                            <span className="text-[10px] font-semibold text-primary-blue">
+                                              {progress.progressPercent}%
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      </button>
                                     );
                                   })}
                                 </div>
@@ -1947,7 +2153,7 @@ export function LessonPlayerClient({
                 <div className="mt-4 space-y-3">
                   <button
                     onClick={toggleLessonCompletion}
-                    disabled={manualCompletionPending}
+                    disabled={manualCompletionPending || !currentLessonAssetsCompleted}
                     className={cn(
                       "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
                       currentLessonProgress.isCompleted
@@ -1960,27 +2166,33 @@ export function LessonPlayerClient({
                     ) : (
                       <CheckCircle2 className="h-4 w-4" />
                     )}
-                    {currentLessonProgress.isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
+                    {currentLessonProgress.isCompleted
+                      ? "Mark as Incomplete"
+                      : currentLessonAssetsCompleted
+                        ? "Mark as Complete"
+                        : "View all assets to complete"}
                   </button>
 
                   <div className="grid grid-cols-1 gap-2">
                     {currentIndex > 0 ? (
-                      <Link
-                        href={`/learn/${course.slug}/${allLessons[currentIndex - 1].id}`}
+                      <button
+                        type="button"
+                        onClick={() => handleLessonSelect(allLessons[currentIndex - 1].id)}
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition-all duration-200 hover:bg-white/10 hover:text-white"
                       >
                         <ChevronLeft className="h-4 w-4" />
                         Previous Lesson
-                      </Link>
+                      </button>
                     ) : null}
                     {currentIndex < allLessons.length - 1 ? (
-                      <Link
-                        href={`/learn/${course.slug}/${allLessons[currentIndex + 1].id}`}
+                      <button
+                        type="button"
+                        onClick={() => handleLessonSelect(allLessons[currentIndex + 1].id)}
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-blue/30 transition-all duration-200 hover:bg-primary-blue/90"
                       >
                         Next Lesson
                         <ChevronRight className="h-4 w-4" />
-                      </Link>
+                      </button>
                     ) : null}
                   </div>
                 </div>
@@ -1994,7 +2206,33 @@ export function LessonPlayerClient({
             <div className="p-4 sm:p-6">
               <div className="mx-auto max-w-7xl">
                 {/* ── Media area ── */}
-                <div className="relative">
+                <motion.div
+                  className="relative"
+                  initial={false}
+                  animate={{ opacity: isLessonNavigating ? 0.45 : 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {isLessonNavigating ? (
+                    <div className="absolute inset-0 z-20 flex min-h-[400px] w-full animate-pulse flex-col gap-4 rounded-2xl border border-white/10 bg-[#08101d]/88 p-6 backdrop-blur-sm">
+                      <div className="h-8 w-40 rounded-xl bg-white/10" />
+                      <div className="h-64 rounded-2xl bg-white/8" />
+                      <div className="h-4 w-3/4 rounded bg-white/10" />
+                      <div className="h-4 w-1/2 rounded bg-white/10" />
+                    </div>
+                  ) : null}
+                  {mainImageAssets.length > 0 ? (
+                    <div className="w-full space-y-4 overflow-hidden rounded-2xl">
+                      {mainImageAssets.map((asset) => (
+                        <img
+                          key={asset.id}
+                          src={asset.resolvedUrl}
+                          alt={asset.title || currentLesson.title}
+                          className="w-full rounded-2xl object-contain max-h-[700px]"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+
                   {activeViewerKind === "pdf" && activeViewerUrl ? (
                     <div
                       ref={pdfViewportRef}
@@ -2127,7 +2365,7 @@ export function LessonPlayerClient({
                     </div>
                   ) : null}
 
-                  {!activeViewerKind || !activeViewerUrl ? (
+                  {!activeViewerKind && mainImageAssets.length === 0 ? (
                     <div className="flex min-h-[400px] w-full flex-col items-center justify-center gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-6 shadow-2xl">
                       <AlertCircle className="h-12 w-12 text-rose-400" />
                       <div className="max-w-md text-center">
@@ -2160,7 +2398,7 @@ export function LessonPlayerClient({
                       }
                     />
                   </AnimatePresence>
-                </div>
+                </motion.div>
 
                 {activeResourceAsset ? (
                   <div className="hidden mt-5 rounded-2xl border border-white/10 bg-[#08101d]/90 p-4 shadow-xl">
@@ -2172,20 +2410,13 @@ export function LessonPlayerClient({
                         </p>
                       </div>
                       <div className="text-xs text-slate-500">
-                        {additionalLessonAssets.length} resource{additionalLessonAssets.length === 1 ? "" : "s"}
+                        {lessonAssetRows.length} resource{lessonAssetRows.length === 1 ? "" : "s"}
                       </div>
                     </div>
 
                     <div className="hidden">
-                      {additionalLessonAssets.map((asset) => {
-                        const assetBadge =
-                          asset.kind === "video"
-                            ? "VIDEO"
-                            : asset.kind === "audio"
-                              ? "AUDIO"
-                              : asset.kind === "pdf"
-                                ? "PDF"
-                                : "FILE";
+                      {lessonAssetRows.map((asset) => {
+                        const assetBadge = getLessonResourceBadge(asset);
 
                         return (
                           <div

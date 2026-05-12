@@ -6,7 +6,12 @@ import { CourseDetailClient } from "@/components/courses/CourseDetailClient";
 import { getExpiredTimedCourseAccess } from "@/lib/access-control";
 import { getAskAiSettings } from "@/lib/ask-ai-settings";
 import { getCoursePreviewState } from "@/lib/course-preview-state";
-import { getCourseBySlug, getCurrentUserProfile, getUserCourseAccessMap } from "@/lib/data";
+import {
+  getCourseBySlug,
+  getCurrentUserProfile,
+  getPublicCourseCatalogData,
+  getUserCourseAccessMap,
+} from "@/lib/data";
 import { buildCourseJsonLd } from "@/lib/seo";
 import { absoluteUrl, buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 import { resolveMediaUrl } from "@/lib/media";
@@ -48,11 +53,15 @@ export default async function CourseDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const [course, viewer, previewState, askAiSettings] = await Promise.all([
+  const [course, viewer, previewState, askAiSettings, catalogData] = await Promise.all([
     getCourseBySlug(slug),
     getCurrentUserProfile(),
     getCoursePreviewState(slug),
     getAskAiSettings(),
+    getPublicCourseCatalogData().catch((error) => {
+      console.error("[course-detail] Unable to load related course catalog. Continuing without it.", error);
+      return { categories: [], courses: [] };
+    }),
   ]);
 
   if (!course) {
@@ -68,6 +77,23 @@ export default async function CourseDetailPage({
     viewer && !courseAccess?.hasAccess ? await getExpiredTimedCourseAccess(viewer.id, course.id) : null;
   const branding = await getSiteBranding();
   const courseJsonLd = buildCourseJsonLd(course, branding.siteName);
+  const relatedCourses = catalogData.courses
+    .filter((candidate) => candidate.id !== course.id)
+    .sort((left, right) => {
+      const leftScore =
+        (left.categoryId === course.categoryId ? 4 : 0) +
+        (left.level === course.level ? 2 : 0) +
+        (left.isFeatured ? 1 : 0) +
+        (left.isTrending ? 1 : 0);
+      const rightScore =
+        (right.categoryId === course.categoryId ? 4 : 0) +
+        (right.level === course.level ? 2 : 0) +
+        (right.isFeatured ? 1 : 0) +
+        (right.isTrending ? 1 : 0);
+
+      return rightScore - leftScore || right.totalStudents - left.totalStudents;
+    })
+    .slice(0, 3);
 
   return (
     <div className="bg-background">
@@ -80,6 +106,7 @@ export default async function CourseDetailPage({
         askAiEnabled={askAiSettings.enabled}
         askAiAssistantLabel={askAiSettings.assistantLabel}
         shareUrl={absoluteUrl(`/courses/${course.slug}`)}
+        relatedCourses={relatedCourses}
         expiredAccess={
           expiredAccess
             ? {

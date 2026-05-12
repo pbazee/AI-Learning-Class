@@ -29,6 +29,7 @@ import { getUserTeamWorkspaceSummary } from "@/lib/team-workspace";
 import { formatDuration } from "@/lib/utils";
 import { ReferEarnCard } from "@/components/dashboard/refer-earn-card";
 import { WorkspaceNotesPanel } from "@/components/dashboard/WorkspaceNotesPanel";
+import { ResetOnboardingButton } from "@/components/onboarding/ResetOnboardingButton";
 
 const thumbnailFallback =
   "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop";
@@ -40,7 +41,9 @@ export default async function DashboardPage() {
     redirect("/login?redirect=/dashboard");
   }
 
-  const [enrollments, certificates, workspaceNotes, completedLessons, affiliateStatus, teamWorkspace, purchasedItems, activeSubscription] = await Promise.all([
+  const onboardingProfile = user as { onboardingRecommendations?: string[] | null };
+
+  const [enrollments, certificates, workspaceNotes, completedLessons, affiliateStatus, teamWorkspace, purchasedItems, activeSubscription, latestSubscription] = await Promise.all([
     getUserEnrollments(user.id),
     getUserCertificates(user.id),
     getUserWorkspaceNotes(user.id, 8),
@@ -98,7 +101,52 @@ export default async function DashboardPage() {
         currentPeriodEnd: "desc",
       },
     }),
+    prisma.userSubscription.findFirst({
+      where: {
+        userId: user.id,
+      },
+      include: {
+        plan: {
+          select: {
+            name: true,
+            slug: true,
+          },
+        },
+      },
+      orderBy: {
+        currentPeriodEnd: "desc",
+      },
+    }),
   ]);
+
+  const recommendationSource = onboardingProfile.onboardingRecommendations;
+  const recommendedCourseIds =
+    Array.isArray(recommendationSource)
+      ? recommendationSource
+      : recommendationSource && typeof recommendationSource === "object"
+        ? Object.values(recommendationSource).filter(
+            (value): value is string => typeof value === "string"
+          )
+        : [];
+  const recommendedCourses =
+    recommendedCourseIds.length > 0
+      ? await prisma.course.findMany({
+          where: {
+            id: { in: recommendedCourseIds },
+            isPublished: true,
+          },
+          include: {
+            category: true,
+          },
+          take: 3,
+        })
+      : [];
+  const showLearningPathHero = enrollments.length === 0 && recommendedCourses.length > 0;
+  const isSubscriptionExpired = Boolean(
+    !activeSubscription &&
+      latestSubscription?.currentPeriodEnd &&
+      latestSubscription.currentPeriodEnd < new Date()
+  );
 
   const totalCompletedSeconds = completedLessons.reduce(
     (sum, item) => sum + (item.lesson.duration ?? 0),
@@ -140,7 +188,7 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-background">
       <div className="pb-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 flex flex-col gap-4 pt-8 md:flex-row md:items-start md:justify-between">
+          <div className="mb-8 flex flex-col gap-4 pt-3 sm:pt-8 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="mb-1 text-2xl font-black text-foreground sm:text-3xl">
                 Welcome back, <span className="text-primary-blue">{user.name || "Learner"}</span>
@@ -157,6 +205,77 @@ export default async function DashboardPage() {
               Explore more courses <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
+
+          {isSubscriptionExpired ? (
+            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="font-medium text-slate-900">Your subscription has expired.</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Your progress is saved. Renew to continue learning.
+              </p>
+              <Link href="/pricing?reason=expired" className="mt-2 inline-flex text-sm font-medium text-amber-700 hover:underline">
+                Renew now →
+              </Link>
+            </div>
+          ) : null}
+
+          {showLearningPathHero ? (
+            <div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 p-6">
+              <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="mb-2 inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary-blue">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Your Learning Path
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="text-3xl font-black text-slate-900">Your personalized path is ready</h2>
+                    <ResetOnboardingButton className="text-sm font-medium text-primary-blue hover:underline">
+                      Redo your learning path
+                    </ResetOnboardingButton>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Based on your quiz, we recommend starting here:
+                  </p>
+                </div>
+                <Link href="/courses" className="text-sm font-semibold text-primary-blue hover:underline">
+                  View all courses
+                </Link>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-3">
+                {recommendedCourses.map((course) => (
+                  <div key={course.id} className="overflow-hidden rounded-2xl bg-white text-slate-950 shadow-lg">
+                    <div className="relative h-48">
+                      <Image
+                        src={course.thumbnailUrl || course.imageUrl || thumbnailFallback}
+                        alt={course.title}
+                        fill
+                        quality={75}
+                        placeholder="blur"
+                        blurDataURL={IMAGE_BLUR_DATA_URL}
+                        sizes="(min-width: 1024px) 33vw, 100vw"
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-blue">
+                        {course.category?.name} • {course.level.replace("_", " ")}
+                      </p>
+                      <h3 className="mt-2 text-lg font-black">{course.title}</h3>
+                      <p className="mt-2 line-clamp-2 text-sm text-slate-600">
+                        {course.shortDescription || course.description}
+                      </p>
+                      <Link
+                        href={`/courses/${course.slug}`}
+                        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                      >
+                        Start Learning <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {[
@@ -214,6 +333,62 @@ export default async function DashboardPage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="space-y-6 lg:col-span-2">
+              {!showLearningPathHero && recommendedCourses.length > 0 ? (
+                <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-base font-bold text-foreground">Recommended for you</h2>
+                      <p className="text-xs text-muted-foreground">
+                        Pick up where your onboarding path pointed you.
+                      </p>
+                    </div>
+                    <ResetOnboardingButton className="text-sm font-medium text-primary-blue hover:underline">
+                      Redo your learning path
+                    </ResetOnboardingButton>
+                  </div>
+                  <div className="grid gap-4">
+                    {recommendedCourses.map((course) => (
+                      <div key={course.id} className="rounded-2xl border border-border p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                          <div className="relative h-44 w-full overflow-hidden rounded-xl sm:h-16 sm:w-24 sm:shrink-0">
+                            <Image
+                              src={course.thumbnailUrl || course.imageUrl || thumbnailFallback}
+                              alt={course.title}
+                              fill
+                              quality={75}
+                              placeholder="blur"
+                              blurDataURL={IMAGE_BLUR_DATA_URL}
+                              sizes="(min-width: 640px) 96px, 100vw"
+                              className="object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              href={`/courses/${course.slug}`}
+                              className="line-clamp-1 text-sm font-bold text-foreground transition-colors hover:text-primary-blue"
+                            >
+                              {course.title}
+                            </Link>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {course.category?.name} • {course.level.replace("_", " ")}
+                            </p>
+                            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                              {course.shortDescription || course.description}
+                            </p>
+                          </div>
+                          <Link
+                            href={`/courses/${course.slug}`}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90 sm:self-start"
+                          >
+                            Start Learning <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -228,16 +403,106 @@ export default async function DashboardPage() {
                 </div>
 
                 {enrollments.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border p-8 text-center">
-                    <p className="mb-3 text-sm text-muted-foreground">
-                      You haven&apos;t enrolled in any courses yet.
-                    </p>
-                    <Link
-                      href="/courses"
-                      className="inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
-                    >
-                      Browse courses <ArrowRight className="h-4 w-4" />
-                    </Link>
+                  <div className="space-y-5">
+                    {!showLearningPathHero && recommendedCourses.length > 0 ? (
+                      <div>
+                        <div className="mb-4">
+                          <h3 className="text-sm font-bold text-foreground">Recommended for you</h3>
+                          <p className="text-xs text-muted-foreground">
+                            Pick up where your onboarding path pointed you.
+                          </p>
+                        </div>
+                        <div className="grid gap-4">
+                          {recommendedCourses.map((course) => (
+                            <div key={course.id} className="rounded-2xl border border-border p-4">
+                              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                                <div className="relative h-44 w-full overflow-hidden rounded-xl sm:h-16 sm:w-24 sm:shrink-0">
+                                  <Image
+                                    src={course.thumbnailUrl || course.imageUrl || thumbnailFallback}
+                                    alt={course.title}
+                                    fill
+                                    quality={75}
+                                    placeholder="blur"
+                                    blurDataURL={IMAGE_BLUR_DATA_URL}
+                                    sizes="(min-width: 640px) 96px, 100vw"
+                                    className="object-cover"
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <Link
+                                    href={`/courses/${course.slug}`}
+                                    className="line-clamp-1 text-sm font-bold text-foreground transition-colors hover:text-primary-blue"
+                                  >
+                                    {course.title}
+                                  </Link>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {course.category?.name} • {course.level.replace("_", " ")}
+                                  </p>
+                                  <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                                    {course.shortDescription || course.description}
+                                  </p>
+                                </div>
+                                <Link
+                                  href={`/courses/${course.slug}`}
+                                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90 sm:self-start"
+                                >
+                                  Start Learning <ArrowRight className="h-4 w-4" />
+                                </Link>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+                      <p className="mb-3 text-sm text-muted-foreground">
+                        You haven&apos;t enrolled in any courses yet.
+                      </p>
+                      {recommendedCourses.length > 0 ? (
+                        <div className="mb-4 text-left">
+                          <p className="mb-3 text-sm font-medium text-slate-700">
+                            ✨ Recommended for you based on your learning path:
+                          </p>
+                          <div className="grid grid-cols-1 gap-3">
+                            {recommendedCourses.map((course) => (
+                              <Link
+                                href={`/courses/${course.slug}`}
+                                key={course.id}
+                                className="flex gap-3 rounded-xl border border-slate-100 p-3 text-left transition-all hover:border-blue-200 hover:bg-blue-50"
+                              >
+                                <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                                  <Image
+                                    src={course.imageUrl || course.thumbnailUrl || thumbnailFallback}
+                                    alt={course.title}
+                                    fill
+                                    quality={75}
+                                    placeholder="blur"
+                                    blurDataURL={IMAGE_BLUR_DATA_URL}
+                                    sizes="64px"
+                                    className="object-cover"
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="line-clamp-1 text-sm font-medium text-slate-900">
+                                    {course.title}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    {course.level.replace("_", " ")} · {course.category?.name}
+                                  </p>
+                                </div>
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      <Link
+                        href="/courses"
+                        className="inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                      >
+                        Browse all courses <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">

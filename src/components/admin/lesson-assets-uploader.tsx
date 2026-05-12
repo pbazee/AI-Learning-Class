@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FileAudio,
+  FileImage,
   FileText,
   FileVideo,
   GripVertical,
@@ -20,7 +21,7 @@ import {
 
 export type LessonAssetDraft = {
   id?: string;
-  assetType: "VIDEO" | "PDF" | "FILE";
+  assetType: "VIDEO" | "PDF" | "FILE" | "IMAGE";
   assetUrl: string;
   assetPath: string;
   fileName: string;
@@ -62,6 +63,11 @@ const acceptedAssetTypes = [
   ".zip",
   ".txt",
   ".csv",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".webp",
 ].join(",");
 
 function createDraftId() {
@@ -92,6 +98,8 @@ function getAssetBadge(kind: ResolvedLessonAssetKind) {
       return "AUDIO";
     case "PDF":
       return "PDF";
+    case "IMAGE":
+      return "IMAGE";
     default:
       return "FILE";
   }
@@ -101,6 +109,8 @@ function getAssetIcon(kind: ResolvedLessonAssetKind) {
   switch (kind) {
     case "VIDEO":
       return FileVideo;
+    case "IMAGE":
+      return FileImage;
     case "AUDIO":
       return FileAudio;
     default:
@@ -289,19 +299,19 @@ export function LessonAssetsUploader({
             );
           });
 
+          const inferredKind = inferLessonAssetKind({
+            fileName: file.name,
+            mimeType: file.type,
+          });
           const nextAsset: LessonAssetDraft = {
             assetType:
-              inferLessonAssetKind({
-                fileName: file.name,
-                mimeType: file.type,
-              }) === "PDF"
+              inferredKind === "PDF"
                 ? "PDF"
-                : inferLessonAssetKind({
-                    fileName: file.name,
-                    mimeType: file.type,
-                  }) === "VIDEO"
+                : inferredKind === "VIDEO"
                   ? "VIDEO"
-                  : "FILE",
+                  : inferredKind === "IMAGE"
+                    ? "IMAGE"
+                    : "FILE",
             assetUrl: signedUpload.url,
             assetPath: signedUpload.path,
             fileName: file.name,
@@ -372,7 +382,7 @@ export function LessonAssetsUploader({
           <div>
             <p className="text-sm font-semibold text-white">Lesson Assets</p>
             <p className="mt-1 text-xs text-slate-400">
-              Drag in multiple videos, audios, PDFs, and supporting files. The first item becomes the primary lesson asset.
+              Drag in multiple videos, images, audios, PDFs, and supporting files. The first item becomes the primary lesson asset.
             </p>
           </div>
           <AdminButton
@@ -482,6 +492,20 @@ export function LessonAssetsUploader({
                 </div>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+                  {kind === "IMAGE" ? (
+                    <div className="md:col-span-2">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Preview
+                      </p>
+                      <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-2">
+                        <img
+                          src={asset.assetUrl}
+                          alt={asset.title || asset.fileName || "Lesson image"}
+                          className="h-40 w-full rounded-xl object-cover"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                   <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                       Optional title

@@ -5,7 +5,8 @@ import { getLessonProgressEntry, upsertLessonProgressEntry } from "@/lib/lesson-
 
 const patchProgressSchema = z.object({
   lessonId: z.string().min(1),
-  contentType: z.enum(["video", "audio", "pdf"]).optional(),
+  assetId: z.string().uuid().nullable().optional(),
+  contentType: z.enum(["video", "audio", "pdf", "image"]).optional(),
   touchOnly: z.boolean().optional(),
   resetProgress: z.boolean().optional(),
   isCompleted: z.boolean().optional(),
@@ -25,7 +26,8 @@ export async function GET(request: Request) {
     }
 
     const { profile } = await getLessonProgressRequestContext(lessonId);
-    const progress = await getLessonProgressEntry(profile.id, lessonId);
+    const assetId = searchParams.get("assetId");
+    const progress = await getLessonProgressEntry(profile.id, lessonId, assetId);
 
     return NextResponse.json({ progress });
   } catch (error) {
@@ -64,7 +66,8 @@ export async function PATCH(request: Request) {
       lessonId: payload.lessonId,
       courseId,
       lessonType: lesson.type,
-      contentType: payload.contentType,
+      assetId: payload.assetId,
+      contentType: payload.contentType === "image" ? null : payload.contentType,
       touchOnly: payload.touchOnly,
       resetProgress: payload.resetProgress,
       isCompleted: payload.isCompleted,

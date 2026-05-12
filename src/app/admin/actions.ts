@@ -41,7 +41,7 @@ const blogStatusOptions = ["DRAFT", "PUBLISHED", "ARCHIVED"] as const;
 const couponDiscountOptions = ["PERCENTAGE", "FIXED_AMOUNT"] as const;
 const courseAssetTypeOptions = ["AUDIO", "VIDEO", "PDF"] as const;
 const lessonTypeOptions = ["VIDEO", "AUDIO", "PDF", "TEXT", "QUIZ", "ASSIGNMENT", "PROJECT", "LIVE"] as const;
-const lessonAssetTypeOptions = ["VIDEO", "PDF", "FILE"] as const;
+const lessonAssetTypeOptions = ["VIDEO", "PDF", "FILE", "IMAGE"] as const;
 const popupShowOnOptions = ["HOMEPAGE_ONLY", "COURSE_PAGES", "BLOG_PAGES", "ALL_PAGES"] as const;
 
 const categorySchema = z.object({
@@ -362,7 +362,7 @@ function optionalNumber(value?: number | null) {
 function normalizeLessonAssetRecords(
   assets?: Array<{
     id?: string;
-    assetType: "VIDEO" | "PDF" | "FILE";
+    assetType: "VIDEO" | "PDF" | "FILE" | "IMAGE";
     assetUrl: string;
     assetPath?: string;
     fileName?: string;

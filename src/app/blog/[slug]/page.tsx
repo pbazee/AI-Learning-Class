@@ -135,7 +135,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           </div>
         </div>
 
-        <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+        <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6 sm:py-12 lg:px-8">
           {post.excerpt && (
             <p className="mb-8 border-b border-border pb-8 text-lg font-medium leading-relaxed text-muted-foreground">
               {post.excerpt}

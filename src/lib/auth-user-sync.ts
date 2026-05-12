@@ -1,7 +1,8 @@
 import type { User as SupabaseUser } from "@supabase/supabase-js";
-import type { Role } from "@prisma/client";
+import { Prisma, type Role } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getPrimaryAdminEmail, normalizeEmail } from "./admin-email";
+import { isPrismaConnectionError, isPrismaSchemaMismatchError } from "./prisma-errors";
 import { getSupabaseAuthRole, syncSupabaseAuthRole } from "./supabase-auth-admin";
 
 function generateReferralCode() {
@@ -22,39 +23,127 @@ async function getUniqueReferralCode() {
   return `${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
+const safeUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  avatarUrl: true,
+  bio: true,
+  country: true,
+  role: true,
+  preferredCurrency: true,
+  stripeCustomerId: true,
+  earnedDiscountCode: true,
+  createdAt: true,
+  updatedAt: true,
+  referralCode: true,
+} as const;
+
+function toJsonb(value: unknown) {
+  if (value === null || value === undefined) {
+    return Prisma.JsonNull;
+  }
+
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function toRecommendationField(value: string[]) {
+  return value.length > 0 ? value : undefined;
+}
+
+function isRecommendationSerializationError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+  return (
+    message.includes("serialize value") &&
+    message.includes("jsonb") &&
+    message.includes("value is a list")
+  );
+}
+
+function buildFallbackProfile(user: SupabaseUser, email: string, role: Role) {
+  return {
+    id: user.id,
+    email,
+    name:
+      (user.user_metadata?.full_name as string | undefined) ||
+      (user.user_metadata?.name as string | undefined) ||
+      null,
+    avatarUrl: (user.user_metadata?.avatar_url as string | undefined) || null,
+    bio: null,
+    country: null,
+    role,
+    preferredCurrency: "USD",
+    stripeCustomerId: null,
+    earnedDiscountCode: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    referralCode: null,
+    onboardingCompleted:
+      typeof user.user_metadata?.onboarding_completed_at === "string",
+    onboardingCompletedAt:
+      typeof user.user_metadata?.onboarding_completed_at === "string"
+        ? new Date(user.user_metadata.onboarding_completed_at)
+        : null,
+    onboardingRecommendations: Array.isArray(user.user_metadata?.onboarding_recommendations)
+      ? user.user_metadata.onboarding_recommendations.filter(
+          (value): value is string => typeof value === "string"
+        )
+      : [],
+    quizAnswers:
+      user.user_metadata?.onboarding_answers &&
+      typeof user.user_metadata.onboarding_answers === "object" &&
+      !Array.isArray(user.user_metadata.onboarding_answers)
+        ? user.user_metadata.onboarding_answers
+        : null,
+  };
+}
+
 export async function syncAuthenticatedUser(user: SupabaseUser) {
   if (!user.email) return null;
 
   const email = normalizeEmail(user.email);
   const configuredAdminEmail = getPrimaryAdminEmail();
+  let adminEmail = configuredAdminEmail;
+  let existingById: { id: string; role: Role } | null = null;
+  let existingByEmail: { id: string; role: Role } | null = null;
 
-  const settings = await prisma.siteSettings.upsert({
-    where: { id: "singleton" },
-    update: {
-      adminEmail: configuredAdminEmail,
-    },
-    create: {
-      id: "singleton",
-      siteName: "AI GENIUS LAB",
-      adminEmail: configuredAdminEmail,
-    },
-    select: {
-      adminEmail: true,
-    },
-  });
+  try {
+    const settings = await prisma.siteSettings.upsert({
+      where: { id: "singleton" },
+      update: {
+        adminEmail: configuredAdminEmail,
+      },
+      create: {
+        id: "singleton",
+        siteName: "AI GENIUS LAB",
+        adminEmail: configuredAdminEmail,
+      },
+      select: {
+        adminEmail: true,
+      },
+    });
 
-  const adminEmail = normalizeEmail(settings.adminEmail || configuredAdminEmail);
-  const existingById = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { id: true, role: true },
-  });
+    adminEmail = normalizeEmail(settings.adminEmail || configuredAdminEmail);
+    existingById = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, role: true },
+    });
 
-  const existingByEmail = existingById
-    ? null
-    : await prisma.user.findUnique({
-        where: { email },
-        select: { id: true, role: true },
-      });
+    existingByEmail = existingById
+      ? null
+      : await prisma.user.findUnique({
+          where: { email },
+          select: { id: true, role: true },
+        });
+  } catch (error) {
+    if (!isPrismaConnectionError(error)) {
+      throw error;
+    }
+
+    const role = (email === normalizeEmail(configuredAdminEmail) ? "ADMIN" : "STUDENT") as Role;
+    return buildFallbackProfile(user, email, role);
+  }
 
   const role = (email === adminEmail ? "ADMIN" : existingById?.role || existingByEmail?.role || "STUDENT") as Role;
   const name =
@@ -62,6 +151,120 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
     (user.user_metadata?.name as string | undefined) ||
     null;
   const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) || null;
+  const onboardingCompletedAt =
+    typeof user.user_metadata?.onboarding_completed_at === "string"
+      ? new Date(user.user_metadata.onboarding_completed_at)
+      : null;
+  const onboardingRecommendations = Array.isArray(user.user_metadata?.onboarding_recommendations)
+    ? user.user_metadata.onboarding_recommendations.filter(
+        (value): value is string => typeof value === "string"
+      )
+    : [];
+  const quizAnswers =
+    user.user_metadata?.onboarding_answers &&
+    typeof user.user_metadata.onboarding_answers === "object" &&
+    !Array.isArray(user.user_metadata.onboarding_answers)
+      ? user.user_metadata.onboarding_answers
+      : undefined;
+
+  async function updateUserDefensively(
+    userId: string,
+    referralCode?: string | null
+  ) {
+    const safeData = {
+      email,
+      name,
+      avatarUrl,
+      role,
+      ...(referralCode ? {} : { referralCode: await getUniqueReferralCode() }),
+    };
+
+    try {
+      return await prisma.user.update({
+        where: { id: userId },
+        data: {
+          ...safeData,
+          onboardingCompleted: Boolean(onboardingCompletedAt),
+          onboardingCompletedAt,
+          onboardingRecommendations: toRecommendationField(onboardingRecommendations),
+          quizAnswers: toJsonb(quizAnswers),
+        },
+      });
+    } catch (error) {
+      if (isRecommendationSerializationError(error)) {
+        return prisma.user.update({
+          where: { id: userId },
+          data: {
+            ...safeData,
+            onboardingCompleted: Boolean(onboardingCompletedAt),
+            onboardingCompletedAt,
+            quizAnswers: toJsonb(quizAnswers),
+          },
+        });
+      }
+
+      if (isPrismaConnectionError(error)) {
+        return buildFallbackProfile(user, email, role);
+      }
+
+      if (isPrismaSchemaMismatchError(error)) {
+        return prisma.user.update({
+          where: { id: userId },
+          data: safeData,
+          select: safeUserSelect,
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  async function createUserDefensively() {
+    const safeData = {
+      id: user.id,
+      email,
+      name,
+      avatarUrl,
+      role,
+      referralCode: await getUniqueReferralCode(),
+    };
+
+    try {
+      return await prisma.user.create({
+        data: {
+          ...safeData,
+          onboardingCompleted: Boolean(onboardingCompletedAt),
+          onboardingCompletedAt,
+          onboardingRecommendations: toRecommendationField(onboardingRecommendations),
+          quizAnswers: toJsonb(quizAnswers),
+        },
+      });
+    } catch (error) {
+      if (isRecommendationSerializationError(error)) {
+        return prisma.user.create({
+          data: {
+            ...safeData,
+            onboardingCompleted: Boolean(onboardingCompletedAt),
+            onboardingCompletedAt,
+            quizAnswers: toJsonb(quizAnswers),
+          },
+        });
+      }
+
+      if (isPrismaConnectionError(error)) {
+        return buildFallbackProfile(user, email, role);
+      }
+
+      if (isPrismaSchemaMismatchError(error)) {
+        return prisma.user.create({
+          data: safeData,
+          select: safeUserSelect,
+        });
+      }
+
+      throw error;
+    }
+  }
 
   if (getSupabaseAuthRole(user) !== role) {
     await syncSupabaseAuthRole({
@@ -79,16 +282,7 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
       select: { referralCode: true },
     }))?.referralCode;
 
-    return prisma.user.update({
-      where: { id: existingById.id },
-      data: {
-        email,
-        name,
-        avatarUrl,
-        role,
-        ...(referralCode ? {} : { referralCode: await getUniqueReferralCode() }),
-      },
-    });
+    return updateUserDefensively(existingById.id, referralCode);
   }
 
   if (existingByEmail) {
@@ -97,26 +291,9 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
       select: { referralCode: true },
     }))?.referralCode;
 
-    return prisma.user.update({
-      where: { id: existingByEmail.id },
-      data: {
-        name,
-        avatarUrl,
-        role,
-        ...(referralCode ? {} : { referralCode: await getUniqueReferralCode() }),
-      },
-    });
+    return updateUserDefensively(existingByEmail.id, referralCode);
   }
 
-  return prisma.user.create({
-    data: {
-      id: user.id,
-      email,
-      name,
-      avatarUrl,
-      role,
-      referralCode: await getUniqueReferralCode(),
-    },
-  });
+  return createUserDefensively();
 }
 

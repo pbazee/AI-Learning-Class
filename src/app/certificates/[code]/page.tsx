@@ -47,7 +47,7 @@ export default async function CertificateDetailPage({
       <main className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(circle_at_top,rgba(0,86,210,0.22),transparent_58%)]" />
 
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-14">
+        <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6 sm:py-10 lg:px-8 lg:py-14">
           <section className="relative overflow-hidden rounded-[34px] border border-slate-200/70 bg-[#0b1327] text-white shadow-[0_42px_120px_-56px_rgba(2,6,23,0.92)] dark:border-slate-800">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(141,180,255,0.16),transparent_32%),radial-gradient(circle_at_bottom_left,rgba(37,99,235,0.12),transparent_32%)]" />
             <div className="pointer-events-none absolute -right-12 top-12 h-72 w-72 rounded-full bg-primary-blue/10 blur-3xl" />

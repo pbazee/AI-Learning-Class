@@ -1,46 +1,45 @@
-import type { Course } from "@/types";
+import type { Course, OnboardingQuizAnswers } from "@/types";
 
 export const onboardingQuizQuestions = [
   {
-    id: "q1",
-    question: "What's your current AI experience level?",
+    id: "experience",
+    question: "What is your current AI experience?",
     options: [
-      "Complete beginner",
-      "Some coding experience",
-      "Data science background",
-      "Experienced ML practitioner",
+      { value: "beginner", label: "Complete beginner - just getting started" },
+      { value: "basics", label: "I know the basics - used ChatGPT, some tools" },
+      { value: "intermediate", label: "Intermediate - built a few AI projects" },
+      { value: "advanced", label: "Advanced - ML engineer or data scientist" },
+      { value: "other", label: "Other — I'll describe my background" },
     ],
   },
   {
-    id: "q2",
-    question: "What's your primary goal?",
+    id: "goal",
+    question: "What is your main goal?",
     options: [
-      "Land an AI job",
-      "Build AI products",
-      "Research & academia",
-      "Understand AI for my business",
+      { value: "career", label: "Switch careers into AI" },
+      { value: "skills", label: "Upgrade my current skills" },
+      { value: "projects", label: "Build AI-powered projects or products" },
+      { value: "business", label: "Apply AI to grow my business" },
+      { value: "other", label: "Other — My goal is different" },
     ],
   },
   {
-    id: "q3",
-    question: "How much time can you dedicate weekly?",
-    options: ["1-3 hours", "4-7 hours", "8-15 hours", "15+ hours"],
+    id: "time",
+    question: "How much time can you dedicate per week?",
+    options: [
+      { value: "1-3hrs", label: "1-3 hours (casual pace)" },
+      { value: "3-5hrs", label: "3-5 hours (steady progress)" },
+      { value: "5-10hrs", label: "5-10 hours (fast track)" },
+      { value: "10+hrs", label: "10+ hours (full commitment)" },
+      { value: "other", label: "Other — My schedule varies" },
+    ],
   },
   {
-    id: "q4",
-    question: "Which AI domain excites you most?",
-    options: [
-      "Generative AI & LLMs",
-      "Machine Learning",
-      "Computer Vision",
-      "AI Engineering & MLOps",
-    ],
+    id: "category_id",
+    question: "Which area interests you most?",
+    options: [],
   },
 ] as const;
-
-export type OnboardingQuizAnswers = Record<string, number>;
-
-const expectedQuestionIds = onboardingQuizQuestions.map((question) => question.id);
 
 function normalizeText(value: string) {
   return value.toLowerCase();
@@ -70,65 +69,65 @@ export function isValidOnboardingQuizAnswers(value: unknown): value is Onboardin
     return false;
   }
 
-  return expectedQuestionIds.every((questionId) => {
-    const answer = (value as Record<string, unknown>)[questionId];
-    return typeof answer === "number" && Number.isInteger(answer) && answer >= 0 && answer <= 3;
-  });
+  const answers = value as Record<string, unknown>;
+
+  return (
+    typeof answers.experience === "string" &&
+    typeof answers.goal === "string" &&
+    typeof answers.time === "string" &&
+    typeof answers.category_id === "string" &&
+    (answers.experience !== "other" ||
+      (typeof answers.experience_other === "string" && answers.experience_other.trim().length > 0)) &&
+    (answers.goal !== "other" ||
+      (typeof answers.goal_other === "string" && answers.goal_other.trim().length > 0)) &&
+    (answers.time !== "other" ||
+      (typeof answers.time_other === "string" && answers.time_other.trim().length > 0)) &&
+    (answers.category_id !== "other" ||
+      (typeof answers.category_other === "string" && answers.category_other.trim().length > 0)) &&
+    answers.category_id.trim().length > 0
+  );
 }
 
 export function getRecommendedCourses(
   courses: Course[],
   answers: OnboardingQuizAnswers,
-  limit = 4
+  limit = 3
 ) {
-  const experience = answers.q1 ?? 0;
-  const goal = answers.q2 ?? 0;
-  const timeCommitment = answers.q3 ?? 0;
-  const domain = answers.q4 ?? 0;
+  const experience = answers.experience;
+  const goal = answers.goal;
+  const timeCommitment = answers.time;
+  const selectedCategoryId = answers.category_id;
 
-  const levelTargets =
-    experience === 0
-      ? ["BEGINNER"]
-      : experience === 1
-        ? ["BEGINNER", "INTERMEDIATE"]
-        : experience === 2
-          ? ["INTERMEDIATE", "ADVANCED"]
-          : ["ADVANCED", "INTERMEDIATE"];
+  const levelTargets: Course["level"][] =
+    experience === "beginner"
+      ? ["BEGINNER", "ALL_LEVELS"]
+      : experience === "basics"
+        ? ["BEGINNER", "INTERMEDIATE", "ALL_LEVELS"]
+        : experience === "intermediate"
+          ? ["INTERMEDIATE", "ADVANCED", "ALL_LEVELS"]
+          : ["ADVANCED", "INTERMEDIATE", "ALL_LEVELS"];
 
-  const goalKeywords = [
-    ["career", "job", "interview", "portfolio", "machine learning", "engineering"],
-    ["product", "build", "ship", "llm", "agent", "prompt", "automation"],
-    ["research", "theory", "deep learning", "machine learning", "vision"],
-    ["business", "strategy", "beginner", "ai for everyone", "workflow"],
-  ][goal] ?? [];
+  const goalKeywords =
+    goal === "career"
+      ? ["career", "job", "interview", "portfolio", "foundational", "machine learning"]
+      : goal === "skills"
+        ? ["skill", "upskill", "practical", "hands-on", "workflow", "productivity"]
+        : goal === "projects"
+          ? ["build", "product", "ship", "agent", "automation", "llm", "prompt"]
+          : ["business", "marketing", "content", "workflow", "growth", "automation"];
 
-  const domainKeywords = [
-    ["llm", "generative", "prompt", "agent", "chatgpt"],
-    ["machine learning", "ml", "model", "data science"],
-    ["vision", "image", "computer vision"],
-    ["mlops", "deployment", "production", "engineering", "systems"],
-  ][domain] ?? [];
-
-  return [...courses]
+  const ranked = [...courses]
+    .filter((course) => course.categoryId === selectedCategoryId)
     .map((course) => {
       const blob = buildKeywordBlob(course);
       let score = 0;
 
       if (levelTargets.includes(course.level)) {
         score += 5;
-      } else if (
-        (course.level === "BEGINNER" && levelTargets.includes("INTERMEDIATE")) ||
-        (course.level === "INTERMEDIATE" && levelTargets.includes("ADVANCED"))
-      ) {
-        score += 2;
       }
 
       if (includesAny(blob, goalKeywords)) {
         score += 5;
-      }
-
-      if (includesAny(blob, domainKeywords)) {
-        score += 7;
       }
 
       if (course.isFeatured) {
@@ -139,15 +138,18 @@ export function getRecommendedCourses(
         score += 2;
       }
 
-      if (experience === 0 && course.isFree) {
+      if (experience === "beginner" && course.isFree) {
         score += 1;
       }
 
-      if (timeCommitment <= 1 && course.totalDuration > 0 && course.totalDuration <= 6 * 60 * 60) {
+      if (timeCommitment === "1-3hrs" && course.totalDuration > 0 && course.totalDuration <= 6 * 60 * 60) {
         score += 2;
       }
 
-      if (timeCommitment >= 2 && course.totalDuration >= 8 * 60 * 60) {
+      if (
+        (timeCommitment === "5-10hrs" || timeCommitment === "10+hrs") &&
+        course.totalDuration >= 8 * 60 * 60
+      ) {
         score += 1;
       }
 
@@ -166,7 +168,25 @@ export function getRecommendedCourses(
       }
 
       return right.course.totalStudents - left.course.totalStudents;
+    });
+
+  const matches = ranked.slice(0, limit).map((entry) => entry.course);
+
+  if (matches.length >= limit) {
+    return matches;
+  }
+
+  const fallback = courses
+    .filter((course) => levelTargets.includes(course.level) || course.isFeatured)
+    .sort((left, right) => {
+      if (Number(right.isFeatured) !== Number(left.isFeatured)) {
+        return Number(right.isFeatured) - Number(left.isFeatured);
+      }
+
+      return right.rating - left.rating;
     })
-    .slice(0, limit)
-    .map((entry) => entry.course);
+    .filter((course) => !matches.some((match) => match.id === course.id))
+    .slice(0, limit - matches.length);
+
+  return [...matches, ...fallback];
 }

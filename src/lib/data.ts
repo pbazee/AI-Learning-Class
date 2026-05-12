@@ -135,7 +135,7 @@ function mapLessonAssets(
     assetPath?: string | null;
     lessonAssets?: Array<{
       id: string;
-      assetType: "VIDEO" | "PDF" | "FILE";
+      assetType: "VIDEO" | "PDF" | "FILE" | "IMAGE";
       assetUrl: string;
       assetPath: string | null;
       fileName: string | null;
@@ -178,10 +178,19 @@ function mapLessonAssets(
       id: `legacy-${lesson.id}`,
       lessonId: lesson.id,
       assetType:
-        (fallbackKind === "PDF" ? "PDF" : fallbackKind === "VIDEO" ? "VIDEO" : "FILE") as
+        (
+          fallbackKind === "PDF"
+            ? "PDF"
+            : fallbackKind === "VIDEO"
+              ? "VIDEO"
+              : fallbackKind === "IMAGE"
+                ? "IMAGE"
+                : "FILE"
+        ) as
           | "VIDEO"
           | "PDF"
-          | "FILE",
+          | "FILE"
+          | "IMAGE",
       assetUrl: fallbackAssetUrl,
       assetPath: lesson.assetPath ?? undefined,
       fileName: getLessonAssetDisplayTitle({ assetUrl: fallbackAssetUrl }),

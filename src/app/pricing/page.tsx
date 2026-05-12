@@ -31,12 +31,28 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-export default async function PricingPage() {
+export default async function PricingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ reason?: string }>;
+}) {
   const plans = await getSubscriptionPlans();
+  const params = searchParams ? await searchParams : undefined;
+  const isExpiredReason = params?.reason === "expired";
 
   return (
     <div className="min-h-screen bg-background">
       <div>
+        {isExpiredReason ? (
+          <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6 lg:px-8">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="font-medium text-slate-900">Your subscription has expired. Renew to continue learning.</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Your progress is still saved and will be waiting for you when you renew.
+              </p>
+            </div>
+          </div>
+        ) : null}
         <PricingSection plans={plans} />
 
         <div className="mx-auto max-w-5xl px-4 pb-24 sm:px-6 lg:px-8">

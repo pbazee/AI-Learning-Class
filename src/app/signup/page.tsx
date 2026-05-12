@@ -27,9 +27,24 @@ import { logger } from "@/lib/logger";
 import { onboardingQuizQuestions as quizQuestions } from "@/lib/onboarding";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { getSupabaseClient } from "@/lib/supabase";
-import type { Course } from "@/types";
+import type { Category, Course, OnboardingQuizAnswers } from "@/types";
 
 type SignupStep = "account" | "quiz" | "roadmap";
+type StoredOnboardingState = {
+  answers: Partial<OnboardingQuizAnswers>;
+  quizStep: number;
+  step: SignupStep;
+  recommendedCourses: Course[];
+};
+
+const defaultCategories: Category[] = [
+  { id: "prompt", name: "Prompt Engineering & LLMs", slug: "prompt" },
+  { id: "ml", name: "Machine Learning & Deep Learning", slug: "ml" },
+  { id: "tools", name: "AI Tools for Content & Marketing", slug: "tools" },
+  { id: "agents", name: "Building AI Agents & Automations", slug: "agents" },
+];
+
+const ONBOARDING_STORAGE_KEY = "ai-learning-signup-onboarding";
 
 const stepConfig: Array<{ id: SignupStep; label: string }> = [
   { id: "account", label: "Account" },
@@ -69,7 +84,9 @@ export default function SignupPage() {
   const [step, setStep] = useState<SignupStep>(requestedStep === "quiz" ? "quiz" : "account");
   const [showPassword, setShowPassword] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [answers, setAnswers] = useState<Partial<OnboardingQuizAnswers>>({});
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(false);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
@@ -86,10 +103,90 @@ export default function SignupPage() {
 
   const currentQuizQuestion = quizQuestions[quizStep];
   const currentStepIndex = stepConfig.findIndex((entry) => entry.id === step);
+  const displayCategories = categories.length > 0 ? categories : defaultCategories;
   const roadmapCourses = useMemo(
-    () => recommendedCourses.slice(0, 4),
+    () => recommendedCourses.slice(0, 3),
     [recommendedCourses]
   );
+  const currentAnswer = answers[currentQuizQuestion.id as keyof OnboardingQuizAnswers];
+  const currentOtherField =
+    currentQuizQuestion.id === "experience"
+      ? "experience_other"
+      : currentQuizQuestion.id === "goal"
+        ? "goal_other"
+        : currentQuizQuestion.id === "time"
+          ? "time_other"
+          : "category_other";
+  const currentOtherValue =
+    typeof answers[currentOtherField as keyof OnboardingQuizAnswers] === "string"
+      ? String(answers[currentOtherField as keyof OnboardingQuizAnswers] ?? "")
+      : "";
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchCategories() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data } = await supabase
+          .from("categories")
+          .select("id, name, slug")
+          .order("name")
+          .limit(6);
+
+        if (mounted) {
+          setCategories(Array.isArray(data) ? (data as Category[]) : []);
+        }
+      } catch {
+        if (mounted) {
+          setCategories([]);
+        }
+      } finally {
+        if (mounted) {
+          setCategoriesLoading(false);
+        }
+      }
+    }
+
+    void fetchCategories();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const savedState = window.localStorage.getItem(ONBOARDING_STORAGE_KEY);
+      if (!savedState) {
+        return;
+      }
+
+      const parsed = JSON.parse(savedState) as Partial<StoredOnboardingState>;
+
+      if (parsed.answers && typeof parsed.answers === "object") {
+        setAnswers(parsed.answers as Partial<OnboardingQuizAnswers>);
+      }
+
+      if (typeof parsed.quizStep === "number" && parsed.quizStep >= 0) {
+        setQuizStep(Math.min(parsed.quizStep, quizQuestions.length - 1));
+      }
+
+      if (parsed.step && ["account", "quiz", "roadmap"].includes(parsed.step)) {
+        setStep(parsed.step as SignupStep);
+      }
+
+      if (Array.isArray(parsed.recommendedCourses)) {
+        setRecommendedCourses(parsed.recommendedCourses as Course[]);
+      }
+    } catch {
+      // Ignore invalid cached onboarding state.
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -145,11 +242,18 @@ export default function SignupPage() {
         const savedRecommendations = Array.isArray(payload.recommendations)
           ? payload.recommendations
           : [];
+        const savedCategories = Array.isArray(payload.categories) ? payload.categories : [];
 
-        setAnswers(savedAnswers);
+        setAnswers(savedAnswers as Partial<OnboardingQuizAnswers>);
+        if (savedCategories.length > 0) {
+          setCategories(savedCategories as Category[]);
+        }
         setRecommendedCourses(savedRecommendations);
 
         if (payload.completed) {
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
+          }
           router.replace(redirectPath === DEFAULT_AFTER_AUTH ? "/dashboard" : redirectPath);
           return;
         }
@@ -163,10 +267,13 @@ export default function SignupPage() {
         if (requestedStep === "quiz" || Object.keys(savedAnswers).length > 0) {
           setStep("quiz");
           const nextQuizIndex = quizQuestions.findIndex(
-            (question) => typeof savedAnswers[question.id] !== "number"
+            (question) => typeof savedAnswers[question.id] !== "string"
           );
           setQuizStep(nextQuizIndex === -1 ? quizQuestions.length - 1 : nextQuizIndex);
+          return;
         }
+
+        setStep("quiz");
       } catch {
         // If onboarding state fails to load we keep the local flow usable.
       }
@@ -178,6 +285,21 @@ export default function SignupPage() {
       mounted = false;
     };
   }, [redirectPath, requestedStep, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextState: StoredOnboardingState = {
+      answers,
+      quizStep,
+      step,
+      recommendedCourses,
+    };
+
+    window.localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(nextState));
+  }, [answers, quizStep, recommendedCourses, step]);
 
   async function syncNewsletterPreference(nextEmail: string, nextName?: string) {
     if (!newsletterOptIn || !nextEmail.trim()) {
@@ -270,27 +392,40 @@ export default function SignupPage() {
     void syncNewsletterPreference(email, name);
     setLoading(false);
 
-    if (redirectPath !== DEFAULT_AFTER_AUTH) {
-      router.push(redirectPath);
-      router.refresh();
-      return;
-    }
-
     setStep("quiz");
+    setQuizStep(0);
   }
 
-  function handleAnswer(questionId: string, answerIdx: number) {
-    const nextAnswers = { ...answers, [questionId]: answerIdx };
+  function handleAnswer(
+    questionId: keyof OnboardingQuizAnswers,
+    value: string,
+    options?: { advanceOnOther?: boolean }
+  ) {
+    const nextAnswers = { ...answers, [questionId]: value };
+
+    if (value !== "other") {
+      if (questionId === "experience") nextAnswers.experience_other = "";
+      if (questionId === "goal") nextAnswers.goal_other = "";
+      if (questionId === "time") nextAnswers.time_other = "";
+      if (questionId === "category_id") nextAnswers.category_other = "";
+    }
+
     setAnswers(nextAnswers);
     setError(null);
 
+    if (value === "other" && !options?.advanceOnOther) {
+      return;
+    }
+
     if (quizStep < quizQuestions.length - 1) {
-      window.setTimeout(() => setQuizStep((previous) => previous + 1), 300);
+      window.setTimeout(() => setQuizStep((previous) => previous + 1), 400);
       return;
     }
 
     setOnboardingLoading(true);
     window.setTimeout(async () => {
+      let nextRecommendations: Course[] = [];
+
       try {
         const response = await fetch("/api/account/onboarding", {
           method: "POST",
@@ -299,47 +434,88 @@ export default function SignupPage() {
         });
         const payload = await response.json().catch(() => null);
 
-        if (!response.ok) {
-          throw new Error(payload?.error || "Unable to build your learning path.");
+        if (response.ok) {
+          nextRecommendations = Array.isArray(payload?.recommendations) ? payload.recommendations : [];
         }
-
-        setRecommendedCourses(Array.isArray(payload?.recommendations) ? payload.recommendations : []);
-        setStep("roadmap");
       } catch (quizError) {
-        setError(
-          quizError instanceof Error
-            ? quizError.message
-            : "Unable to build your learning path right now."
-        );
+        console.error("Quiz save failed silently:", quizError);
       } finally {
+        setRecommendedCourses(nextRecommendations);
+        setStep("roadmap");
         setOnboardingLoading(false);
       }
-    }, 350);
+    }, 1500);
   }
 
-  async function completeOnboarding(destination: string) {
+  function handleOtherAnswerChange(field: keyof OnboardingQuizAnswers, value: string) {
+    setAnswers((current) => ({ ...current, [field]: value }));
+    setError(null);
+  }
+
+  function submitOtherAnswer() {
+    if (!currentOtherValue.trim()) {
+      setError("Please add a short note so we can personalize your path.");
+      return;
+    }
+
+    handleAnswer(currentQuizQuestion.id as keyof OnboardingQuizAnswers, "other", {
+      advanceOnOther: true,
+    });
+  }
+
+  async function completeOnboarding(
+    destination: string,
+    options?: { recommendationIds?: string[]; skipPersonalization?: boolean }
+  ) {
     setOnboardingLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/account/onboarding", {
+      await fetch("/api/account/onboarding", {
         method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          recommendationIds: options?.skipPersonalization ? [] : options?.recommendationIds ?? recommendedCourses.map((course) => course.id),
+        }),
       });
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(payload?.error || "Unable to finish onboarding.");
+    } catch (completionError) {
+      console.error("Onboarding completion save failed silently:", completionError);
+    } finally {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
       }
 
       router.push(destination);
       router.refresh();
-    } catch (completionError) {
-      setError(
-        completionError instanceof Error
-          ? completionError.message
-          : "Unable to finish onboarding right now."
-      );
+      setOnboardingLoading(false);
+    }
+  }
+
+  async function skipPersonalization() {
+    await completeOnboarding("/dashboard", { recommendationIds: [], skipPersonalization: true });
+  }
+
+  async function handleRedoQuiz() {
+    setOnboardingLoading(true);
+    setError(null);
+
+    try {
+      await fetch("/api/account/onboarding", {
+        method: "DELETE",
+      });
+    } catch (redoError) {
+      console.error("Unable to reset onboarding before restarting the quiz:", redoError);
     } finally {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
+      }
+
+      setRecommendedCourses([]);
+      setAnswers({});
+      setQuizStep(0);
+      setStep("quiz");
       setOnboardingLoading(false);
     }
   }
@@ -352,7 +528,7 @@ export default function SignupPage() {
       title="Join the next generation of AI builders"
       subtitle="Open a polished workspace for courses, guided onboarding, and the production-focused paths your team can actually use."
     >
-      <div className="w-full">
+      <div className="right-panel w-full rounded-[32px] border border-white/30 bg-primary-blue p-6 text-white shadow-[0_34px_100px_-44px_rgba(37,99,235,0.55)] sm:p-8">
         <div className="mb-8">
           <div className="flex items-start gap-2">
             {stepConfig.map((entry, index) => {
@@ -365,22 +541,22 @@ export default function SignupPage() {
                     <div
                       className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold transition-all ${
                         isComplete
-                          ? "border-sky-400 bg-sky-500 text-white"
+                          ? "border-white bg-white text-primary-blue"
                           : isActive
-                            ? "border-sky-400 bg-primary-blue text-white shadow-[0_0_0_6px_rgba(56,189,248,0.16)]"
-                            : "border-white/30 bg-transparent text-white/80"
+                            ? "border-white bg-white text-primary-blue shadow-[0_0_0_6px_rgba(255,255,255,0.18)]"
+                            : "border-white/75 bg-white text-primary-blue"
                       }`}
                     >
-                      {isComplete ? <Check className="h-4 w-4" /> : index + 1}
+                      {isComplete ? <Check className="h-4 w-4 text-primary-blue" /> : index + 1}
                     </div>
-                    <span className="text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-200">
+                    <span className="step-label text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-white/80">
                       {entry.label}
                     </span>
                   </div>
                   {index < stepConfig.length - 1 ? (
                     <div
                       className={`mt-5 h-0.5 flex-1 transition-all ${
-                        isComplete ? "bg-sky-500" : "bg-white/20"
+                        isComplete ? "bg-white/85" : "bg-white/35"
                       }`}
                     />
                   ) : null}
@@ -398,9 +574,9 @@ export default function SignupPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <div className="mb-6 text-center">
+                <div className="mb-6 text-center">
                 <h1 className="mb-1 text-2xl font-black text-white">Start learning with a premium setup</h1>
-                <p className="text-sm text-slate-200">
+                <p className="text-sm text-white/80">
                   Create your account, then personalize your roadmap in under a minute.
                 </p>
               </div>
@@ -423,7 +599,7 @@ export default function SignupPage() {
                   </button>
                 </div>
               ) : (
-                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)] sm:p-7">
+                <div className="rounded-[28px] border border-white/20 bg-primary-blue p-6 sm:p-7">
                   {error ? (
                     <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -435,10 +611,10 @@ export default function SignupPage() {
                     type="button"
                     onClick={handleGoogleSignUp}
                     disabled={loading}
-                    className="mb-6 flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 py-3.5 text-sm font-medium text-slate-950 transition hover:bg-slate-100 disabled:opacity-60"
+                    className="mb-6 flex w-full items-center justify-center gap-3 rounded-2xl border border-white/60 bg-white py-3.5 text-sm font-medium text-primary-blue transition hover:bg-white/90 disabled:opacity-60"
                   >
                     {loading ? (
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" />
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                     ) : (
                       <GoogleIcon className="h-5 w-5" />
                     )}
@@ -446,78 +622,78 @@ export default function SignupPage() {
                   </button>
 
                   <div className="mb-6 flex items-center gap-3">
-                    <div className="h-px flex-1 bg-slate-200" />
-                    <span className="text-xs uppercase tracking-[0.16em] text-slate-400">or</span>
-                    <div className="h-px flex-1 bg-slate-200" />
+                    <div className="h-px flex-1 bg-white/40" />
+                    <span className="text-xs uppercase tracking-[0.16em] text-white/50">or</span>
+                    <div className="h-px flex-1 bg-white/40" />
                   </div>
 
                   <form onSubmit={handleAccountSubmit} className="space-y-4">
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-white">
                         Full name
                       </label>
                       <div className="relative">
-                        <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
                         <input
                           type="text"
                           value={name}
                           onChange={(event) => setName(event.target.value)}
                           required
                           placeholder="Your name"
-                          className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                          className="h-12 w-full rounded-2xl border border-white/40 bg-white/10 pl-11 pr-4 text-sm text-white placeholder:text-white/70 outline-none transition focus:border-white focus:bg-white/15 focus:ring-4 focus:ring-white/15"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-white">
                         Email address
                       </label>
                       <div className="relative">
-                        <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
                         <input
                           type="email"
                           value={email}
                           onChange={(event) => setEmail(event.target.value)}
                           required
                           placeholder="you@example.com"
-                          className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                          className="h-12 w-full rounded-2xl border border-white/40 bg-white/10 pl-11 pr-4 text-sm text-white placeholder:text-white/70 outline-none transition focus:border-white focus:bg-white/15 focus:ring-4 focus:ring-white/15"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-white">
                         Password
                       </label>
                       <div className="relative">
-                        <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
                         <input
                           type={showPassword ? "text" : "password"}
                           value={password}
                           onChange={(event) => setPassword(event.target.value)}
                           required
                           placeholder="Min 8 characters"
-                          className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-11 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                          className="h-12 w-full rounded-2xl border border-white/40 bg-white/10 pl-11 pr-11 text-sm text-white placeholder:text-white/70 outline-none transition focus:border-white focus:bg-white/15 focus:ring-4 focus:ring-white/15"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword((current) => !current)}
-                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-900"
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-white/55 transition hover:text-white"
                         >
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </div>
 
-                    <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5">
+                    <label className="flex items-start gap-3 rounded-2xl border border-white/30 bg-white/10 px-4 py-3.5">
                       <input
                         type="checkbox"
                         checked={newsletterOptIn}
                         onChange={(event) => setNewsletterOptIn(event.target.checked)}
                         className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-blue focus:ring-primary-blue"
                       />
-                      <span className="text-xs leading-5 text-slate-800">
+                      <span className="text-xs leading-5 text-white">
                         Get notified on more offers, discounts, and new AI trends.
                       </span>
                     </label>
@@ -525,7 +701,7 @@ export default function SignupPage() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white text-sm font-semibold text-primary-blue transition hover:bg-white/90 disabled:opacity-60"
                     >
                       {loading ? (
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -537,13 +713,13 @@ export default function SignupPage() {
                       )}
                     </button>
 
-                    <p className="text-center text-xs text-slate-800">
+                    <p className="text-center text-xs text-white/75">
                       By signing up you agree to our{" "}
-                      <Link href="/terms" className="font-semibold text-slate-950 transition hover:text-sky-700">
+                      <Link href="/terms" className="font-semibold text-white transition hover:text-sky-300">
                         Terms
                       </Link>{" "}
                       and{" "}
-                      <Link href="/privacy" className="font-semibold text-slate-950 transition hover:text-sky-700">
+                      <Link href="/privacy" className="font-semibold text-white transition hover:text-sky-300">
                         Privacy Policy
                       </Link>
                       .
@@ -552,7 +728,7 @@ export default function SignupPage() {
                 </div>
               )}
 
-              <p className="mt-6 text-center text-sm text-slate-100">
+              <p className="mt-6 text-center text-sm text-slate-800">
                 Already have an account?{" "}
                 <Link
                   href={
@@ -560,7 +736,7 @@ export default function SignupPage() {
                       ? `/login?redirect=${encodeURIComponent(redirectPath)}`
                       : "/login"
                   }
-                  className="font-semibold text-white transition hover:text-sky-300"
+                  className="font-bold text-[#2563eb] transition hover:text-[#1d4ed8]"
                 >
                   Sign in
                 </Link>
@@ -576,21 +752,21 @@ export default function SignupPage() {
               exit={{ opacity: 0, x: -20 }}
             >
               <div className="mb-6 text-center">
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-4 py-2">
-                  <Sparkles className="h-4 w-4 text-sky-700" />
-                  <span className="text-sm font-medium text-sky-700">60-second AI quiz</span>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-sky-300/20 bg-sky-300/10 px-4 py-2">
+                  <Sparkles className="h-4 w-4 text-sky-200" />
+                  <span className="text-sm font-medium text-sky-100">Personalization quiz</span>
                 </div>
                 <h2 className="mb-1 text-xl font-black text-white">Personalize your roadmap</h2>
-                <p className="text-sm text-slate-200">4 quick questions to build your perfect learning path.</p>
+                <p className="text-sm text-white/85">4 quick questions to build your perfect learning path.</p>
               </div>
 
-              <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)]">
+              <div className="rounded-[28px] border border-white/20 bg-primary-blue p-8">
                 <div className="mb-6 flex gap-1.5">
                   {quizQuestions.map((_, index) => (
                     <div
                       key={index}
                       className={`h-1.5 flex-1 rounded-full transition-all ${
-                        index <= quizStep ? "bg-sky-600" : "bg-slate-100"
+                        index <= quizStep ? "bg-white" : "bg-white/35"
                       }`}
                     />
                   ))}
@@ -609,40 +785,101 @@ export default function SignupPage() {
                         <span>{error}</span>
                       </div>
                     ) : null}
-                    <p className="mb-1 text-sm text-slate-700">
+                    <p className="helper-text mb-1 text-sm text-white/65">
                       Question {quizStep + 1} of {quizQuestions.length}
                     </p>
-                    <h3 className="mb-6 text-lg font-bold text-slate-950">
+                    <h3 className="quiz-question mb-6 text-2xl font-semibold text-white">
                       {currentQuizQuestion.question}
                     </h3>
-                    <div className="space-y-3">
-                      {currentQuizQuestion.options.map((option, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          onClick={() => handleAnswer(currentQuizQuestion.id, index)}
-                          disabled={onboardingLoading}
-                          className={`w-full rounded-xl border px-5 py-4 text-left text-sm transition-all ${
-                            answers[currentQuizQuestion.id] === index
-                              ? "border-sky-300 bg-sky-50 text-slate-950"
-                              : "border-slate-200 bg-slate-50 text-slate-950 hover:border-sky-200 hover:bg-white"
-                          }`}
-                        >
-                          <span className="mr-3 font-semibold text-sky-700">
-                            {String.fromCharCode(65 + index)}.
-                          </span>
-                          {option}
-                        </button>
-                      ))}
-                    </div>
                     {onboardingLoading ? (
-                      <p className="mt-5 text-sm font-medium text-slate-600">
-                        Building your recommended learning path...
-                      </p>
-                    ) : null}
+                      <div className="flex min-h-[16rem] flex-col items-center justify-center text-center">
+                        <p className="text-lg font-semibold text-white">Analyzing your answers...</p>
+                        <div className="mt-4 flex items-center gap-2">
+                          {[0, 1, 2].map((dot) => (
+                            <motion.span
+                              key={dot}
+                              className="h-2.5 w-2.5 rounded-full bg-sky-300"
+                              animate={{ opacity: [0.3, 1, 0.3], y: [0, -4, 0] }}
+                              transition={{
+                                duration: 0.9,
+                                repeat: Number.POSITIVE_INFINITY,
+                                delay: dot * 0.12,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : currentQuizQuestion.id === "category_id" && categoriesLoading ? (
+                      <div className="flex min-h-[16rem] flex-col items-center justify-center text-center">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-sky-300" />
+                        <p className="helper-text mt-4 text-sm text-white/70">Loading categories...</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3">
+                        {(currentQuizQuestion.id === "category_id"
+                          ? displayCategories.map((category) => ({
+                              value: category.id,
+                              label: category.name,
+                            })).concat([{ value: "other", label: "Other — Something else" }])
+                          : currentQuizQuestion.options
+                        ).map((option, index) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() =>
+                              handleAnswer(
+                                currentQuizQuestion.id as keyof OnboardingQuizAnswers,
+                                option.value
+                              )
+                            }
+                            className={`quiz-option w-full rounded-[22px] border px-5 py-5 text-left text-base transition-all ${
+                              currentAnswer === option.value
+                                ? "selected border-white bg-blue-700 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
+                                : "border-white/70 bg-white text-primary-blue hover:border-white hover:bg-blue-700 hover:text-white"
+                            }`}
+                          >
+                            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-sky-200">
+                              {String.fromCharCode(65 + index)}
+                            </span>
+                            {option.label}
+                          </button>
+                        ))}
+                        {currentAnswer === "other" ? (
+                          <div className="rounded-[22px] border border-white/25 bg-white/10 p-4">
+                            <input
+                              type="text"
+                              value={currentOtherValue}
+                              onChange={(event) =>
+                                handleOtherAnswerChange(
+                                  currentOtherField as keyof OnboardingQuizAnswers,
+                                  event.target.value
+                                )
+                              }
+                              placeholder="Tell us a little more"
+                              className="h-11 w-full rounded-2xl border border-white/35 bg-white/10 px-4 text-sm text-white placeholder:text-white/65 outline-none transition focus:border-white focus:ring-4 focus:ring-white/15"
+                            />
+                            <button
+                              type="button"
+                              onClick={submitOtherAnswer}
+                              className="mt-3 inline-flex items-center justify-center rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-primary-blue transition hover:bg-white/90"
+                            >
+                              Continue
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                   </motion.div>
                 </AnimatePresence>
               </div>
+              <button
+                type="button"
+                onClick={() => void skipPersonalization()}
+                disabled={onboardingLoading}
+                className="mt-4 block w-full text-center text-sm text-white/80 transition hover:text-white disabled:opacity-70"
+              >
+                Skip personalisation
+              </button>
             </motion.div>
           ) : null}
 
@@ -654,13 +891,12 @@ export default function SignupPage() {
               exit={{ opacity: 0, x: -20 }}
             >
               <div className="mb-6 text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-sky-200 bg-sky-100">
-                  <Sparkles className="h-8 w-8 text-sky-700" />
+                <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-white/35 bg-white/10 px-4 py-2 text-sm font-semibold text-white">
+                  <Sparkles className="h-4 w-4 text-white" />
+                  <span>✨ Your personalized path is ready</span>
                 </div>
-                <h2 className="mb-1 text-xl font-black text-white">Your AI roadmap is ready</h2>
-                <p className="text-sm text-slate-200">
-                  Based on your answers, here&apos;s your personalized learning path.
-                </p>
+                <h2 className="mb-1 text-3xl font-black text-white">Here&apos;s where to start</h2>
+                <p className="text-sm text-white/70">We picked these based on your answers.</p>
               </div>
 
               {error ? (
@@ -670,19 +906,19 @@ export default function SignupPage() {
                 </div>
               ) : null}
 
-              <div className="mb-4 rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)]">
+              <div className="mb-4 rounded-[28px] border border-white/20 bg-primary-blue p-6">
                 <div className="mb-5">
-                  <h3 className="text-lg font-black text-slate-950">Your Learning Path</h3>
-                  <p className="text-sm text-slate-700">
-                    Start with the courses that best fit your experience, goals, and interests.
+                  <h3 className="text-lg font-black text-white">Recommended courses for you</h3>
+                  <p className="text-sm text-white/72">
+                    Start with the courses that best match your level and category.
                   </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4">
                   {roadmapCourses.map((course) => (
                     <div
                       key={course.id}
-                      className="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50"
+                      className="overflow-hidden rounded-[24px] border border-white/25 bg-white/10"
                     >
                       <div className="relative aspect-[16/10] bg-slate-200">
                         <Image
@@ -698,51 +934,61 @@ export default function SignupPage() {
                       </div>
                       <div className="space-y-3 p-4">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+                          <span className="rounded-full bg-sky-300/14 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-100">
                             {course.level.replace("_", " ")}
                           </span>
-                          <span className="text-xs font-medium text-slate-500">{course.categoryName}</span>
+                          <span className="text-xs font-medium text-white/55">{course.categoryName}</span>
                         </div>
                         <div>
-                          <p className="line-clamp-2 text-base font-bold text-slate-950">{course.title}</p>
-                          <p className="mt-2 line-clamp-2 text-sm text-slate-700">
+                          <p className="line-clamp-2 text-base font-bold text-white">{course.title}</p>
+                          <p className="mt-2 line-clamp-2 text-sm text-white/72">
                             {course.shortDescription || course.description}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => void completeOnboarding(`/courses/${course.slug}`)}
-                          disabled={onboardingLoading}
-                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-blue px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-blue/90 disabled:opacity-70"
+                        <Link
+                          href={`/courses/${course.slug}`}
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-primary-blue transition hover:bg-white/90"
                         >
-                          Start Learning
+                          View Course
                           <ArrowRight className="h-4 w-4" />
-                        </button>
+                        </Link>
                       </div>
                     </div>
                   ))}
                 </div>
+
+                {roadmapCourses.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/15 px-5 py-6 text-center text-sm text-white/70">
+                    We couldn&apos;t find an exact match, so we&apos;ll show featured courses in your workspace.
+                  </div>
+                ) : null}
               </div>
 
               <button
                 type="button"
-                onClick={() => void completeOnboarding("/dashboard")}
+                onClick={() =>
+                  void completeOnboarding("/dashboard", {
+                    recommendationIds: roadmapCourses.map((course) => course.id),
+                  })
+                }
                 disabled={onboardingLoading}
-                className="block w-full rounded-2xl bg-slate-950 py-4 text-center text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-70"
+                className="block w-full rounded-2xl bg-white py-4 text-center text-sm font-bold text-primary-blue transition hover:bg-white/90 disabled:opacity-70"
               >
-                Go to Dashboard
+                Enter your workspace →
               </button>
+              <Link
+                href="/courses"
+                className="mt-3 block w-full text-center text-sm text-white/72 transition hover:text-white"
+              >
+                Skip and browse all courses
+              </Link>
               <button
                 type="button"
-                onClick={() => {
-                  setRecommendedCourses([]);
-                  setStep("quiz");
-                  setQuizStep(0);
-                  setError(null);
-                }}
-                className="mt-3 block w-full text-center text-sm text-slate-200 transition hover:text-white"
+                onClick={() => void handleRedoQuiz()}
+                disabled={onboardingLoading}
+                className="mt-3 block w-full text-center text-sm text-white/70 underline transition hover:text-white disabled:opacity-70"
               >
-                Retake quiz
+                Redo personalisation quiz
               </button>
             </motion.div>
           ) : null}

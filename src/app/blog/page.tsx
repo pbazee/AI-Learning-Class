@@ -83,7 +83,7 @@ export default async function BlogPage({
           </div>
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-12 lg:px-8">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-4">
             <div className="space-y-8 lg:col-span-3">
               <Link href={`/blog/${featured.slug}`} className="group block">

@@ -1,5 +1,4 @@
 import { notFound, redirect } from "next/navigation";
-import { ExpiredSubscriptionNotice } from "@/components/courses/ExpiredSubscriptionNotice";
 import { LessonPlayerClient } from "@/components/learn/LessonPlayerClient";
 import { getExpiredTimedCourseAccess } from "@/lib/access-control";
 import { getAskAiSettings } from "@/lib/ask-ai-settings";
@@ -8,10 +7,14 @@ import { getCourseProgressState, getLessonNotes } from "@/lib/lesson-player";
 
 export default async function LessonPlayerPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; lessonId: string }>;
+  searchParams?: Promise<{ lesson?: string }>;
 }) {
   const { slug, lessonId } = await params;
+  const requestedSearchParams = searchParams ? await searchParams : undefined;
+  const requestedLessonId = requestedSearchParams?.lesson || lessonId;
   const [viewer, courseBySlug, askAiSettings] = await Promise.all([
     getCurrentUserProfile(),
     getCourseBySlug(slug),
@@ -20,10 +23,10 @@ export default async function LessonPlayerPage({
   let course = courseBySlug;
 
   const hasRequestedLesson =
-    course?.modules?.some((module) => module.lessons.some((lesson) => lesson.id === lessonId)) ?? false;
+    course?.modules?.some((module) => module.lessons.some((lesson) => lesson.id === requestedLessonId)) ?? false;
 
   if (!hasRequestedLesson) {
-    const courseByLesson = await getCourseByLessonId(lessonId);
+    const courseByLesson = await getCourseByLessonId(requestedLessonId);
     if (courseByLesson) {
       course = courseByLesson;
     }
@@ -38,7 +41,7 @@ export default async function LessonPlayerPage({
   }
 
   const orderedLessons = course.modules?.flatMap((module) => module.lessons) ?? [];
-  const requestedLesson = orderedLessons.find((lesson) => lesson.id === lessonId) ?? null;
+  const requestedLesson = orderedLessons.find((lesson) => lesson.id === requestedLessonId) ?? null;
 
   if (!requestedLesson) {
     const fallbackLesson = orderedLessons[0];
@@ -50,46 +53,38 @@ export default async function LessonPlayerPage({
     notFound();
   }
 
-  const courseAccessMap =
-    viewer ? await getUserCourseAccessMap(viewer.id, [course.id]) : {};
-  const hasFullCourseAccess = Boolean(courseAccessMap[course.id]?.hasAccess);
+  const [courseAccessMap, progressAndNotes] = viewer
+    ? await Promise.all([
+        getUserCourseAccessMap(viewer.id, [course.id]),
+        Promise.all([
+          getCourseProgressState(viewer.id, course.id),
+          getLessonNotes(viewer.id, requestedLessonId),
+        ]).then(([progress, notes]) => ({ progress, notes })),
+      ])
+    : [{}, null];
+  const hasFullCourseAccess = Boolean(
+    (courseAccessMap as Record<string, { hasAccess?: boolean }>)[course.id]?.hasAccess
+  ) || course.isFree || course.price === 0;
   const expiredAccess =
     viewer && !hasFullCourseAccess ? await getExpiredTimedCourseAccess(viewer.id, course.id) : null;
 
   if (!hasFullCourseAccess && !requestedLesson.isPreview) {
     if (expiredAccess) {
-      return (
-        <div className="min-h-screen bg-white px-4 py-16 dark:bg-slate-950 sm:px-6">
-          <ExpiredSubscriptionNotice
-            renewHref={`/checkout?plan=${expiredAccess.planSlug === "teams" ? "teams" : "pro"}&billing=${expiredAccess.billingCycle ?? "monthly"}`}
-          />
-        </div>
-      );
+      redirect("/pricing?reason=expired");
     }
 
     redirect(`/courses/${course.slug}`);
   }
 
-  const playerState = viewer
-    ? await Promise.all([
-        getCourseProgressState(viewer.id, course.id),
-        getLessonNotes(viewer.id, lessonId),
-      ]).then(([progress, notes]) => ({
-        progress,
-        notes,
-      }))
-    : null;
-
   return (
     <LessonPlayerClient
-      key={lessonId}
       course={course}
-      initialLessonId={lessonId}
+      initialLessonId={requestedLessonId}
       viewerId={viewer?.id ?? null}
-      initialCompletedLessonIds={playerState?.progress.completedLessonIds ?? []}
-      initialLessonProgressMap={playerState?.progress.lessonProgressByLessonId ?? {}}
-      initialNotes={playerState?.notes ?? []}
-      initialNoteContent={playerState?.notes[0]?.content ?? ""}
+      initialCompletedLessonIds={progressAndNotes?.progress.completedLessonIds ?? []}
+      initialLessonProgressMap={progressAndNotes?.progress.lessonProgressByLessonId ?? {}}
+      initialNotes={progressAndNotes?.notes ?? []}
+      initialNoteContent={progressAndNotes?.notes[0]?.content ?? ""}
       hasFullCourseAccess={hasFullCourseAccess}
       askAiEnabled={askAiSettings.enabled}
       askAiAssistantLabel={askAiSettings.assistantLabel}

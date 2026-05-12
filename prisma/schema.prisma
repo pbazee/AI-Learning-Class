@@ -16,6 +16,10 @@ model User {
   role                    Role                   @default(STUDENT)
   bio                     String?
   country                 String?
+  quizAnswers             Json?
+  onboardingRecommendations String[]
+  onboardingCompleted     Boolean                @default(false)
+  onboardingCompletedAt   DateTime?
   preferredCurrency       String                 @default("USD")
   stripeCustomerId        String?                @unique
   createdAt               DateTime               @default(now())
@@ -240,6 +244,7 @@ model LessonProgress {
   id              String    @id @default(uuid())
   userId          String
   lessonId        String
+  assetId         String?   @db.Uuid
   contentType     CourseAssetType?
   isCompleted     Boolean   @default(false)
   watchedSeconds  Int       @default(0)
@@ -252,7 +257,8 @@ model LessonProgress {
   lesson          Lesson    @relation(fields: [lessonId], references: [id])
   user            User      @relation(fields: [userId], references: [id])
 
-  @@unique([userId, lessonId])
+  @@index([userId, lessonId], map: "lesson_progress_user_lesson_idx")
+  @@index([userId, lessonId, assetId], map: "lesson_progress_user_lesson_asset_idx")
 }
 
 model Enrollment {
@@ -847,6 +853,7 @@ enum LessonAssetType {
   VIDEO @map("video")
   PDF   @map("pdf")
   FILE  @map("file")
+  IMAGE @map("image")
 }
 
 enum EnrollmentStatus {

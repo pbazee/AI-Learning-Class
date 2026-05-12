@@ -24,10 +24,13 @@ export async function ensureLessonAssetsTable() {
               JOIN pg_namespace n ON n.oid = t.typnamespace
               WHERE t.typname = 'LessonAssetType' AND n.nspname = 'public'
             ) THEN
-              CREATE TYPE "LessonAssetType" AS ENUM ('video', 'pdf', 'file');
+              CREATE TYPE "LessonAssetType" AS ENUM ('video', 'pdf', 'file', 'image');
             END IF;
           END
           $$;
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          ALTER TYPE "LessonAssetType" ADD VALUE IF NOT EXISTS 'image'
         `);
         await prisma.$executeRaw(Prisma.sql`
           CREATE TABLE IF NOT EXISTS lesson_assets (

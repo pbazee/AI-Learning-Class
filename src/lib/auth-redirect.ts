@@ -5,6 +5,7 @@ const DEFAULT_AFTER_AUTH = "/dashboard";
 type PostAuthProfile = {
   role?: string | null;
   createdAt?: string | Date | null;
+  onboardingCompleted?: boolean | null;
   onboardingCompletedAt?: string | Date | null;
 };
 
@@ -37,18 +38,7 @@ export function resolvePostAuthDestination(nextPath: string, profile?: PostAuthP
     return "/admin";
   }
 
-  const createdAtValue =
-    profile?.createdAt instanceof Date
-      ? profile.createdAt
-      : profile?.createdAt
-        ? new Date(profile.createdAt)
-        : null;
-  const isNewAccount =
-    createdAtValue instanceof Date &&
-    !Number.isNaN(createdAtValue.getTime()) &&
-    Date.now() - createdAtValue.getTime() < 1000 * 60 * 30;
-
-  if (!profile?.onboardingCompletedAt && isNewAccount) {
+  if (!profile?.onboardingCompleted && !profile?.onboardingCompletedAt) {
     return "/signup?step=quiz";
   }
 

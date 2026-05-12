@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import dynamic from "next/dynamic";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
@@ -12,13 +11,7 @@ import { ToastProvider } from "@/components/ui/ToastProvider";
 import { buildSiteMetadata } from "@/lib/site-server";
 import { Navbar } from "@/components/layout/Navbar";
 import { getMetadataBase } from "@/lib/site-server";
-
-const PopupCampaigns = dynamic(
-  () =>
-    import("@/components/popups/PopupCampaigns").then((module) => ({
-      default: module.PopupCampaigns,
-    }))
-);
+import { PopupCampaigns } from "@/components/popups/PopupCampaigns";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,7 +19,7 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadataBase = getMetadataBase();
+const metadataBase = getMetadataBase();
 
 export async function generateMetadata(): Promise<Metadata> {
   const metadata = await buildSiteMetadata("/");
@@ -46,6 +39,10 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const bodyClassName = [inter?.variable, "professional-app", "antialiased"]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -66,7 +63,7 @@ export default async function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.variable} professional-app antialiased`}>
+      <body className={bodyClassName}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
