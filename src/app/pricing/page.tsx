@@ -44,7 +44,7 @@ export default async function PricingPage({
     <div className="min-h-screen bg-background">
       <div>
         {isExpiredReason ? (
-          <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-6xl px-4 pt-0 sm:px-6 sm:pt-8 lg:px-8">
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
               <p className="font-medium text-slate-900">Your subscription has expired. Renew to continue learning.</p>
               <p className="mt-1 text-sm text-slate-600">

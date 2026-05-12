@@ -49,7 +49,7 @@ export default async function AffiliatePage() {
     <div className="min-h-screen bg-background">
       <ScrollToTopOnMount />
 
-      <section className="relative overflow-hidden bg-primary-blue pb-16 pt-5 sm:pb-20 sm:pt-16">
+      <section className="relative overflow-hidden bg-primary-blue pb-16 pt-0 sm:pb-20 sm:pt-16">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_60%)]" />
         <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/12 px-4 py-2 text-sm font-semibold text-white">

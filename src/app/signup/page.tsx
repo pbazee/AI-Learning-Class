@@ -100,6 +100,7 @@ export default function SignupPage() {
     siteName: DEFAULT_SITE_NAME,
     logoUrl: "",
   });
+  const [brandingLoaded, setBrandingLoaded] = useState(false);
 
   const currentQuizQuestion = quizQuestions[quizStep];
   const currentStepIndex = stepConfig.findIndex((entry) => entry.id === step);
@@ -208,6 +209,10 @@ export default function SignupPage() {
         });
       } catch {
         // The default logo fallback is good enough if settings fail to load.
+      } finally {
+        if (mounted) {
+          setBrandingLoaded(true);
+        }
       }
     }
 
@@ -217,6 +222,10 @@ export default function SignupPage() {
       mounted = false;
     };
   }, []);
+
+  if (!brandingLoaded) {
+    return <div className="min-h-screen bg-slate-50" />;
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -586,14 +595,14 @@ export default function SignupPage() {
                   <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-sky-100">
                     <Mail className="h-8 w-8 text-sky-700" />
                   </div>
-                  <h3 className="mb-2 text-lg font-bold text-slate-950">Confirm your email</h3>
-                  <p className="mb-4 text-sm text-slate-800">
-                    We sent a confirmation link to <strong className="text-slate-950">{email}</strong>. Click it to activate your account and start learning.
+                  <h3 className="mb-2 text-lg font-bold text-white">Confirm your email</h3>
+                  <p className="mb-4 text-sm text-white/85">
+                    We sent a confirmation link to <strong className="text-white">{email}</strong>. Click it to activate your account and start learning.
                   </p>
                   <button
                     type="button"
                     onClick={() => setEmailConfirmSent(false)}
-                    className="text-xs font-semibold text-slate-950 transition hover:text-sky-700"
+                    className="text-xs font-semibold text-white transition hover:text-white/80"
                   >
                     Use a different email
                   </button>

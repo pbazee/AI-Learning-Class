@@ -56,6 +56,7 @@ function LoginPageInner() {
     siteName: DEFAULT_SITE_NAME,
     logoUrl: "",
   });
+  const [brandingLoaded, setBrandingLoaded] = useState(false);
   const [error, setError] = useState<string | null>(
     callbackError === "oauth_failed"
       ? "Google sign-in failed. Please try again."
@@ -91,6 +92,10 @@ function LoginPageInner() {
         });
       } catch {
         // Auth pages fall back to the default brand mark if settings are unavailable.
+      } finally {
+        if (mounted) {
+          setBrandingLoaded(true);
+        }
       }
     }
 
@@ -100,6 +105,10 @@ function LoginPageInner() {
       mounted = false;
     };
   }, []);
+
+  if (!brandingLoaded) {
+    return <div className="min-h-screen bg-slate-50" />;
+  }
 
   async function syncNewsletterPreference(nextEmail: string) {
     if (!newsletterOptIn || !nextEmail.trim()) {

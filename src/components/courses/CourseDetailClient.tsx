@@ -335,7 +335,7 @@ export function CourseDetailClient({
     <div className="min-h-screen">
 
       {expiredAccess ? (
-        <div className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 sm:pt-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 pt-0 sm:px-6 sm:pt-6 lg:px-8">
           <ExpiredSubscriptionNotice
             renewHref={`/checkout?plan=${expiredAccess.planSlug === "teams" ? "teams" : "pro"}&billing=${expiredAccess.billingCycle ?? "monthly"}`}
           />

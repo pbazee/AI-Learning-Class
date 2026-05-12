@@ -188,7 +188,7 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-background">
       <div className="pb-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 flex flex-col gap-4 pt-3 sm:pt-8 md:flex-row md:items-start md:justify-between">
+          <div className="mb-8 flex flex-col gap-4 pt-0 sm:pt-8 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="mb-1 text-2xl font-black text-foreground sm:text-3xl">
                 Welcome back, <span className="text-primary-blue">{user.name || "Learner"}</span>
