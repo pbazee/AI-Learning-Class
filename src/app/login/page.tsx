@@ -326,19 +326,19 @@ function LoginPageInner() {
                     </Link>
                   </div>
                   <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/60" />
                     <input
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       required
                       placeholder="Enter your password"
-                      className="auth-input h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-11 text-sm text-slate-950 placeholder:text-slate-600 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+                      className="h-12 w-full rounded-2xl border border-white/40 bg-white/10 pl-11 pr-11 text-sm text-white placeholder:text-white/70 outline-none transition focus:border-white focus:bg-white/15 focus:ring-4 focus:ring-white/15"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((current) => !current)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-900"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60 transition hover:text-white"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -376,7 +376,7 @@ function LoginPageInner() {
           )}
         </div>
 
-        <p className="auth-helper-text mt-6 text-center text-sm text-[#1e293b]">
+        <p className="auth-helper-text mt-6 text-center text-base text-[#1e293b]">
           Don&apos;t have an account?{" "}
           <Link
             href={

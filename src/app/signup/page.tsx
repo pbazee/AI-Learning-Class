@@ -223,10 +223,6 @@ export default function SignupPage() {
     };
   }, []);
 
-  if (!brandingLoaded) {
-    return <div className="min-h-screen bg-slate-50" />;
-  }
-
   useEffect(() => {
     let mounted = true;
 
@@ -529,6 +525,10 @@ export default function SignupPage() {
     }
   }
 
+  if (!brandingLoaded) {
+    return <div className="min-h-screen bg-slate-50" />;
+  }
+
   return (
     <AuthShell
       badge="Create Your Account"
@@ -737,7 +737,7 @@ export default function SignupPage() {
                 </div>
               )}
 
-              <p className="mt-6 text-center text-sm text-slate-800">
+              <p className="mt-6 text-center text-base text-[#1e293b]">
                 Already have an account?{" "}
                 <Link
                   href={

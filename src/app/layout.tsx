@@ -86,9 +86,9 @@ export default async function RootLayout({
                 </Suspense>
               }
               navbar={<Navbar />}
-              mobileBottomNav={<MobileBottomNav />}
             />
             {children}
+            <MobileBottomNav />
           </ToastProvider>
         </ThemeProvider>
       </body>

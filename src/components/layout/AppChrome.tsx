@@ -4,12 +4,10 @@ import { usePathname } from "next/navigation";
 
 export function AppChrome({
   announcementBar,
-  mobileBottomNav,
   navbar,
   popupCampaigns,
 }: {
   announcementBar: React.ReactNode;
-  mobileBottomNav: React.ReactNode;
   navbar: React.ReactNode;
   popupCampaigns: React.ReactNode;
 }) {
@@ -25,7 +23,6 @@ export function AppChrome({
       {announcementBar}
       {popupCampaigns}
       {navbar}
-      {mobileBottomNav}
     </>
   );
 }

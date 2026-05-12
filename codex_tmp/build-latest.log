@@ -1,11 +1,130 @@
 
-> ai-learning-class@0.1.0 build
+> ai-genius-lab@0.1.0 build
 > next build
 
    ▲ Next.js 15.5.14
    - Environments: .env.local, .env
 
    Creating an optimized production build ...
+ ✓ Compiled successfully in 57s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/85) ...
+prisma:error 
+Invalid `prisma.announcement.findMany()` invocation:
 
-> Build error occurred
-[Error: spawn EPERM] { errno: -4048, code: 'EPERM', syscall: 'spawn' }
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+prisma:error 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+prisma:error 
+Invalid `prisma.blogPost.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+prisma:error 
+Invalid `prisma.category.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+prisma:error 
+Invalid `prisma.user.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+[subscription-plans] Unable to ensure the subscription plans table right now. Error [PrismaClientInitializationError]: 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+    at async (C:\Projects\ai-learning-class\.next\server\chunks\2001.js:1:13301)
+    at async k (C:\Projects\ai-learning-class\.next\server\chunks\2001.js:65:231)
+    at async i (C:\Projects\ai-learning-class\.next\server\app\admin\ask-ai\page.js:2:13078) {
+  clientVersion: '5.22.0',
+  errorCode: undefined
+}
+Error occurred prerendering page "/admin/announcements". Read more: https://nextjs.org/docs/messages/prerender-error
+Error [PrismaClientInitializationError]: 
+Invalid `prisma.announcement.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+    at async g (C:\Projects\ai-learning-class\.next\server\app\admin\announcements\page.js:1:9318) {
+  clientVersion: '5.22.0',
+  errorCode: undefined,
+  digest: '4071321239'
+}
+Export encountered an error on /admin/announcements/page: /admin/announcements, exiting the build.
+prisma:error 
+Invalid `prisma.course.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+prisma:error 
+Invalid `prisma.blogPost.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+prisma:error 
+Invalid `prisma.blogPost.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+prisma:error 
+Invalid `prisma.blogPost.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+[database] getBlogPosts failed. Returning a safe fallback while the database catches up. Error [PrismaClientInitializationError]: 
+Invalid `prisma.blogPost.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+    at async (C:\Projects\ai-learning-class\.next\server\chunks\6233.js:1:19364)
+    at async K (C:\Projects\ai-learning-class\.next\server\chunks\6233.js:1:4438)
+    at async p (C:\Projects\ai-learning-class\.next\server\chunks\5772.js:15:1351) {
+  clientVersion: '5.22.0',
+  errorCode: undefined
+}
+Error occurred prerendering page "/sitemap.xml". Read more: https://nextjs.org/docs/messages/prerender-error
+Error [PrismaClientInitializationError]: 
+Invalid `prisma.course.findMany()` invocation:
+
+
+Can't reach database server at `aws-1-eu-west-1.pooler.supabase.com:5432`
+
+Please make sure your database server is running at `aws-1-eu-west-1.pooler.supabase.com:5432`.
+    at async A (C:\Projects\ai-learning-class\.next\server\app\sitemap.xml\route.js:16:1524)
+    at async D (C:\Projects\ai-learning-class\.next\server\app\sitemap.xml\route.js:16:2542) {
+  clientVersion: '5.22.0',
+  errorCode: undefined
+}
+Export encountered an error on /sitemap.xml/route: /sitemap.xml, exiting the build.
+ ⨯ Next.js build worker exited with code: 1 and signal: null
