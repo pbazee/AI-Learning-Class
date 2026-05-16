@@ -2,9 +2,19 @@ import { prisma } from "@/lib/prisma";
 import { HeroSlidesManager } from "@/components/admin/hero-slides-manager";
 
 export default async function AdminHeroSlidesPage() {
-  const slides = await prisma.heroSlide.findMany({
-    orderBy: [{ order: "asc" }, { createdAt: "desc" }],
-  });
+  const slides = await (async () => {
+    try {
+      return await prisma.heroSlide.findMany({
+        orderBy: [{ order: "asc" }, { createdAt: "desc" }],
+      });
+    } catch (error) {
+      console.error(
+        "[database] admin hero slides query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
 
   return (
     <HeroSlidesManager

@@ -8,22 +8,32 @@ const joinedFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export default async function AdminUsersPage() {
-  const users = await prisma.user.findMany({
-    include: {
-      enrollments: {
-        select: { id: true },
-      },
-      subscriptions: {
-        where: { status: "ACTIVE" },
-        select: { id: true },
-      },
-      orders: {
-        where: { status: "COMPLETED" },
-        select: { totalAmount: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const users = await (async () => {
+    try {
+      return await prisma.user.findMany({
+        include: {
+          enrollments: {
+            select: { id: true },
+          },
+          subscriptions: {
+            where: { status: "ACTIVE" },
+            select: { id: true },
+          },
+          orders: {
+            where: { status: "COMPLETED" },
+            select: { totalAmount: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (error) {
+      console.error(
+        "[database] admin users query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
 
   return (
     <UsersManager

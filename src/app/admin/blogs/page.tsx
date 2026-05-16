@@ -8,42 +8,54 @@ const publishedFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export default async function AdminBlogsPage() {
-  const [posts, categories, authors] = await Promise.all([
-    prisma.blogPost.findMany({
-      include: {
-        category: {
+  const { posts, categories, authors } = await (async () => {
+    try {
+      const [posts, categories, authors] = await Promise.all([
+        prisma.blogPost.findMany({
+          include: {
+            category: {
+              select: {
+                name: true,
+              },
+            },
+            author: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { updatedAt: "desc" },
+        }),
+        prisma.category.findMany({
           select: {
+            id: true,
             name: true,
           },
-        },
-        author: {
+          orderBy: { name: "asc" },
+        }),
+        prisma.user.findMany({
+          where: {
+            role: { in: ["ADMIN", "SUPER_ADMIN", "INSTRUCTOR"] },
+          },
           select: {
+            id: true,
             name: true,
             email: true,
           },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
-    prisma.category.findMany({
-      select: {
-        id: true,
-        name: true,
-      },
-      orderBy: { name: "asc" },
-    }),
-    prisma.user.findMany({
-      where: {
-        role: { in: ["ADMIN", "SUPER_ADMIN", "INSTRUCTOR"] },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+          orderBy: { createdAt: "desc" },
+        }),
+      ]);
+
+      return { posts, categories, authors };
+    } catch (error) {
+      console.error(
+        "[database] admin blogs query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return { posts: [], categories: [], authors: [] };
+    }
+  })();
 
   return (
     <BlogsManager

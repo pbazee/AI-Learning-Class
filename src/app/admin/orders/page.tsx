@@ -38,55 +38,67 @@ function humanizePaymentMethod(value?: string | null) {
 }
 
 export default async function AdminOrdersPage() {
-  const [orders, subscriptions] = await Promise.all([
-    prisma.order.findMany({
-      include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-            country: true,
-            enrollments: {
-              select: {
-                courseId: true,
-              },
-            },
-          },
-        },
-        items: {
+  const { orders, subscriptions } = await (async () => {
+    try {
+      const [orders, subscriptions] = await Promise.all([
+        prisma.order.findMany({
           include: {
-            course: {
+            user: {
               select: {
-                id: true,
-                title: true,
+                name: true,
+                email: true,
+                country: true,
+                enrollments: {
+                  select: {
+                    courseId: true,
+                  },
+                },
+              },
+            },
+            items: {
+              include: {
+                course: {
+                  select: {
+                    id: true,
+                    title: true,
+                  },
+                },
               },
             },
           },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.userSubscription.findMany({
-      include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-            country: true,
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.userSubscription.findMany({
+          include: {
+            user: {
+              select: {
+                name: true,
+                email: true,
+                country: true,
+              },
+            },
+            plan: {
+              select: {
+                name: true,
+                price: true,
+                yearlyPrice: true,
+                currency: true,
+              },
+            },
           },
-        },
-        plan: {
-          select: {
-            name: true,
-            price: true,
-            yearlyPrice: true,
-            currency: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+          orderBy: { createdAt: "desc" },
+        }),
+      ]);
+
+      return { orders, subscriptions };
+    } catch (error) {
+      console.error(
+        "[database] admin orders query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return { orders: [], subscriptions: [] };
+    }
+  })();
 
   const orderRows: AdminOrderRecord[] = orders.map((order) => {
     const status = normalizeOrderStatus(order.status);

@@ -2,49 +2,62 @@ import { UserSubscriptionsManager } from "@/components/admin/user-subscriptions-
 import { prisma } from "@/lib/prisma";
 
 export default async function AdminUserSubscriptionsPage() {
-  const subscriptions = await prisma.userSubscription.findMany({
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          country: true,
+  const { subscriptions, lessonActivity, includedCourses } = await (async () => {
+    try {
+      const subscriptions = await prisma.userSubscription.findMany({
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              country: true,
+            },
+          },
+          plan: true,
         },
-      },
-      plan: true,
-    },
-    orderBy: { currentPeriodEnd: "asc" },
-  });
+        orderBy: { currentPeriodEnd: "asc" },
+      });
 
-  const userIds = subscriptions.map((subscription) => subscription.user.id);
-  const lessonActivity = userIds.length
-    ? await prisma.lessonProgress.groupBy({
-        by: ["userId"],
-        where: { userId: { in: userIds } },
-        _max: { updatedAt: true },
-      })
-    : [];
+      const userIds = subscriptions.map((subscription) => subscription.user.id);
+      const lessonActivity = userIds.length
+        ? await prisma.lessonProgress.groupBy({
+            by: ["userId"],
+            where: { userId: { in: userIds } },
+            _max: { updatedAt: true },
+          })
+        : [];
+
+      const includedCourseIds = Array.from(
+        new Set(
+          subscriptions.flatMap((subscription) =>
+            subscription.plan.coursesIncluded.filter((courseId) => courseId !== "ALL")
+          )
+        )
+      );
+      const includedCourses = includedCourseIds.length
+        ? await prisma.course.findMany({
+            where: { id: { in: includedCourseIds } },
+            select: {
+              id: true,
+              title: true,
+            },
+          })
+        : [];
+
+      return { subscriptions, lessonActivity, includedCourses };
+    } catch (error) {
+      console.error(
+        "[database] admin user subscriptions query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return { subscriptions: [], lessonActivity: [], includedCourses: [] };
+    }
+  })();
+
   const lastActiveMap = new Map(
     lessonActivity.map((entry) => [entry.userId, entry._max.updatedAt?.toISOString() ?? null])
   );
-
-  const includedCourseIds = Array.from(
-    new Set(
-      subscriptions.flatMap((subscription) =>
-        subscription.plan.coursesIncluded.filter((courseId) => courseId !== "ALL")
-      )
-    )
-  );
-  const includedCourses = includedCourseIds.length
-    ? await prisma.course.findMany({
-        where: { id: { in: includedCourseIds } },
-        select: {
-          id: true,
-          title: true,
-        },
-      })
-    : [];
   const includedCourseMap = new Map(includedCourses.map((course) => [course.id, course.title]));
 
   return (

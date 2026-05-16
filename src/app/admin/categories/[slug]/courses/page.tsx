@@ -9,43 +9,67 @@ export default async function AdminCategoryCoursesPage({
 }) {
   const { slug } = await params;
 
-  const category = await prisma.category.findUnique({
-    where: { slug },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      _count: {
+  const { category, courses } = await (async () => {
+    try {
+      const category = await prisma.category.findUnique({
+        where: { slug },
         select: {
-          courses: true,
+          id: true,
+          name: true,
+          slug: true,
+          _count: {
+            select: {
+              courses: true,
+            },
+          },
         },
-      },
-    },
-  });
+      });
+
+      if (!category) {
+        return { category: null, courses: [] };
+      }
+
+      const courses = await prisma.course.findMany({
+        where: {
+          categoryId: category.id,
+        },
+        include: {
+          instructor: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+          _count: {
+            select: {
+              enrollments: true,
+            },
+          },
+        },
+        orderBy: [{ isPublished: "desc" }, { title: "asc" }],
+      });
+
+      return { category, courses };
+    } catch (error) {
+      console.error(
+        "[database] admin category courses query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return {
+        category: {
+          id: `fallback-${slug}`,
+          name: slug,
+          slug,
+          _count: { courses: 0 },
+        },
+        courses: [],
+      };
+    }
+  })();
 
   if (!category) {
     notFound();
   }
-
-  const courses = await prisma.course.findMany({
-    where: {
-      categoryId: category.id,
-    },
-    include: {
-      instructor: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-      _count: {
-        select: {
-          enrollments: true,
-        },
-      },
-    },
-    orderBy: [{ isPublished: "desc" }, { title: "asc" }],
-  });
 
   return (
     <CategoryCoursesView

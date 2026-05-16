@@ -10,64 +10,76 @@ export default async function AdminCoursesPage() {
   await ensureLessonAssetsTable();
   await ensureSubscriptionPlansTable();
 
-  const [courses, categories, instructors, activePlans] = await Promise.all([
-    prisma.course.findMany({
-      include: {
-        category: {
-          select: {
-            name: true,
-          },
-        },
-        instructor: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
-        assets: {
-          orderBy: { createdAt: "desc" },
-        },
-        modules: {
-          orderBy: { order: "asc" },
+  const { courses, categories, instructors, activePlans } = await (async () => {
+    try {
+      const [courses, categories, instructors, activePlans] = await Promise.all([
+        prisma.course.findMany({
           include: {
-            lessons: {
+            category: {
+              select: {
+                name: true,
+              },
+            },
+            instructor: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+            assets: {
+              orderBy: { createdAt: "desc" },
+            },
+            modules: {
               orderBy: { order: "asc" },
               include: {
-                lessonAssets: {
-                  orderBy: { sortOrder: "asc" },
+                lessons: {
+                  orderBy: { order: "asc" },
+                  include: {
+                    lessonAssets: {
+                      orderBy: { sortOrder: "asc" },
+                    },
+                  },
                 },
               },
             },
           },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.category.findMany({
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-      },
-    }),
-    prisma.user.findMany({
-      where: {
-        role: { in: ["INSTRUCTOR", "ADMIN", "SUPER_ADMIN"] },
-      },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    }),
-    prisma.subscriptionPlan.findMany({
-      where: { isActive: true },
-      select: {
-        coursesIncluded: true,
-      },
-    }),
-  ]);
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.category.findMany({
+          orderBy: { name: "asc" },
+          select: {
+            id: true,
+            name: true,
+          },
+        }),
+        prisma.user.findMany({
+          where: {
+            role: { in: ["INSTRUCTOR", "ADMIN", "SUPER_ADMIN"] },
+          },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        }),
+        prisma.subscriptionPlan.findMany({
+          where: { isActive: true },
+          select: {
+            coursesIncluded: true,
+          },
+        }),
+      ]);
+
+      return { courses, categories, instructors, activePlans };
+    } catch (error) {
+      console.error(
+        "[database] admin courses query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return { courses: [], categories: [], instructors: [], activePlans: [] };
+    }
+  })();
 
   const subscriptionCourseSet = new Set<string>();
   const subscriptionIncludesAll = activePlans.some((plan) => plan.coursesIncluded.includes("ALL"));

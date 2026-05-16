@@ -2,14 +2,24 @@ import { MessagesManager } from "@/components/admin/messages-manager";
 import { prisma } from "@/lib/prisma";
 
 export default async function AdminMessagesPage() {
-  const messages = await prisma.contactMessage.findMany({
-    orderBy: [{ createdAt: "desc" }],
-    include: {
-      replies: {
-        orderBy: [{ createdAt: "asc" }],
-      },
-    },
-  });
+  const messages = await (async () => {
+    try {
+      return await prisma.contactMessage.findMany({
+        orderBy: [{ createdAt: "desc" }],
+        include: {
+          replies: {
+            orderBy: [{ createdAt: "asc" }],
+          },
+        },
+      });
+    } catch (error) {
+      console.error(
+        "[database] admin messages query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
 
   return (
     <MessagesManager

@@ -16,19 +16,47 @@ function readSocialLinks(value: unknown) {
 export default async function AdminAskAiPage() {
   await ensureSubscriptionPlansTable();
 
-  const [settings, plans] = await Promise.all([
-    prisma.siteSettings.upsert({
-      where: { id: "singleton" },
-      update: {},
-      create: {
-        id: "singleton",
-        siteName: DEFAULT_SITE_NAME,
-      },
-    }),
-    prisma.subscriptionPlan.findMany({
-      orderBy: [{ price: "asc" }, { createdAt: "asc" }],
-    }),
-  ]);
+  const { settings, plans } = await (async () => {
+    try {
+      const [settings, plans] = await Promise.all([
+        prisma.siteSettings.upsert({
+          where: { id: "singleton" },
+          update: {},
+          create: {
+            id: "singleton",
+            siteName: DEFAULT_SITE_NAME,
+          },
+        }),
+        prisma.subscriptionPlan.findMany({
+          orderBy: [{ price: "asc" }, { createdAt: "asc" }],
+        }),
+      ]);
+
+      return { settings, plans };
+    } catch (error) {
+      console.error(
+        "[database] admin ask-ai query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return {
+        settings: {
+          id: "singleton",
+          siteName: DEFAULT_SITE_NAME,
+          supportEmail: null,
+          supportPhone: null,
+          adminEmail: null,
+          logoUrl: null,
+          faviconUrl: null,
+          socialLinks: {},
+          maintenanceMode: false,
+          updatedAt: new Date(),
+          supportAddress: null,
+          heroSlideInterval: 6,
+        },
+        plans: [],
+      };
+    }
+  })();
 
   const socialLinks = readSocialLinks(settings.socialLinks);
 

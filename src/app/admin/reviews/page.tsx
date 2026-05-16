@@ -8,39 +8,51 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export default async function AdminReviewsPage() {
-  const [reviews, users, courses] = await Promise.all([
-    prisma.review.findMany({
-      include: {
-        user: {
+  const { reviews, users, courses } = await (async () => {
+    try {
+      const [reviews, users, courses] = await Promise.all([
+        prisma.review.findMany({
+          include: {
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+            course: {
+              select: {
+                title: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.user.findMany({
           select: {
+            id: true,
             name: true,
             email: true,
           },
-        },
-        course: {
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.course.findMany({
           select: {
+            id: true,
             title: true,
           },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.course.findMany({
-      select: {
-        id: true,
-        title: true,
-      },
-      orderBy: { title: "asc" },
-    }),
-  ]);
+          orderBy: { title: "asc" },
+        }),
+      ]);
+
+      return { reviews, users, courses };
+    } catch (error) {
+      console.error(
+        "[database] admin reviews query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return { reviews: [], users: [], courses: [] };
+    }
+  })();
 
   return (
     <ReviewsManager

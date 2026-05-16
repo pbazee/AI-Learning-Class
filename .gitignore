@@ -58,3 +58,5 @@ public/pdf.worker.min.mjs
 public/pdf.worker.min.js
 public/pdf.worker.mjs
 public/pdf.worker.js
+.open-next/
+.wrangler/

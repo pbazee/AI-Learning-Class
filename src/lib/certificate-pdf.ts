@@ -4,16 +4,12 @@ import PDFDocument from "@react-pdf/pdfkit";
 import { prisma } from "@/lib/prisma";
 import { getPublicCertificateByCode } from "@/lib/learner-records";
 import {
-  ADMIN_STORAGE_BUCKET,
-  ensureAdminStorageBucket,
-  getSupabaseAdminClient,
-} from "@/lib/supabase-admin";
-import {
   type CertificatePresentation,
   buildCertificatePresentation,
   getCertificatePdfFileName,
 } from "@/lib/certificate-presenter";
 import { CERTIFICATE_PDF_CACHE_REVALIDATE_SECONDS } from "@/lib/cache-config";
+import { getR2Url, uploadToR2 } from "@/lib/r2";
 
 type CertificateSource = Awaited<ReturnType<typeof getPublicCertificateByCode>>;
 type PdfDocument = InstanceType<typeof PDFDocument>;
@@ -38,10 +34,8 @@ function buildCertificateStoragePath(code: string) {
   return `certificates/${code}.pdf`;
 }
 
-function getCertificatePublicUrl(storagePath: string, bucket = ADMIN_STORAGE_BUCKET) {
-  const supabase = getSupabaseAdminClient();
-  const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath);
-  return data.publicUrl;
+function getCertificatePublicUrl(storagePath: string) {
+  return getR2Url(storagePath);
 }
 
 export function getCertificateDownloadFileName(certificate: {
@@ -388,24 +382,14 @@ export async function ensureCertificatePdfAsset(
   }
 
   try {
-    const bucket = await ensureAdminStorageBucket();
     const storagePath = buildCertificateStoragePath(certificate.code);
-    const supabase = getSupabaseAdminClient();
-    const uploadResult = await supabase.storage.from(bucket).upload(
-      storagePath,
-      pdfBuffer,
-      {
-        contentType: "application/pdf",
-        upsert: true,
-        cacheControl: String(CERTIFICATE_PDF_CACHE_REVALIDATE_SECONDS),
-      }
-    );
-
-    if (uploadResult.error) {
-      throw uploadResult.error;
-    }
-
-    const pdfUrl = getCertificatePublicUrl(storagePath, bucket);
+    await uploadToR2({
+      file: pdfBuffer,
+      key: storagePath,
+      contentType: "application/pdf",
+    });
+    const pdfUrl = getCertificatePublicUrl(storagePath);
+    void CERTIFICATE_PDF_CACHE_REVALIDATE_SECONDS;
 
     await prisma.certificate.update({
       where: { id: certificate.id },

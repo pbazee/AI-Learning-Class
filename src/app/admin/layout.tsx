@@ -1,9 +1,6 @@
 import { AdminClientLayout } from "@/components/admin/AdminClientLayout";
 import { getSiteBranding } from "@/lib/site-server";
 
-// Force Node.js runtime so Prisma and server-only libs are available on Vercel.
-export const runtime = "nodejs";
-
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   let branding: Awaited<ReturnType<typeof getSiteBranding>>;
 

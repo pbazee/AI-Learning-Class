@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { FileAudio, FileImage, FileText, FileVideo, Trash2, UploadCloud } from "lucide-react";
 import { AdminButton, AdminCard } from "@/components/admin/ui";
-import { getSupabaseClient } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
 
 export type UploadedAsset = {
@@ -81,47 +80,33 @@ export function MediaUploader({
     setBusy(true);
 
     try {
-      const signResponse = await fetch("/api/admin/upload/sign", {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", folder);
+
+      const uploadResponse = await fetch("/api/admin/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          folder,
-          fileName: file.name,
-          mimeType: file.type,
-        }),
+        body: formData,
       });
-      const signPayload = await parseJsonResponse(signResponse);
+      const uploadPayload = await parseJsonResponse(uploadResponse);
 
       if (
-        !signResponse.ok ||
-        typeof signPayload?.bucket !== "string" ||
-        typeof signPayload?.path !== "string" ||
-        typeof signPayload?.token !== "string" ||
-        typeof signPayload?.url !== "string"
+        !uploadResponse.ok ||
+        typeof uploadPayload?.bucket !== "string" ||
+        typeof uploadPayload?.path !== "string" ||
+        typeof uploadPayload?.url !== "string"
       ) {
         throw new Error(
-          typeof signPayload?.error === "string"
-            ? signPayload.error
+          typeof uploadPayload?.error === "string"
+            ? uploadPayload.error
             : "Upload failed."
         );
       }
 
-      const supabase = getSupabaseClient();
-      const { error: uploadError } = await supabase.storage
-        .from(signPayload.bucket)
-        .uploadToSignedUrl(signPayload.path, signPayload.token, file, {
-          cacheControl: "31536000",
-          contentType: file.type || "application/octet-stream",
-        });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
       onUploaded({
-        bucket: signPayload.bucket,
-        path: signPayload.path,
-        url: signPayload.url,
+        bucket: uploadPayload.bucket,
+        path: uploadPayload.path,
+        url: uploadPayload.url,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
         sizeBytes: file.size,
@@ -178,7 +163,7 @@ export function MediaUploader({
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-foreground">{value.fileName || "Uploaded file"}</p>
-            <p className="text-xs text-muted-foreground">{value.mimeType || "Stored in Supabase Storage"}</p>
+            <p className="text-xs text-muted-foreground">{value.mimeType || "Stored in Cloudflare storage"}</p>
           </div>
           <AdminButton
             type="button"
@@ -206,8 +191,8 @@ export function MediaUploader({
           />
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-foreground">Upload to Supabase Storage</p>
-              <p className="mt-1 text-xs text-muted-foreground">Files are stored in the shared admin bucket at original quality.</p>
+              <p className="text-sm font-semibold text-foreground">Upload to Cloudflare storage</p>
+              <p className="mt-1 text-xs text-muted-foreground">Images and files go to R2, while videos go to Cloudflare Stream.</p>
             </div>
             <AdminButton
               type="button"

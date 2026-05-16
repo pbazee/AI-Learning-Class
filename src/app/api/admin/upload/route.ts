@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import {
   ADMIN_STORAGE_BUCKET,
   deleteAdminStorageObjects,
-  ensureAdminStorageBucket,
-  getSupabaseAdminClient,
-  isMissingStorageBucketError,
 } from "@/lib/supabase-admin";
+import { uploadVideoToStream } from "@/lib/cloudflare-stream";
+import { uploadToR2 } from "@/lib/r2";
 
 export const dynamic = "force-dynamic";
 
@@ -34,42 +33,35 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "This file is too large for the buffered upload route. Use the signed direct upload flow for longer videos and large assets.",
+            "This file is too large for the current buffered upload route. Increase the limit or add direct-to-R2 uploads before sending larger assets.",
         },
         { status: 413 }
       );
     }
-
-    const supabase = getSupabaseAdminClient();
     const safeFileName = sanitizeFileName(file.name || "upload");
     const storagePath = `${folder}/${Date.now()}-${crypto.randomUUID()}-${safeFileName}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    const uploadFile = () =>
-      supabase.storage.from(bucket).upload(storagePath, buffer, {
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-        // Updated: keep uploaded assets at their original fidelity and cache aggressively.
-        cacheControl: "31536000",
-      });
-
-    let { error: uploadError } = await uploadFile();
-
-    if (uploadError && isMissingStorageBucketError(uploadError)) {
-      await ensureAdminStorageBucket(bucket);
-      ({ error: uploadError } = await uploadFile());
-    }
-
-    if (uploadError) {
-      throw uploadError;
-    }
-
-    const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath);
+    const isVideo = file.type.startsWith("video/");
+    const uploadResult = isVideo
+      ? await uploadVideoToStream({
+          file: buffer,
+          name: safeFileName,
+        })
+      : null;
+    const publicUrl = uploadResult
+      ? uploadResult.playbackUrl
+      : await uploadToR2({
+          file: buffer,
+          key: storagePath,
+          contentType: file.type || "application/octet-stream",
+        });
+    const responsePath = uploadResult ? `stream/${uploadResult.videoId}` : storagePath;
 
     return NextResponse.json({
       success: true,
-      bucket,
-      path: storagePath,
-      url: data.publicUrl,
+      bucket: uploadResult ? "cloudflare-stream" : bucket,
+      path: responsePath,
+      url: publicUrl,
       fileName: file.name,
       mimeType: file.type || "application/octet-stream",
       sizeBytes: file.size,
@@ -86,17 +78,13 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const payload = await request.json();
-    const bucket =
-      typeof payload?.bucket === "string" && payload.bucket.trim().length > 0
-        ? payload.bucket.trim()
-        : ADMIN_STORAGE_BUCKET;
     const path = typeof payload?.path === "string" ? payload.path.trim() : "";
 
     if (!path) {
       return NextResponse.json({ error: "A storage path is required." }, { status: 400 });
     }
 
-    await deleteAdminStorageObjects([path], bucket);
+    await deleteAdminStorageObjects([path]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

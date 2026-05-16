@@ -1,8 +1,14 @@
 import { z } from "zod";
 
+export const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  "http://localhost:3000";
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default(process.env.NODE_ENV as any ?? "development"),
-  NEXT_PUBLIC_APP_URL: z.string().url().default(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  NEXT_PUBLIC_APP_URL: z.string().url().default(process.env.NEXT_PUBLIC_APP_URL ?? APP_URL),
+  NEXT_PUBLIC_SITE_URL: z.string().optional(),
 
   // Supabase (public keys are optional for server; service role is server-only)
   NEXT_PUBLIC_SUPABASE_URL: z.string().optional(),
@@ -10,9 +16,17 @@ const EnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET: z.string().optional(),
 
-  // Vercel / host hints
-  VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
-  VERCEL_URL: z.string().optional(),
+  // Cloudflare
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
+  CLOUDFLARE_API_TOKEN: z.string().optional(),
+  CLOUDFLARE_STREAM_API_TOKEN: z.string().optional(),
+  CLOUDFLARE_WORKERS: z.string().optional(),
+
+  // Cloudflare R2
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+  R2_PUBLIC_URL: z.string().optional(),
 
   // Admin
   ADMIN_EMAIL: z.string().email().optional(),
@@ -60,12 +74,19 @@ const EnvSchema = z.object({
 const raw = {
   NODE_ENV: process.env.NODE_ENV,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET,
-  VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,
-  VERCEL_URL: process.env.VERCEL_URL,
+  CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+  CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
+  CLOUDFLARE_STREAM_API_TOKEN: process.env.CLOUDFLARE_STREAM_API_TOKEN,
+  CLOUDFLARE_WORKERS: process.env.CLOUDFLARE_WORKERS,
+  R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+  R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
+  R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
   ADMIN_EMAIL: process.env.ADMIN_EMAIL,
   DATABASE_URL: process.env.DATABASE_URL,
   DIRECT_URL: process.env.DIRECT_URL,

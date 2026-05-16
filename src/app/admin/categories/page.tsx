@@ -2,21 +2,31 @@ import { prisma } from "@/lib/prisma";
 import { CategoriesManager } from "@/components/admin/categories-manager";
 
 export default async function AdminCategoriesPage() {
-  const categories = await prisma.category.findMany({
-    include: {
-      parent: {
-        select: {
-          name: true,
+  const categories = await (async () => {
+    try {
+      return await prisma.category.findMany({
+        include: {
+          parent: {
+            select: {
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              courses: true,
+            },
+          },
         },
-      },
-      _count: {
-        select: {
-          courses: true,
-        },
-      },
-    },
-    orderBy: { name: "asc" },
-  });
+        orderBy: { name: "asc" },
+      });
+    } catch (error) {
+      console.error(
+        "[database] admin categories query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
 
   return (
     <CategoriesManager

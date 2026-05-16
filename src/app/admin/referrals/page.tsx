@@ -2,17 +2,29 @@ import { prisma } from "@/lib/prisma";
 import { ReferralsManager } from "@/components/admin/referrals-manager";
 
 export default async function AdminReferralsPage() {
-  const [program, referrals] = await Promise.all([
-    prisma.referralProgram.findFirst(),
-    prisma.referral.findMany({
-      include: {
-        referrer: { select: { name: true, email: true } },
-        referred: { select: { name: true, email: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 25,
-    }),
-  ]);
+  const { program, referrals } = await (async () => {
+    try {
+      const [program, referrals] = await Promise.all([
+        prisma.referralProgram.findFirst(),
+        prisma.referral.findMany({
+          include: {
+            referrer: { select: { name: true, email: true } },
+            referred: { select: { name: true, email: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 25,
+        }),
+      ]);
+
+      return { program, referrals };
+    } catch (error) {
+      console.error(
+        "[database] admin referrals query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return { program: null, referrals: [] };
+    }
+  })();
 
   return (
     <ReferralsManager

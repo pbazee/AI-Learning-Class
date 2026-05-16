@@ -161,7 +161,7 @@ export async function buildSiteMetadata(
   const description = overrides?.description || DEFAULT_SITE_DESCRIPTION;
   const image = overrides?.image || branding.logoUrl || undefined;
   const canonical = overrides?.canonicalUrl || absoluteUrl(path);
-  const iconUrl = `/icon${branding.assetVersion ? `?v=${branding.assetVersion}` : ""}`;
+  const iconUrl = `/favicon.svg${branding.assetVersion ? `?v=${branding.assetVersion}` : ""}`;
   const openGraphTitle = overrides?.openGraphTitle || title;
   const openGraphDescription = overrides?.openGraphDescription || description;
 
@@ -203,31 +203,16 @@ export async function buildSiteMetadata(
       icon: [
         {
           url: iconUrl,
-          sizes: "16x16",
-          type: "image/png",
-        },
-        {
-          url: iconUrl,
-          sizes: "32x32",
-          type: "image/png",
-        },
-        {
-          url: iconUrl,
-          sizes: "192x192",
-          type: "image/png",
-        },
-        {
-          url: iconUrl,
-          sizes: "512x512",
-          type: "image/png",
+          sizes: "any",
+          type: "image/svg+xml",
         },
       ],
       shortcut: iconUrl,
       apple: [
         {
           url: iconUrl,
-          sizes: "180x180",
-          type: "image/png",
+          sizes: "any",
+          type: "image/svg+xml",
         },
       ],
     },

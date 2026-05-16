@@ -1,0 +1,17 @@
+name = "ai-genius-lab"
+account_id = "00d89852dbf5409a64da20ac12fe3920"
+
+main = ".open-next/worker.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NEXT_PUBLIC_APP_URL = "https://your-domain.com"
+CLOUDFLARE_WORKERS = "true"
+
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "ai-genius-lab-assets"
+
+[build]
+command = "npx @opennextjs/cloudflare build"

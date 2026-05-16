@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
+import { deleteVideoFromStream, extractVideoIdFromStreamPath } from "@/lib/cloudflare-stream";
 import { env } from "@/lib/config";
+import { deleteFromR2, extractR2KeyFromUrl } from "@/lib/r2";
 
 export const ADMIN_STORAGE_BUCKET = env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "admin-assets";
 
@@ -71,10 +73,52 @@ export async function deleteAdminStorageObjects(paths: Array<string | null | und
     return;
   }
 
+  const supabaseFallbackPaths: string[] = [];
+
+  for (const path of validPaths) {
+    const streamVideoId = extractVideoIdFromStreamPath(path);
+
+    if (streamVideoId) {
+      try {
+        await deleteVideoFromStream(streamVideoId);
+      } catch (error) {
+        console.warn("[storage] Failed to remove a Cloudflare Stream asset.", error);
+      }
+      continue;
+    }
+
+    const r2Key = extractR2KeyFromUrl(path);
+
+    if (r2Key) {
+      try {
+        await deleteFromR2(r2Key);
+      } catch (error) {
+        console.warn("[storage] Failed to remove an R2 asset.", error);
+      }
+      continue;
+    }
+
+    try {
+      await deleteFromR2(path);
+      continue;
+    } catch {
+      supabaseFallbackPaths.push(path);
+    }
+  }
+
+  if (supabaseFallbackPaths.length === 0) {
+    return;
+  }
+
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn("[storage] Supabase storage is not configured for legacy asset cleanup.");
+    return;
+  }
+
   const supabase = getSupabaseAdminClient();
-  const { error } = await supabase.storage.from(bucket).remove(validPaths);
+  const { error } = await supabase.storage.from(bucket).remove(supabaseFallbackPaths);
 
   if (error) {
-    console.warn("[storage] Failed to remove one or more admin assets.", error);
+    console.warn("[storage] Failed to remove one or more legacy Supabase assets.", error);
   }
 }

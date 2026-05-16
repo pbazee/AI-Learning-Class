@@ -41,12 +41,13 @@ type PendingUpload = {
   errorMessage?: string;
 };
 
-type SignedUploadPayload = {
+type UploadedAssetPayload = {
   bucket: string;
   path: string;
-  signedUrl: string;
-  token: string;
   url: string;
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
 };
 
 const acceptedAssetTypes = [
@@ -132,44 +133,14 @@ async function parseJsonResponse(response: Response) {
   }
 }
 
-async function requestSignedUpload(folder: string, file: File) {
-  const response = await fetch("/api/admin/upload/sign", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      folder,
-      fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
-    }),
-  });
-  const payload = await parseJsonResponse(response);
-
-  if (
-    !response.ok ||
-    typeof payload?.path !== "string" ||
-    typeof payload?.signedUrl !== "string" ||
-    typeof payload?.url !== "string"
-  ) {
-    throw new Error(
-      typeof payload?.error === "string"
-        ? payload.error
-        : "Unable to prepare the upload right now."
-    );
-  }
-
-  return payload as unknown as SignedUploadPayload;
-}
-
 function uploadFileWithProgress(
-  signedUrl: string,
+  folder: string,
   file: File,
   onProgress: (progress: number) => void
 ) {
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<UploadedAssetPayload>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", signedUrl, true);
-    xhr.setRequestHeader("x-upsert", "false");
-    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+    xhr.open("POST", "/api/admin/upload", true);
 
     xhr.upload.onprogress = (event) => {
       if (!event.lengthComputable) {
@@ -181,16 +152,43 @@ function uploadFileWithProgress(
 
     xhr.onerror = () => reject(new Error("Network error while uploading."));
     xhr.onload = () => {
+      const payload = (() => {
+        try {
+          return JSON.parse(xhr.responseText) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })();
+
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress(100);
-        resolve();
+        if (
+          payload &&
+          typeof payload.path === "string" &&
+          typeof payload.url === "string" &&
+          typeof payload.bucket === "string"
+        ) {
+          resolve(payload as UploadedAssetPayload);
+          return;
+        }
+
+        reject(new Error("Upload completed, but the server response was incomplete."));
         return;
       }
 
-      reject(new Error("Upload failed before the file reached storage."));
+      reject(
+        new Error(
+          typeof payload?.error === "string"
+            ? payload.error
+            : "Upload failed before the file reached storage."
+        )
+      );
     };
 
-    xhr.send(file);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", folder);
+    xhr.send(formData);
   });
 }
 
@@ -290,14 +288,17 @@ export function LessonAssetsUploader({
         const pendingId = uploadRows[fileIndex].id;
 
         try {
-          const signedUpload = await requestSignedUpload(`courses/lessons/${courseId}`, file);
-          await uploadFileWithProgress(signedUpload.signedUrl, file, (progress) => {
+          const uploadedAsset = await uploadFileWithProgress(
+            `courses/lessons/${courseId}`,
+            file,
+            (progress) => {
             setPendingUploads((current) =>
               current.map((upload) =>
                 upload.id === pendingId ? { ...upload, progress } : upload
               )
             );
-          });
+            }
+          );
 
           const inferredKind = inferLessonAssetKind({
             fileName: file.name,
@@ -309,11 +310,11 @@ export function LessonAssetsUploader({
                 ? "PDF"
                 : inferredKind === "VIDEO"
                   ? "VIDEO"
-                  : inferredKind === "IMAGE"
+                : inferredKind === "IMAGE"
                     ? "IMAGE"
                     : "FILE",
-            assetUrl: signedUpload.url,
-            assetPath: signedUpload.path,
+            assetUrl: uploadedAsset.url,
+            assetPath: uploadedAsset.path,
             fileName: file.name,
             mimeType: file.type || "application/octet-stream",
             sizeBytes: file.size,
@@ -403,7 +404,7 @@ export function LessonAssetsUploader({
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-white">{upload.fileName}</p>
                   <p className="mt-1 text-xs text-slate-400">
-                    {upload.status === "error" ? upload.errorMessage : "Uploading to storage..."}
+                    {upload.status === "error" ? upload.errorMessage : "Uploading to Cloudflare storage..."}
                   </p>
                 </div>
                 {upload.status === "uploading" ? (

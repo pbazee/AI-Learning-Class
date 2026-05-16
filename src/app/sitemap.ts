@@ -26,16 +26,27 @@ const staticPages: Array<{
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [courses, blogPosts] = await Promise.all([
-    prisma.course.findMany({
-      where: { isPublished: true },
-      select: {
-        slug: true,
-        updatedAt: true,
-        createdAt: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
+  const courses = await (async () => {
+    try {
+      return await prisma.course.findMany({
+        where: { isPublished: true },
+        select: {
+          slug: true,
+          updatedAt: true,
+          createdAt: true,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch (error) {
+      console.error(
+        "[database] sitemap course query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
+
+  const [blogPosts] = await Promise.all([
     prisma.blogPost.findMany({
       where: {
         OR: [{ status: "PUBLISHED" }, { isPublished: true }],

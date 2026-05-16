@@ -3,19 +3,47 @@ import { SettingsManager } from "@/components/admin/settings-manager";
 import { DEFAULT_SITE_NAME, normalizeSiteName } from "@/lib/site";
 
 export default async function AdminSettingsPage() {
-  const [settings, faqs] = await Promise.all([
-    prisma.siteSettings.upsert({
-      where: { id: "singleton" },
-      update: {},
-      create: {
-        id: "singleton",
-        siteName: DEFAULT_SITE_NAME,
-      },
-    }),
-    prisma.fAQ.findMany({
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-    }),
-  ]);
+  const { settings, faqs } = await (async () => {
+    try {
+      const [settings, faqs] = await Promise.all([
+        prisma.siteSettings.upsert({
+          where: { id: "singleton" },
+          update: {},
+          create: {
+            id: "singleton",
+            siteName: DEFAULT_SITE_NAME,
+          },
+        }),
+        prisma.fAQ.findMany({
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+        }),
+      ]);
+
+      return { settings, faqs };
+    } catch (error) {
+      console.error(
+        "[database] admin settings query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return {
+        settings: {
+          id: "singleton",
+          siteName: DEFAULT_SITE_NAME,
+          supportEmail: null,
+          supportPhone: null,
+          adminEmail: null,
+          logoUrl: null,
+          faviconUrl: null,
+          socialLinks: {},
+          maintenanceMode: false,
+          updatedAt: new Date(),
+          supportAddress: null,
+          heroSlideInterval: 6,
+        },
+        faqs: [],
+      };
+    }
+  })();
 
   return (
     <SettingsManager

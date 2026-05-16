@@ -2,9 +2,19 @@ import { prisma } from "@/lib/prisma";
 import { CouponsManager } from "@/components/admin/coupons-manager";
 
 export default async function AdminCouponsPage() {
-  const coupons = await prisma.coupon.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  const coupons = await (async () => {
+    try {
+      return await prisma.coupon.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (error) {
+      console.error(
+        "[database] admin coupons query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
 
   return (
     <CouponsManager

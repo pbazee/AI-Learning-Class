@@ -2,9 +2,19 @@ import { prisma } from "@/lib/prisma";
 import { AnnouncementsManager } from "@/components/admin/announcements-manager";
 
 export default async function AdminAnnouncementsPage() {
-  const announcements = await prisma.announcement.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  const announcements = await (async () => {
+    try {
+      return await prisma.announcement.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (error) {
+      console.error(
+        "[database] admin announcements query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
 
   return (
     <AnnouncementsManager

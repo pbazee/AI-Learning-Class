@@ -8,9 +8,19 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export default async function AdminSubscribersPage() {
-  const subscribers = await prisma.newsletterSubscriber.findMany({
-    orderBy: { subscribedAt: "desc" },
-  });
+  const subscribers = await (async () => {
+    try {
+      return await prisma.newsletterSubscriber.findMany({
+        orderBy: { subscribedAt: "desc" },
+      });
+    } catch (error) {
+      console.error(
+        "[database] admin subscribers query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
 
   return (
     <SubscribersManager

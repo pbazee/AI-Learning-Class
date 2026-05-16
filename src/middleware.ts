@@ -39,206 +39,25 @@ function isAdminRole(role: string | null | undefined) {
 
 const protectedPaths = ["/dashboard", "/admin", "/checkout", "/affiliate/dashboard", "/settings"];
 const authPaths = ["/login", "/signup", "/sign-in", "/sign-up"];
-type RateLimitRule = {
-  id: string;
-  limit: number;
-  windowMs: number;
-  message: string;
-};
 type CookieToSet = {
   name: string;
   value: string;
   options: CookieOptions;
 };
-type RateLimitBucket = {
-  count: number;
-  resetAt: number;
-};
-type RateLimitResult = {
-  limit: number;
-  remaining: number;
-  resetAt: number;
-  retryAfterSeconds: number;
-  exceeded: boolean;
-};
-
-const rateLimitState = globalThis as typeof globalThis & {
-  __alcRateLimitBuckets?: Map<string, RateLimitBucket>;
-  __alcRateLimitLastSweepAt?: number;
-};
-
-function getRateLimitStore() {
-  rateLimitState.__alcRateLimitBuckets ??= new Map<string, RateLimitBucket>();
-  return rateLimitState.__alcRateLimitBuckets;
-}
-
-function sweepRateLimitStore(now: number) {
-  const lastSweepAt = rateLimitState.__alcRateLimitLastSweepAt ?? 0;
-
-  if (now - lastSweepAt < 30_000) {
-    return;
-  }
-
-  const store = getRateLimitStore();
-
-  for (const [key, bucket] of store.entries()) {
-    if (bucket.resetAt <= now) {
-      store.delete(key);
-    }
-  }
-
-  rateLimitState.__alcRateLimitLastSweepAt = now;
-}
-
-function getClientIdentifier(request: NextRequest) {
-  const forwardedFor = request.headers
-    .get("x-forwarded-for")
-    ?.split(",")[0]
-    ?.trim();
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  const cloudflareIp = request.headers.get("cf-connecting-ip")?.trim();
-
-  return forwardedFor || realIp || cloudflareIp || "unknown-client";
-}
-
-function getApiRateLimitRule(request: NextRequest): RateLimitRule | null {
-  const { pathname } = request.nextUrl;
-
-  if (!pathname.startsWith("/api/")) {
-    return null;
-  }
-
-  if (
-    pathname === "/api/stripe/webhook" ||
-    pathname === "/api/paypal/webhook" ||
-    pathname === "/api/paystack/webhook"
-  ) {
-    return null;
-  }
-
-  if (pathname === "/api/auth/login" && request.method === "POST") {
-    return {
-      id: "auth-login",
-      limit: 6,
-      windowMs: 15 * 60 * 1000,
-      message: "Too many login attempts. Please wait a few minutes and try again.",
-    };
-  }
-
-  if (pathname.startsWith("/api/team/workspace")) {
-    return {
-      id: "team-workspace",
-      limit: 30,
-      windowMs: 5 * 60 * 1000,
-      message: "Too many Teams workspace requests. Please slow down and try again shortly.",
-    };
-  }
-
-  if (pathname.startsWith("/api/checkout/")) {
-    return {
-      id: "checkout",
-      limit: 20,
-      windowMs: 5 * 60 * 1000,
-      message: "Too many checkout requests. Please wait a moment and try again.",
-    };
-  }
-
-  if (pathname === "/api/contact/messages" || pathname === "/api/newsletter/subscribe") {
-    return {
-      id: "forms",
-      limit: 10,
-      windowMs: 10 * 60 * 1000,
-      message: "Too many form submissions. Please wait before trying again.",
-    };
-  }
-
-  if (pathname.startsWith("/api/ask-ai")) {
-    return {
-      id: "ask-ai",
-      limit: 30,
-      windowMs: 5 * 60 * 1000,
-      message: "Too many Ask AI requests. Please wait a moment and try again.",
-    };
-  }
-
-  return {
-    id: "api-general",
-    limit: 120,
-    windowMs: 60 * 1000,
-    message: "Too many API requests. Please wait a moment and try again.",
-  };
-}
-
-function consumeRateLimit(
-  rule: RateLimitRule,
-  clientIdentifier: string,
-  pathname: string
-): RateLimitResult {
-  const now = Date.now();
-  sweepRateLimitStore(now);
-
-  const windowStart = Math.floor(now / rule.windowMs) * rule.windowMs;
-  const resetAt = windowStart + rule.windowMs;
-  const bucketKey = `${rule.id}:${pathname}:${clientIdentifier}:${windowStart}`;
-  const store = getRateLimitStore();
-  const existingBucket = store.get(bucketKey);
-
-  if (existingBucket && existingBucket.resetAt > now) {
-    existingBucket.count += 1;
-    store.set(bucketKey, existingBucket);
-
-    return {
-      limit: rule.limit,
-      remaining: Math.max(rule.limit - existingBucket.count, 0),
-      resetAt,
-      retryAfterSeconds: Math.max(1, Math.ceil((existingBucket.resetAt - now) / 1000)),
-      exceeded: existingBucket.count > rule.limit,
-    };
-  }
-
-  store.set(bucketKey, {
-    count: 1,
-    resetAt,
-  });
-
-  return {
-    limit: rule.limit,
-    remaining: Math.max(rule.limit - 1, 0),
-    resetAt,
-    retryAfterSeconds: Math.max(1, Math.ceil((resetAt - now) / 1000)),
-    exceeded: false,
-  };
-}
-
-function applyRateLimitHeaders(response: NextResponse, result: RateLimitResult) {
-  response.headers.set("X-RateLimit-Limit", String(result.limit));
-  response.headers.set("X-RateLimit-Remaining", String(result.remaining));
-  response.headers.set("X-RateLimit-Reset", String(Math.ceil(result.resetAt / 1000)));
-  response.headers.set("Retry-After", String(result.retryAfterSeconds));
-}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const rateLimitRule = getApiRateLimitRule(request);
-  const rateLimitResult = rateLimitRule
-    ? consumeRateLimit(rateLimitRule, getClientIdentifier(request), pathname)
-    : null;
+  const rateLimitKey =
+    request.headers.get("CF-Ray") ||
+    request.headers.get("x-forwarded-for") ||
+    "unknown";
+  void rateLimitKey;
 
-  if (rateLimitRule && rateLimitResult?.exceeded) {
-    const response = NextResponse.json(
-      { error: rateLimitRule.message },
-      { status: 429 }
-    );
-    applyRateLimitHeaders(response, rateLimitResult);
-    return response;
-  }
+  // TODO: Implement Cloudflare KV rate limiting after deployment
+  // Current: rate limiting disabled for Cloudflare Workers compatibility
 
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    const response = NextResponse.next();
-    if (rateLimitResult) {
-      applyRateLimitHeaders(response, rateLimitResult);
-    }
-    return response;
+    return NextResponse.next();
   }
 
   let response = NextResponse.next({ request });
@@ -271,11 +90,7 @@ export async function middleware(request: NextRequest) {
   if (isProtected && !user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
-    response = NextResponse.redirect(loginUrl);
-    if (rateLimitResult) {
-      applyRateLimitHeaders(response, rateLimitResult);
-    }
-    return response;
+    return NextResponse.redirect(loginUrl);
   }
 
   const isAuthPage = authPaths.some((p) => pathname.startsWith(p));
@@ -285,9 +100,6 @@ export async function middleware(request: NextRequest) {
       typeof user.user_metadata?.onboarding_completed_at !== "string";
 
     if (isOnboardingRoute) {
-      if (rateLimitResult) {
-        applyRateLimitHeaders(response, rateLimitResult);
-      }
       return response;
     }
 
@@ -296,11 +108,7 @@ export async function middleware(request: NextRequest) {
       userEmail === getPrimaryAdminEmail() || isAdminRole(getAuthRole(user))
         ? "/admin"
         : "/dashboard";
-    response = NextResponse.redirect(new URL(destination, request.url));
-    if (rateLimitResult) {
-      applyRateLimitHeaders(response, rateLimitResult);
-    }
-    return response;
+    return NextResponse.redirect(new URL(destination, request.url));
   }
 
   if (pathname.startsWith("/admin") && user) {
@@ -309,16 +117,8 @@ export async function middleware(request: NextRequest) {
     const authRole = getAuthRole(user);
 
     if (userEmail !== primaryAdminEmail && !isAdminRole(authRole)) {
-      response = NextResponse.redirect(new URL("/dashboard", request.url));
-      if (rateLimitResult) {
-        applyRateLimitHeaders(response, rateLimitResult);
-      }
-      return response;
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
-  }
-
-  if (rateLimitResult) {
-    applyRateLimitHeaders(response, rateLimitResult);
   }
 
   return response;
