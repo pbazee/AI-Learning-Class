@@ -6,7 +6,7 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-NEXT_PUBLIC_APP_URL = "https://your-domain.com"
+NEXT_PUBLIC_APP_URL = "https://ai-genius-lab.daviswapeti.workers.dev"
 CLOUDFLARE_WORKERS = "true"
 
 [[r2_buckets]]
