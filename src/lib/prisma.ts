@@ -11,7 +11,7 @@ function isCloudflareWorkersRuntime() {
     return true;
   }
 
-  if (typeof WebSocketPair === "function") {
+  if (typeof (globalThis as typeof globalThis & { WebSocketPair?: unknown }).WebSocketPair === "function") {
     return true;
   }
 
