@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "pub-*.r2.dev" },
     ],
   },
-  serverExternalPackages: ["@prisma/client", "prisma"],
+  serverExternalPackages: ["@prisma/client", ".prisma/client"],
   webpack: (config) => {
     config.resolve = config.resolve ?? {};
     config.resolve.alias = {
