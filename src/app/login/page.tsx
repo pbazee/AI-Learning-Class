@@ -376,7 +376,7 @@ function LoginPageInner() {
           )}
         </div>
 
-        <p className="auth-helper-text mt-6 text-center text-base text-[#1e293b]">
+        <p className="auth-helper-text mt-6 text-center text-base text-white">
           Don&apos;t have an account?{" "}
           <Link
             href={
@@ -384,7 +384,7 @@ function LoginPageInner() {
                 ? `/signup?redirect=${encodeURIComponent(redirectPath)}`
                 : "/signup"
             }
-            className="font-bold text-[#2563eb] transition hover:text-[#1d4ed8]"
+            className="font-bold text-white underline underline-offset-4 transition hover:text-white/85"
           >
             Sign up
           </Link>

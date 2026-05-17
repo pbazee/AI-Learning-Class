@@ -2,7 +2,11 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isPrismaConnectionError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
+import {
+  isPrismaConnectionError,
+  isPrismaSchemaMismatchError,
+  logPrismaConnectionEvent,
+} from "@/lib/prisma-errors";
 
 let lessonPreviewColumnsReady = false;
 let lessonPreviewColumnsPromise: Promise<boolean> | null = null;
@@ -28,17 +32,13 @@ export async function ensureLessonPreviewColumns() {
       } catch (error) {
         lessonPreviewColumnsReady = false;
 
-        if (isPrismaConnectionError(error)) {
-          logPrismaConnectionEvent(
-            "lessonPreviewColumns",
-            "[lesson-preview] Unable to ensure lesson preview columns right now.",
-            error,
-            "warn"
-          );
-          return false;
-        }
-
-        throw error;
+        logPrismaConnectionEvent(
+          "lessonPreviewColumns",
+          "[lesson-preview] Unable to ensure lesson preview columns right now.",
+          error,
+          "warn"
+        );
+        return false;
       }
     })().catch((error) => {
       lessonPreviewColumnsPromise = null;

@@ -68,13 +68,25 @@ export default async function CourseDetailPage({
     notFound();
   }
 
-  const viewerCourseAccess =
-    viewer
-      ? (await getUserCourseAccessMap(viewer.id, [course.id]))[course.id]
-      : undefined;
+  let viewerCourseAccess;
+
+  if (viewer) {
+    try {
+      viewerCourseAccess = (await getUserCourseAccessMap(viewer.id, [course.id]))[course.id];
+    } catch (error) {
+      console.error("[course-detail] Unable to resolve viewer access state.", error);
+    }
+  }
   const courseAccess = viewerCourseAccess ?? previewState?.courseAccess;
-  const expiredAccess =
-    viewer && !courseAccess?.hasAccess ? await getExpiredTimedCourseAccess(viewer.id, course.id) : null;
+  let expiredAccess = null;
+
+  if (viewer && !courseAccess?.hasAccess) {
+    try {
+      expiredAccess = await getExpiredTimedCourseAccess(viewer.id, course.id);
+    } catch (error) {
+      console.error("[course-detail] Unable to resolve expired access state.", error);
+    }
+  }
   const branding = await getSiteBranding();
   const courseJsonLd = buildCourseJsonLd(course, branding.siteName);
   const relatedCourses = catalogData.courses

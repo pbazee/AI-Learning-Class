@@ -28,6 +28,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserTeamWorkspaceSummary } from "@/lib/team-workspace";
 import { formatDuration } from "@/lib/utils";
 import { ReferEarnCard } from "@/components/dashboard/refer-earn-card";
+import { LearnerInboxPanel } from "@/components/dashboard/LearnerInboxPanel";
 import { WorkspaceNotesPanel } from "@/components/dashboard/WorkspaceNotesPanel";
 import { ResetOnboardingButton } from "@/components/onboarding/ResetOnboardingButton";
 
@@ -43,7 +44,18 @@ export default async function DashboardPage() {
 
   const onboardingProfile = user as { onboardingRecommendations?: string[] | null };
 
-  const [enrollments, certificates, workspaceNotes, completedLessons, affiliateStatus, teamWorkspace, purchasedItems, activeSubscription, latestSubscription] = await Promise.all([
+  const [
+    enrollments,
+    certificates,
+    workspaceNotes,
+    completedLessons,
+    affiliateStatus,
+    teamWorkspace,
+    purchasedItems,
+    activeSubscription,
+    latestSubscription,
+    inboxConversations,
+  ] = await Promise.all([
     getUserEnrollments(user.id),
     getUserCertificates(user.id),
     getUserWorkspaceNotes(user.id, 8),
@@ -70,6 +82,9 @@ export default async function DashboardPage() {
       },
       orderBy: { updatedAt: "desc" },
       take: 6,
+    }).catch((error) => {
+      console.error("[dashboard] Unable to load completed lessons.", error);
+      return [];
     }),
     getUserAffiliateStatus(user.id),
     getUserTeamWorkspaceSummary(user.id),
@@ -83,6 +98,9 @@ export default async function DashboardPage() {
       select: {
         courseId: true,
       },
+    }).catch((error) => {
+      console.error("[dashboard] Unable to load purchased course items.", error);
+      return [];
     }),
     prisma.userSubscription.findFirst({
       where: {
@@ -100,6 +118,9 @@ export default async function DashboardPage() {
       orderBy: {
         currentPeriodEnd: "desc",
       },
+    }).catch((error) => {
+      console.error("[dashboard] Unable to load active subscription.", error);
+      return null;
     }),
     prisma.userSubscription.findFirst({
       where: {
@@ -116,6 +137,33 @@ export default async function DashboardPage() {
       orderBy: {
         currentPeriodEnd: "desc",
       },
+    }).catch((error) => {
+      console.error("[dashboard] Unable to load subscription history.", error);
+      return null;
+    }),
+    prisma.contactMessage.findMany({
+      where: {
+        email: {
+          equals: user.email,
+          mode: "insensitive",
+        },
+        replies: {
+          some: {
+            isAdmin: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        replies: {
+          where: { isAdmin: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+      take: 8,
+    }).catch((error) => {
+      console.error("[dashboard] Unable to load learner inbox conversations.", error);
+      return [];
     }),
   ]);
 
@@ -139,6 +187,9 @@ export default async function DashboardPage() {
             category: true,
           },
           take: 3,
+        }).catch((error) => {
+          console.error("[dashboard] Unable to load recommended courses.", error);
+          return [];
         })
       : [];
   const showLearningPathHero = enrollments.length === 0 && recommendedCourses.length > 0;
@@ -634,6 +685,20 @@ export default async function DashboardPage() {
                   </Link>
                 </div>
               ) : null}
+
+              <LearnerInboxPanel
+                conversations={inboxConversations.map((conversation) => ({
+                  id: conversation.id,
+                  subject: conversation.subject,
+                  message: conversation.message,
+                  createdAt: conversation.createdAt.toISOString(),
+                  replies: conversation.replies.map((reply) => ({
+                    id: reply.id,
+                    body: reply.body,
+                    createdAt: reply.createdAt.toISOString(),
+                  })),
+                }))}
+              />
 
               <WorkspaceNotesPanel notes={workspaceNotes} />
 

@@ -109,22 +109,14 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
   let existingByEmail: { id: string; role: Role } | null = null;
 
   try {
-    const settings = await prisma.siteSettings.upsert({
+    const settings = await prisma.siteSettings.findUnique({
       where: { id: "singleton" },
-      update: {
-        adminEmail: configuredAdminEmail,
-      },
-      create: {
-        id: "singleton",
-        siteName: "AI GENIUS LAB",
-        adminEmail: configuredAdminEmail,
-      },
       select: {
         adminEmail: true,
       },
     });
 
-    adminEmail = normalizeEmail(settings.adminEmail || configuredAdminEmail);
+    adminEmail = normalizeEmail(settings?.adminEmail || configuredAdminEmail);
     existingById = await prisma.user.findUnique({
       where: { id: user.id },
       select: { id: true, role: true },
@@ -137,7 +129,7 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
           select: { id: true, role: true },
         });
   } catch (error) {
-    if (!isPrismaConnectionError(error)) {
+    if (!isPrismaConnectionError(error) && !isPrismaSchemaMismatchError(error)) {
       throw error;
     }
 
@@ -266,6 +258,23 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
     }
   }
 
+  async function getExistingReferralCodeOrNull(userId: string) {
+    try {
+      return (
+        await prisma.user.findUnique({
+          where: { id: userId },
+          select: { referralCode: true },
+        })
+      )?.referralCode;
+    } catch (error) {
+      if (isPrismaConnectionError(error) || isPrismaSchemaMismatchError(error)) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
   if (getSupabaseAuthRole(user) !== role) {
     await syncSupabaseAuthRole({
       authUserId: user.id,
@@ -277,19 +286,13 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
   }
 
   if (existingById) {
-    const referralCode = (await prisma.user.findUnique({
-      where: { id: existingById.id },
-      select: { referralCode: true },
-    }))?.referralCode;
+    const referralCode = await getExistingReferralCodeOrNull(existingById.id);
 
     return updateUserDefensively(existingById.id, referralCode);
   }
 
   if (existingByEmail) {
-    const referralCode = (await prisma.user.findUnique({
-      where: { id: existingByEmail.id },
-      select: { referralCode: true },
-    }))?.referralCode;
+    const referralCode = await getExistingReferralCodeOrNull(existingByEmail.id);
 
     return updateUserDefensively(existingByEmail.id, referralCode);
   }

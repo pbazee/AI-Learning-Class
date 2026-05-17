@@ -699,10 +699,14 @@ export function LessonPlayerClient({
         setActiveResourceId(assetId ?? null);
         setIsLessonNavigating(false);
         setPendingLessonId(lessonId);
-        router.replace(`/learn/${course.slug}/${initialLessonId}?lesson=${lessonId}`, { scroll: false });
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `/learn/${course.slug}/${initialLessonId}?lesson=${lessonId}`
+        );
       }, 150);
     },
-    [course.slug, initialLessonId, router]
+    [course.slug, initialLessonId]
   );
 
   useEffect(() => {

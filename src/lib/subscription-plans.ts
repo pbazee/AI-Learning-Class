@@ -4,7 +4,11 @@ import { Prisma } from "@prisma/client";
 import { resolveYearlyPrice } from "@/lib/site";
 import type { SubscriptionPlan } from "@/types";
 import { prisma } from "@/lib/prisma";
-import { isPrismaConnectionError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
+import {
+  isPrismaConnectionError,
+  isPrismaSchemaMismatchError,
+  logPrismaConnectionEvent,
+} from "@/lib/prisma-errors";
 
 let subscriptionPlansTableReady: Promise<boolean> | null = null;
 let subscriptionPlansTableAvailable = false;
@@ -129,17 +133,13 @@ export async function ensureSubscriptionPlansTable() {
       } catch (error) {
         subscriptionPlansTableAvailable = false;
 
-        if (isPrismaConnectionError(error)) {
-          logPrismaConnectionEvent(
-            "subscriptionPlansTable",
-            "[subscription-plans] Unable to ensure the subscription plans table right now.",
-            error,
-            "warn"
-          );
-          return false;
-        }
-
-        throw error;
+        logPrismaConnectionEvent(
+          "subscriptionPlansTable",
+          "[subscription-plans] Unable to ensure the subscription plans table right now.",
+          error,
+          "warn"
+        );
+        return false;
       }
     })().catch((error) => {
       subscriptionPlansTableReady = null;

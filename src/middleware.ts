@@ -82,9 +82,14 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+
+  try {
+    const authResult = await supabase.auth.getUser();
+    user = authResult.data.user;
+  } catch (error) {
+    console.warn("[middleware] Unable to resolve the current Supabase user.", error);
+  }
 
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
   if (isProtected && !user) {

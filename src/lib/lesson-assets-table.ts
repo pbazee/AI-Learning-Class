@@ -2,7 +2,11 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isPrismaConnectionError, logPrismaConnectionEvent } from "@/lib/prisma-errors";
+import {
+  isPrismaConnectionError,
+  isPrismaSchemaMismatchError,
+  logPrismaConnectionEvent,
+} from "@/lib/prisma-errors";
 
 let lessonAssetsTableReady = false;
 let lessonAssetsTablePromise: Promise<boolean> | null = null;
@@ -62,17 +66,13 @@ export async function ensureLessonAssetsTable() {
       } catch (error) {
         lessonAssetsTableReady = false;
 
-        if (isPrismaConnectionError(error)) {
-          logPrismaConnectionEvent(
-            "lessonAssetsTable",
-            "[lesson-assets] Unable to ensure lesson assets table right now.",
-            error,
-            "warn"
-          );
-          return false;
-        }
-
-        throw error;
+        logPrismaConnectionEvent(
+          "lessonAssetsTable",
+          "[lesson-assets] Unable to ensure lesson assets table right now.",
+          error,
+          "warn"
+        );
+        return false;
       }
     })().catch((error) => {
       lessonAssetsTablePromise = null;

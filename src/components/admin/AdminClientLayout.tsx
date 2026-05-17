@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -32,6 +32,11 @@ import {
 } from "lucide-react";
 import { AdminSessionControls } from "@/components/admin/admin-session-controls";
 import { SiteLogo } from "@/components/layout/SiteLogo";
+import {
+  ADMIN_NOTIFICATION_PATHS,
+  ADMIN_NOTIFICATION_SECTIONS,
+  type AdminNotificationSection,
+} from "@/lib/admin-notification-sections";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +65,9 @@ const navItems = [
   { label: "Ask AI", href: "/admin/ask-ai", icon: Sparkles },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
+
+const BADGE_SECTIONS = new Set<AdminNotificationSection>(ADMIN_NOTIFICATION_SECTIONS);
+const LAST_VISITED_STORAGE_PREFIX = "admin:last-visited:";
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/admin": {
@@ -154,8 +162,73 @@ export function AdminClientLayout({
   branding: { siteName: string; logoUrl?: string };
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [notificationCounts, setNotificationCounts] = useState<
+    Partial<Record<AdminNotificationSection, number>>
+  >({});
   const pathname = usePathname();
   const pageMeta = useMemo(() => resolvePageMeta(pathname), [pathname]);
+
+  useEffect(() => {
+    const matchingEntry = Object.entries(ADMIN_NOTIFICATION_PATHS).find(([, href]) =>
+      pathname === href || pathname.startsWith(`${href}/`)
+    );
+
+    if (!matchingEntry) {
+      return;
+    }
+
+    const [section] = matchingEntry as [AdminNotificationSection, string];
+    window.localStorage.setItem(
+      `${LAST_VISITED_STORAGE_PREFIX}${section}`,
+      new Date().toISOString()
+    );
+    setNotificationCounts((current) => ({
+      ...current,
+      [section]: 0,
+    }));
+  }, [pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNotificationCounts() {
+      const responses = await Promise.all(
+        ADMIN_NOTIFICATION_SECTIONS.map(async (section) => {
+          const since =
+            window.localStorage.getItem(`${LAST_VISITED_STORAGE_PREFIX}${section}`) ??
+            new Date(0).toISOString();
+
+          try {
+            const response = await fetch(
+              `/api/admin/notifications/${section}?since=${encodeURIComponent(since)}`,
+              { cache: "no-store" }
+            );
+
+            if (!response.ok) {
+              return [section, 0] as const;
+            }
+
+            const payload = (await response.json()) as { count?: number };
+            return [section, Number(payload.count ?? 0)] as const;
+          } catch {
+            return [section, 0] as const;
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setNotificationCounts(Object.fromEntries(responses));
+    }
+
+    void loadNotificationCounts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   return (
     <div className="dark min-h-screen bg-[#04070d] text-slate-100">
@@ -192,6 +265,8 @@ export function AdminClientLayout({
         <nav className="flex-1 space-y-1 overflow-y-auto p-4">
           {navItems.map(({ label, href, icon: Icon }) => {
             const active = pathname === href || (href !== "/admin" && pathname.startsWith(href));
+            const section = label.toLowerCase().replace(/\s+/g, "-") as AdminNotificationSection;
+            const count = BADGE_SECTIONS.has(section) ? notificationCounts[section] ?? 0 : 0;
 
             return (
               <Link
@@ -199,7 +274,7 @@ export function AdminClientLayout({
                 href={href}
                 title={collapsed ? label : undefined}
                 className={cn(
-                  "group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all",
+                  "group relative flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all",
                   active
                     ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-[0_22px_45px_-25px_rgba(59,130,246,0.95)]"
                     : "text-slate-400 hover:bg-white/5 hover:text-white",
@@ -207,7 +282,20 @@ export function AdminClientLayout({
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed ? label : null}
+                {!collapsed ? (
+                  <>
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {count > 0 ? (
+                      <span className="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                        {count > 99 ? "99+" : count}
+                      </span>
+                    ) : null}
+                  </>
+                ) : count > 0 ? (
+                  <span className="absolute right-2 top-2 inline-flex min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 py-0.5 text-[9px] font-bold leading-none text-white">
+                    {count > 9 ? "9+" : count}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

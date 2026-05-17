@@ -737,7 +737,7 @@ export default function SignupPage() {
                 </div>
               )}
 
-              <p className="mt-6 text-center text-base text-[#1e293b]">
+              <p className="mt-6 text-center text-base text-white">
                 Already have an account?{" "}
                 <Link
                   href={
@@ -745,7 +745,7 @@ export default function SignupPage() {
                       ? `/login?redirect=${encodeURIComponent(redirectPath)}`
                       : "/login"
                   }
-                  className="font-bold text-[#2563eb] transition hover:text-[#1d4ed8]"
+                  className="font-bold text-white underline underline-offset-4 transition hover:text-white/85"
                 >
                   Sign in
                 </Link>

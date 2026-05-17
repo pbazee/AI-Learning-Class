@@ -48,7 +48,7 @@ export function AuthShell({
       </div>
 
       <main className="relative mx-auto grid min-h-screen max-w-7xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[1.1fr_minmax(0,560px)] lg:px-8 lg:py-8">
-        <section className="hidden min-h-[720px] flex-col justify-between overflow-hidden rounded-[32px] border border-white/20 bg-[#2563eb] p-10 text-white shadow-[0_40px_140px_-60px_rgba(37,99,235,0.62)] lg:flex">
+        <section className="hidden min-h-[720px] flex-col justify-between overflow-hidden rounded-[32px] border border-white/20 bg-primary-blue p-10 text-white shadow-[0_40px_140px_-60px_rgba(37,99,235,0.62)] lg:flex">
           <div>
             <div className="flex items-center justify-between gap-4">
               <Link href="/" className="inline-flex items-center">
@@ -93,17 +93,17 @@ export function AuthShell({
 
           <div className="grid gap-6">
             <div className="grid grid-cols-3 gap-4">
-              <div className="rounded-2xl border border-white/20 bg-[#1d4ed8] p-4">
+              <div className="rounded-2xl border border-white/20 bg-primary-blue p-4">
                 <Zap className="h-5 w-5 text-white" />
                 <p className="mt-6 text-2xl font-black text-white">Fast</p>
                 <p className="mt-1 text-sm text-white">Low-friction sign-in and onboarding.</p>
               </div>
-              <div className="rounded-2xl border border-white/20 bg-[#1d4ed8] p-4">
+              <div className="rounded-2xl border border-white/20 bg-primary-blue p-4">
                 <ShieldCheck className="h-5 w-5 text-white" />
                 <p className="mt-6 text-2xl font-black text-white">Secure</p>
                 <p className="mt-1 text-sm text-white">Recovery, previews, and protected content.</p>
               </div>
-              <div className="rounded-2xl border border-white/20 bg-[#1d4ed8] p-4">
+              <div className="rounded-2xl border border-white/20 bg-primary-blue p-4">
                 <Sparkles className="h-5 w-5 text-white" />
                 <p className="mt-6 text-2xl font-black text-white">Refined</p>
                 <p className="mt-1 text-sm text-white">Purposeful visuals inspired by the best SaaS flows.</p>
