@@ -47,6 +47,7 @@ export function isPrismaConnectionError(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
 
   return [
+    "no database host or connection string was set",
     "can't reach database server",
     "connection closed",
     "connection reset",

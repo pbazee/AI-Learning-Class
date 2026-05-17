@@ -3,7 +3,7 @@ account_id = "00d89852dbf5409a64da20ac12fe3920"
 
 main = ".open-next/worker.js"
 compatibility_date = "2025-01-01"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
 
 [vars]
 NEXT_PUBLIC_APP_URL = "https://ai-genius-lab.daviswapeti.workers.dev"
