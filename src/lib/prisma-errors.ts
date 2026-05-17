@@ -36,6 +36,22 @@ function shouldLogPrismaEvent(key: string) {
 }
 
 export function isPrismaConnectionError(error: unknown) {
+  if (
+    typeof ErrorEvent !== "undefined" &&
+    error instanceof ErrorEvent
+  ) {
+    return true;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "type" in error &&
+    (error as { type?: unknown }).type === "error"
+  ) {
+    return true;
+  }
+
   if (error instanceof Prisma.PrismaClientInitializationError) {
     return true;
   }
@@ -54,6 +70,7 @@ export function isPrismaConnectionError(error: unknown) {
     "connection terminated unexpectedly",
     "connection pool timeout",
     "prepared statement",
+    "protocol violation during authentication",
     "server closed the connection unexpectedly",
     "timed out fetching a new connection",
     "the database system is starting up",
@@ -61,6 +78,8 @@ export function isPrismaConnectionError(error: unknown) {
     "unable to start a transaction in the given time",
     "transaction already closed",
     "transaction was already closed",
+    "eauthprotocol",
+    "[object errorevent]",
   ].some((fragment) => message.includes(fragment));
 }
 

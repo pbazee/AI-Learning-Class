@@ -3,6 +3,11 @@ import { HelpCircle, ChevronDown } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { prisma } from "@/lib/prisma";
+import {
+  isPrismaConnectionError,
+  isPrismaSchemaMismatchError,
+  logPrismaConnectionEvent,
+} from "@/lib/prisma-errors";
 import { buildSiteMetadata } from "@/lib/site-server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -14,10 +19,30 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function FaqsPage() {
-  const faqs = await prisma.fAQ.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-  });
+  let faqs: Array<{ id: string; question: string; answer: string }> = [];
+
+  try {
+    faqs = await prisma.fAQ.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        question: true,
+        answer: true,
+      },
+    });
+  } catch (error) {
+    if (!isPrismaConnectionError(error) && !isPrismaSchemaMismatchError(error)) {
+      throw error;
+    }
+
+    logPrismaConnectionEvent(
+      "faqs-page:list",
+      "[faqs-page] Failed to fetch FAQs. Falling back to an empty state.",
+      error,
+      "warn"
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

@@ -1,5 +1,14 @@
 import type { NextConfig } from "next";
 
+const prismaExternalPackages = [
+  "@prisma/client",
+  "@prisma/client/edge",
+  "@prisma/adapter-neon",
+  "@neondatabase/serverless",
+  "prisma",
+  ".prisma/client",
+];
+
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
@@ -12,12 +21,13 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "pub-*.r2.dev" },
     ],
   },
-  serverExternalPackages: ["@prisma/client", ".prisma/client"],
+  serverExternalPackages: prismaExternalPackages,
   webpack: (config) => {
     config.resolve = config.resolve ?? {};
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
       canvas: false,
+      "react-dom/server.edge": "react-dom/server.browser",
     };
     config.module.rules.push({
       test: /\.mjs$/,

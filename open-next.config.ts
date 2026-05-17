@@ -11,7 +11,14 @@ const config: OpenNextConfig = {
       queue: "direct",
     },
   },
-  edgeExternals: ["node:crypto"],
+  edgeExternals: [
+    "node:crypto",
+    "@prisma/client",
+    "@prisma/client/edge",
+    "@prisma/adapter-neon",
+    "@neondatabase/serverless",
+    "prisma",
+  ],
   middleware: {
     external: true,
     override: {

@@ -46,19 +46,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   })();
 
-  const [blogPosts] = await Promise.all([
-    prisma.blogPost.findMany({
-      where: {
-        OR: [{ status: "PUBLISHED" }, { isPublished: true }],
-      },
-      select: {
-        slug: true,
-        updatedAt: true,
-        createdAt: true,
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
-  ]);
+  const blogPosts = await (async () => {
+    try {
+      return await prisma.blogPost.findMany({
+        where: {
+          OR: [{ status: "PUBLISHED" }, { isPublished: true }],
+        },
+        select: {
+          slug: true,
+          updatedAt: true,
+          createdAt: true,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+    } catch (error) {
+      console.error(
+        "[database] sitemap blog query failed. Returning a safe fallback while the database catches up.",
+        error
+      );
+      return [];
+    }
+  })();
 
   return [
     ...staticPages.map((page) => ({
