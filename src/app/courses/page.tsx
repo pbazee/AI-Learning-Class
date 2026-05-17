@@ -7,6 +7,7 @@ import { getPublicCourseCatalogData } from "@/lib/data";
 import { buildSiteMetadata } from "@/lib/site-server";
 
 export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   return buildSiteMetadata("/courses", {

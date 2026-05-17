@@ -1,6 +1,8 @@
 import { AdminClientLayout } from "@/components/admin/AdminClientLayout";
 import { getSiteBranding } from "@/lib/site-server";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   let branding: Awaited<ReturnType<typeof getSiteBranding>>;
 

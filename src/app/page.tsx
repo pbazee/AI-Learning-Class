@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { HeroCarousel } from "@/components/landing/HeroCarousel";
@@ -13,27 +13,27 @@ import {
 import { buildHomepageJsonLd } from "@/lib/seo";
 import { buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 
-const CategoriesGrid = dynamic(() =>
+const CategoriesGrid = nextDynamic(() =>
   import("@/components/landing/CategoriesGrid").then((module) => ({
     default: module.CategoriesGrid,
   }))
 );
-const TestimonialsSection = dynamic(() =>
+const TestimonialsSection = nextDynamic(() =>
   import("@/components/landing/TestimonialsSection").then((module) => ({
     default: module.TestimonialsSection,
   }))
 );
-const BlogSection = dynamic(() =>
+const BlogSection = nextDynamic(() =>
   import("@/components/landing/BlogSection").then((module) => ({
     default: module.BlogSection,
   }))
 );
-const PricingSection = dynamic(() =>
+const PricingSection = nextDynamic(() =>
   import("@/components/landing/PricingSection").then((module) => ({
     default: module.PricingSection,
   }))
 );
-const AffiliateSection = dynamic(() =>
+const AffiliateSection = nextDynamic(() =>
   import("@/components/landing/AffiliateSection").then((module) => ({
     default: module.AffiliateSection,
   }))
@@ -45,6 +45,7 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 });
 
 export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   return buildSiteMetadata("/", {

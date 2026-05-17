@@ -12,6 +12,8 @@ import { buildBlogPostJsonLd } from "@/lib/seo";
 import { resolveMediaUrl } from "@/lib/media";
 import { absoluteUrl, buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({
   params,
 }: {

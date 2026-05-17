@@ -16,6 +16,8 @@ import { buildCourseJsonLd } from "@/lib/seo";
 import { absoluteUrl, buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 import { resolveMediaUrl } from "@/lib/media";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({
   params,
 }: {
