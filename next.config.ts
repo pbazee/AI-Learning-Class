@@ -2,9 +2,8 @@ import type { NextConfig } from "next";
 
 const prismaExternalPackages = [
   "@prisma/client",
-  "@prisma/client/edge",
-  "@prisma/adapter-neon",
-  "@neondatabase/serverless",
+  "@prisma/adapter-pg",
+  "pg",
   "prisma",
   ".prisma/client",
 ];

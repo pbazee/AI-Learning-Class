@@ -9,7 +9,7 @@ function getR2Endpoint() {
 }
 
 async function getR2Client() {
-  const { S3Client } = await import("@aws-sdk/client-s3");
+  const { S3Client } = (await import("@aws-sdk/client-s3")) as any;
 
   return new S3Client({
     region: "auto",
@@ -30,7 +30,7 @@ export async function uploadToR2({
   key: string;
   contentType: string;
 }): Promise<string> {
-  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const { PutObjectCommand } = (await import("@aws-sdk/client-s3")) as any;
   const client = await getR2Client();
 
   await client.send(
@@ -47,7 +47,7 @@ export async function uploadToR2({
 
 export async function deleteFromR2(key: string) {
   const normalizedKey = key.replace(/^\/+/, "");
-  const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+  const { DeleteObjectCommand } = (await import("@aws-sdk/client-s3")) as any;
   const client = await getR2Client();
 
   await client.send(

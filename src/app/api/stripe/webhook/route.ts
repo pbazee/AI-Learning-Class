@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object as import("stripe").Stripe.Checkout.Session;
+        const session = event.data.object as any;
         const subscription =
           typeof session.subscription === "string"
             ? await stripe.subscriptions.retrieve(session.subscription)
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       }
 
       case "customer.subscription.updated": {
-        const subscription = event.data.object as import("stripe").Stripe.Subscription;
+        const subscription = event.data.object as any;
 
         await syncManagedStripeSubscription({
           stripeSubscriptionId: subscription.id,
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
       }
 
       case "customer.subscription.deleted": {
-        const subscription = event.data.object as import("stripe").Stripe.Subscription;
+        const subscription = event.data.object as any;
 
         await syncManagedStripeSubscription({
           stripeSubscriptionId: subscription.id,

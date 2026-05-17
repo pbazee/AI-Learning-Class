@@ -14,9 +14,8 @@ const config: OpenNextConfig = {
   edgeExternals: [
     "node:crypto",
     "@prisma/client",
-    "@prisma/client/edge",
-    "@prisma/adapter-neon",
-    "@neondatabase/serverless",
+    "@prisma/adapter-pg",
+    "pg",
     "prisma",
   ],
   middleware: {

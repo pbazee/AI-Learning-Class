@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaNeon } from "@prisma/adapter-neon";
-import { Pool } from "@neondatabase/serverless";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -50,7 +50,15 @@ function createPrismaClient() {
   }
 
   const connectionString = normalizeDatabaseUrl(process.env.DATABASE_URL);
-  const adapter = new PrismaNeon(new Pool({ connectionString }));
+  const adapter = new PrismaPg(
+    new Pool({
+      connectionString,
+      max: 1,
+      min: 0,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
+    })
+  );
 
   if (isCloudflareWorkersRuntime()) {
     return new PrismaClient({ adapter });
