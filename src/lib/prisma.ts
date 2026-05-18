@@ -59,7 +59,9 @@ function buildPoolConfig(connectionString: string): PoolConfig {
 
   try {
     const url = new URL(normalizedConnectionString);
-    const sslSearchParams = ["sslmode", "sslrootcert", "sslcert", "sslkey"];
+    const sslAccept = url.searchParams.get("sslaccept")?.trim().toLowerCase();
+    const shouldAcceptInvalidCerts = sslAccept === "accept_invalid_certs";
+    const sslSearchParams = ["sslmode", "sslrootcert", "sslcert", "sslkey", "sslaccept"];
 
     for (const param of sslSearchParams) {
       url.searchParams.delete(param);
@@ -81,7 +83,7 @@ function buildPoolConfig(connectionString: string): PoolConfig {
       return config;
     }
 
-    if (explicitSslMode === "require") {
+    if (shouldAcceptInvalidCerts || explicitSslMode === "require") {
       config.ssl = {
         rejectUnauthorized: false,
       };
