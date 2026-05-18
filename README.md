@@ -14,7 +14,6 @@
 - Learner dashboard with progress tracking, skill radar, and streak counter
 - Certificate generation (PDF + optional blockchain hash)
 - AI co-pilot chat inside every course (powered by Claude)
-why did you leave me soledad
 ### 🤖 AI Features
 - **Personalized onboarding quiz** — generates custom learning roadmap on signup
 - **AI Copilot** — in-course assistant for questions, exercises, and explanations
@@ -356,3 +355,5 @@ MIT — build whatever you want with this.
 ---
 
 Built with ❤️ using Next.js 15, Supabase, Prisma, Stripe, and Claude AI.
+
+Cloudflare Hyperdrive deploys require the deploy-time secret `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` to be set to the direct Supabase Postgres URL.
