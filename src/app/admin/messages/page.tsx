@@ -1,6 +1,9 @@
 import { MessagesManager } from "@/components/admin/messages-manager";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export default async function AdminMessagesPage() {
   const messages = await (async () => {
     try {

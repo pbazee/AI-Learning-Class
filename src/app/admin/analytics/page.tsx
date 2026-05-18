@@ -3,6 +3,7 @@ import { getAdminStats } from "@/lib/data";
 import { formatPrice, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export default async function AdminAnalyticsPage() {
   const stats = await getAdminStats();

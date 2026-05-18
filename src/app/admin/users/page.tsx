@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { UsersManager } from "@/components/admin/users-manager";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 const joinedFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",

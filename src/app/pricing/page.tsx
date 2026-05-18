@@ -8,6 +8,9 @@ import { Check, X, HelpCircle } from "lucide-react";
 import { getSubscriptionPlans } from "@/lib/data";
 import { buildSiteMetadata } from "@/lib/site-server";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 const comparison = [
   { feature: "Course access", free: "All free courses", pro: "All courses", teams: "All courses + team access" },
   { feature: "Certificates", free: true, pro: true, teams: true },

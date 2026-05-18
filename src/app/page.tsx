@@ -46,6 +46,7 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 
 export const revalidate = 300;
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function generateMetadata(): Promise<Metadata> {
   return buildSiteMetadata("/", {

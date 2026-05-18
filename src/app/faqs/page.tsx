@@ -10,6 +10,9 @@ import {
 } from "@/lib/prisma-errors";
 import { buildSiteMetadata } from "@/lib/site-server";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export async function generateMetadata(): Promise<Metadata> {
   return buildSiteMetadata("/faqs", {
     title: "Frequently Asked Questions",

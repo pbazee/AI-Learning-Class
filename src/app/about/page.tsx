@@ -7,7 +7,8 @@ import { getPublicAboutPageData } from "@/lib/data";
 import { buildSiteMetadata } from "@/lib/site-server";
 import { DEFAULT_ABOUT_CONTENT } from "@/lib/site-settings";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function generateMetadata(): Promise<Metadata> {
   return buildSiteMetadata("/about", {

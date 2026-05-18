@@ -9,6 +9,28 @@ const globalForPrisma = globalThis as unknown as {
 const MISSING_DATABASE_URL_MESSAGE =
   "No database host or connection string was set. Set DATABASE_URL for this runtime.";
 
+function getRuntimeConnectionString() {
+  const hyperdriveBinding = (process.env as Record<string, unknown>).HYPERDRIVE as
+    | { connectionString?: string }
+    | string
+    | undefined;
+
+  if (
+    hyperdriveBinding &&
+    typeof hyperdriveBinding === "object" &&
+    typeof hyperdriveBinding.connectionString === "string" &&
+    hyperdriveBinding.connectionString.trim().length > 0
+  ) {
+    return hyperdriveBinding.connectionString.trim();
+  }
+
+  if (typeof hyperdriveBinding === "string" && hyperdriveBinding.trim().length > 0) {
+    return hyperdriveBinding.trim();
+  }
+
+  return process.env.DATABASE_URL;
+}
+
 function normalizeDatabaseUrl(connectionString: string) {
   try {
     const url = new URL(connectionString);
@@ -63,7 +85,8 @@ function buildPoolConfig(connectionString: string): PoolConfig {
       max: 1,
       min: 0,
       idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 15_000,
+      allowExitOnIdle: true,
       query_timeout: 10_000,
       statement_timeout: 10_000,
     };
@@ -84,7 +107,8 @@ function buildPoolConfig(connectionString: string): PoolConfig {
       max: 1,
       min: 0,
       idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 15_000,
+      allowExitOnIdle: true,
       query_timeout: 10_000,
       statement_timeout: 10_000,
     };
@@ -116,7 +140,8 @@ function buildPoolConfig(connectionString: string): PoolConfig {
       max: 1,
       min: 0,
       idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 15_000,
+      allowExitOnIdle: true,
     };
   }
 }
@@ -142,13 +167,13 @@ function isCloudflareWorkersRuntime() {
 }
 
 function createPrismaClient() {
-  if (!process.env.DATABASE_URL) {
+  const connectionString = getRuntimeConnectionString();
+
+  if (!connectionString) {
     throw new Error(MISSING_DATABASE_URL_MESSAGE);
   }
 
-  const adapter = new PrismaPg(
-    new Pool(buildPoolConfig(process.env.DATABASE_URL))
-  );
+  const adapter = new PrismaPg(new Pool(buildPoolConfig(connectionString)));
 
   if (isCloudflareWorkersRuntime()) {
     return new PrismaClient({ adapter });

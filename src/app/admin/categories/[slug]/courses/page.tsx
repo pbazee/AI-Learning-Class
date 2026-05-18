@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { CategoryCoursesView } from "@/components/admin/category-courses-view";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export default async function AdminCategoryCoursesPage({
   params,
 }: {
@@ -55,15 +58,7 @@ export default async function AdminCategoryCoursesPage({
         "[database] admin category courses query failed. Returning a safe fallback while the database catches up.",
         error
       );
-      return {
-        category: {
-          id: `fallback-${slug}`,
-          name: slug,
-          slug,
-          _count: { courses: 0 },
-        },
-        courses: [],
-      };
+      return { category: null, courses: [] };
     }
   })();
 

@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { PopupsManager } from "@/components/admin/popups-manager";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export default async function AdminPopupsPage() {
   const popups = await (async () => {
     try {

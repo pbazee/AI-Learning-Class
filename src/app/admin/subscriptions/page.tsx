@@ -2,6 +2,9 @@ import { SubscriptionPlansManager } from "@/components/admin/subscription-plans-
 import { prisma } from "@/lib/prisma";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export default async function AdminSubscriptionsPage() {
   await ensureSubscriptionPlansTable();
   const { managedPlans, subscriptionCounts } = await (async () => {

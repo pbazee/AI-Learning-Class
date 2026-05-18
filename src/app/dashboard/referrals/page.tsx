@@ -5,6 +5,7 @@ import { ReferralsDashboard } from "@/components/dashboard/ReferralsDashboard";
 import { getCurrentUserProfile } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export default async function DashboardReferralsPage() {
   const user = await getCurrentUserProfile();

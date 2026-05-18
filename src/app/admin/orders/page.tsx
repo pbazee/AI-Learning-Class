@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { OrdersManager, type AdminOrderRecord, type AdminOrderStatus } from "@/components/admin/orders-manager";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 function normalizeOrderStatus(status: "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED"): AdminOrderStatus {
   switch (status) {
     case "COMPLETED":

@@ -6,6 +6,7 @@ import { getLeaderboard } from "@/lib/data";
 import { buildSiteMetadata } from "@/lib/site-server";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const badgeCopy: Record<string, string> = {
   Trophy: "ðŸ†",

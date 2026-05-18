@@ -8,6 +8,7 @@ import { getCurrentUserProfile } from "@/lib/data";
 import { getTeamWorkspaceDashboardData } from "@/lib/team-workspace";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export default async function TeamsDashboardPage() {
   const user = await getCurrentUserProfile();

@@ -484,32 +484,34 @@ function sleep(ms: number) {
 async function safeDatabaseRead<T>(
   label: string,
   fallback: T | (() => T),
-  query: () => Promise<T>
+  query: () => Promise<T>,
+  retries = 3
 ) {
-  try {
-    return await query();
-  } catch (error) {
-    if (isPrismaConnectionError(error) || isPrismaSchemaMismatchError(error)) {
-      try {
-        await sleep(Math.max(500, prismaConfig.retryDelayMs));
-        return await query();
-      } catch (retryError) {
-        if (!isPrismaConnectionError(retryError) && !isPrismaSchemaMismatchError(retryError)) {
-          throw retryError;
-        }
-
-        logPrismaConnectionEvent(
-          `safeDatabaseRead:${label}`,
-          `[database] ${label} failed after retry. Returning a safe fallback while the database catches up.`,
-          retryError,
-          "warn"
-        );
-        return resolveFallback(fallback);
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      return await query();
+    } catch (error) {
+      if (!isPrismaConnectionError(error) && !isPrismaSchemaMismatchError(error)) {
+        throw error;
       }
-    }
 
-    throw error;
+      if (attempt < retries - 1) {
+        const backoffMs = Math.max(500 * Math.pow(2, attempt), prismaConfig.retryDelayMs);
+        await sleep(backoffMs);
+        continue;
+      }
+
+      logPrismaConnectionEvent(
+        `safeDatabaseRead:${label}`,
+        `[database] ${label} failed after ${retries} attempts. Returning a safe fallback while the database catches up.`,
+        error,
+        "warn"
+      );
+      return resolveFallback(fallback);
+    }
   }
+
+  return resolveFallback(fallback);
 }
 
 function getMonthStart(date: Date) {

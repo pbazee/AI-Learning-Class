@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { HeroSlidesManager } from "@/components/admin/hero-slides-manager";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export default async function AdminHeroSlidesPage() {
   const slides = await (async () => {
     try {

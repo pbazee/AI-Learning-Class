@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { SettingsManager } from "@/components/admin/settings-manager";
 import { DEFAULT_SITE_NAME, normalizeSiteName } from "@/lib/site";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export default async function AdminSettingsPage() {
   const { settings, faqs } = await (async () => {
     try {

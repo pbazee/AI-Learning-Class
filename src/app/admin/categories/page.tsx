@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { CategoriesManager } from "@/components/admin/categories-manager";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export default async function AdminCategoriesPage() {
   const categories = await (async () => {
     try {

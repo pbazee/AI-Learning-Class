@@ -5,6 +5,7 @@ import { AcceptTeamInviteCard } from "@/components/dashboard/AcceptTeamInviteCar
 import { getCurrentUserProfile } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export default async function TeamInvitePage({
   params,

@@ -8,6 +8,9 @@ import { getCourses, getCurrentUserProfile, getUserCourseAccessMap } from "@/lib
 import { getUserWishlistCourseIds } from "@/lib/learner-records";
 import type { CourseAccessState } from "@/types";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 export default async function WishlistPage() {
   const user = await getCurrentUserProfile();
 
