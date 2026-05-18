@@ -5,6 +5,8 @@ import { Trophy, Medal, Award, TrendingUp, Star } from "lucide-react";
 import { getLeaderboard } from "@/lib/data";
 import { buildSiteMetadata } from "@/lib/site-server";
 
+export const dynamic = "force-dynamic";
+
 const badgeCopy: Record<string, string> = {
   Trophy: "ðŸ†",
   Silver: "ðŸ¥ˆ",

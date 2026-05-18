@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+import { Pool, type PoolConfig } from "pg";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -12,15 +12,96 @@ const MISSING_DATABASE_URL_MESSAGE =
 function normalizeDatabaseUrl(connectionString: string) {
   try {
     const url = new URL(connectionString);
+    const isSupabaseTransactionPooler =
+      url.protocol.startsWith("postgres") &&
+      url.port === "6543" &&
+      url.hostname.startsWith("db.") &&
+      url.hostname.endsWith(".supabase.co");
+    const isSupabaseSessionPooler = url.hostname.includes("pooler.supabase.com");
 
-    if (url.hostname.includes("pooler.supabase.com")) {
-      url.searchParams.set("pgbouncer", "true");
-      url.searchParams.set("connection_limit", "1");
+    if (isSupabaseTransactionPooler || isSupabaseSessionPooler) {
+      if (!url.searchParams.has("pgbouncer")) {
+        url.searchParams.set("pgbouncer", "true");
+      }
+      if (!url.searchParams.has("connection_limit")) {
+        url.searchParams.set("connection_limit", "1");
+      }
     }
 
     return url.toString();
   } catch {
     return connectionString;
+  }
+}
+
+function normalizeMultilineSecret(value?: string) {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.replace(/\\n/g, "\n").trim();
+}
+
+function buildPoolConfig(connectionString: string): PoolConfig {
+  const normalizedConnectionString = normalizeDatabaseUrl(connectionString);
+  const ca = normalizeMultilineSecret(process.env.DATABASE_CA_CERT);
+  const explicitSslMode = process.env.DATABASE_SSL_MODE?.trim().toLowerCase();
+
+  if (!ca && !explicitSslMode) {
+    return {
+      connectionString: normalizedConnectionString,
+      max: 1,
+      min: 0,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
+    };
+  }
+
+  try {
+    const url = new URL(normalizedConnectionString);
+    const sslSearchParams = ["sslmode", "sslrootcert", "sslcert", "sslkey"];
+
+    for (const param of sslSearchParams) {
+      url.searchParams.delete(param);
+    }
+
+    const config: PoolConfig = {
+      connectionString: url.toString(),
+      max: 1,
+      min: 0,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
+    };
+
+    if (ca) {
+      config.ssl = {
+        ca,
+        rejectUnauthorized: true,
+      };
+      return config;
+    }
+
+    if (explicitSslMode === "require") {
+      config.ssl = {
+        rejectUnauthorized: false,
+      };
+      return config;
+    }
+
+    if (explicitSslMode) {
+      url.searchParams.set("sslmode", explicitSslMode);
+      config.connectionString = url.toString();
+    }
+
+    return config;
+  } catch {
+    return {
+      connectionString: normalizedConnectionString,
+      max: 1,
+      min: 0,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
+    };
   }
 }
 
@@ -49,15 +130,8 @@ function createPrismaClient() {
     throw new Error(MISSING_DATABASE_URL_MESSAGE);
   }
 
-  const connectionString = normalizeDatabaseUrl(process.env.DATABASE_URL);
   const adapter = new PrismaPg(
-    new Pool({
-      connectionString,
-      max: 1,
-      min: 0,
-      idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 10_000,
-    })
+    new Pool(buildPoolConfig(process.env.DATABASE_URL))
   );
 
   if (isCloudflareWorkersRuntime()) {

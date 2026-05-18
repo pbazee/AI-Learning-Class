@@ -34,6 +34,8 @@ const EnvSchema = z.object({
   // Database
   DATABASE_URL: z.string().optional(),
   DIRECT_URL: z.string().optional(),
+  DATABASE_SSL_MODE: z.string().optional(),
+  DATABASE_CA_CERT: z.string().optional(),
 
   // Payments
   STRIPE_SECRET_KEY: z.string().optional(),
@@ -90,6 +92,8 @@ const raw = {
   ADMIN_EMAIL: process.env.ADMIN_EMAIL,
   DATABASE_URL: process.env.DATABASE_URL,
   DIRECT_URL: process.env.DIRECT_URL,
+  DATABASE_SSL_MODE: process.env.DATABASE_SSL_MODE,
+  DATABASE_CA_CERT: process.env.DATABASE_CA_CERT,
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
   PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY,

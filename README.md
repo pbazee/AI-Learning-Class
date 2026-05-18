@@ -87,8 +87,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
 # Database
-DATABASE_URL=postgresql://postgres:[pw]@db.[ref].supabase.co:5432/postgres
-DIRECT_URL=postgresql://postgres:[pw]@db.[ref].supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+DIRECT_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+DATABASE_SSL_MODE=verify-full
+DATABASE_CA_CERT="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
 ```
 
 ### Optional (enable features progressively)
@@ -126,8 +128,17 @@ Update `.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://[your-ref].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-DATABASE_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
+DIRECT_URL=postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+DATABASE_SSL_MODE=verify-full
+DATABASE_CA_CERT="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
 ```
+
+For Cloudflare Workers and Pages:
+- Use the Supabase transaction pooler string for `DATABASE_URL` because Cloudflare runs in a serverless/edge environment.
+- Keep `DIRECT_URL` pointed at the direct database host for Prisma CLI tasks such as `prisma db push` and migrations.
+- Download the Supabase CA certificate from Database Settings -> SSL Configuration and store it as the `DATABASE_CA_CERT` secret if you want full certificate verification with `DATABASE_SSL_MODE=verify-full`.
+- If you need a short-term compatibility fallback while fixing certificate trust, set `DATABASE_SSL_MODE=require` instead. This skips certificate verification and is less secure than `verify-full`.
 
 ### Step 3: Push the Schema
 ```bash
