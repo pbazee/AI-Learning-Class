@@ -15,10 +15,6 @@ run_worker_first = false
 NEXT_PUBLIC_APP_URL = "https://ai-genius-lab.daviswapeti.workers.dev"
 CLOUDFLARE_WORKERS = "true"
 
-[[hyperdrive]]
-binding = "HYPERDRIVE"
-id = "fbcb737e9b024c27bf6e534953775fda"
-
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "ai-genius-lab-assets"
