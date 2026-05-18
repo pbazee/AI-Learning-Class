@@ -32,6 +32,9 @@ import { LearnerInboxPanel } from "@/components/dashboard/LearnerInboxPanel";
 import { WorkspaceNotesPanel } from "@/components/dashboard/WorkspaceNotesPanel";
 import { ResetOnboardingButton } from "@/components/onboarding/ResetOnboardingButton";
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 const thumbnailFallback =
   "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop";
 
@@ -58,7 +61,10 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     getUserEnrollments(user.id),
     getUserCertificates(user.id),
-    getUserWorkspaceNotes(user.id, 8),
+    getUserWorkspaceNotes(user.id, 8).catch((error) => {
+      console.error("[dashboard] Unable to load workspace notes.", error);
+      return [];
+    }),
     prisma.lessonProgress.findMany({
       where: {
         userId: user.id,
@@ -87,7 +93,10 @@ export default async function DashboardPage() {
       return [];
     }),
     getUserAffiliateStatus(user.id),
-    getUserTeamWorkspaceSummary(user.id),
+    getUserTeamWorkspaceSummary(user.id).catch((error) => {
+      console.error("[dashboard] Unable to load team workspace summary.", error);
+      return null;
+    }),
     prisma.orderItem.findMany({
       where: {
         order: {

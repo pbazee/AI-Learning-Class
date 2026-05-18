@@ -28,6 +28,16 @@ function normalizeDatabaseUrl(connectionString: string) {
       }
     }
 
+    if (!url.searchParams.has("connect_timeout")) {
+      url.searchParams.set("connect_timeout", "10");
+    }
+    if (!url.searchParams.has("pool_timeout")) {
+      url.searchParams.set("pool_timeout", "10");
+    }
+    if (!url.searchParams.has("socket_timeout")) {
+      url.searchParams.set("socket_timeout", "10");
+    }
+
     return url.toString();
   } catch {
     return connectionString;
@@ -54,6 +64,8 @@ function buildPoolConfig(connectionString: string): PoolConfig {
       min: 0,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 10_000,
+      query_timeout: 10_000,
+      statement_timeout: 10_000,
     };
   }
 
@@ -73,6 +85,8 @@ function buildPoolConfig(connectionString: string): PoolConfig {
       min: 0,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 10_000,
+      query_timeout: 10_000,
+      statement_timeout: 10_000,
     };
 
     if (ca) {
@@ -142,7 +156,7 @@ function createPrismaClient() {
 
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === "development" ? ["error"] : [],
+    log: ["error"],
   });
 }
 

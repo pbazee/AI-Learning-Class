@@ -8,6 +8,7 @@ import { getCurrentUserProfile, getUserAffiliateStatus } from "@/lib/data";
 import { ScrollToTopOnMount } from "@/components/layout/ScrollToTopOnMount";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const steps = [
   {
@@ -38,6 +39,9 @@ export default async function AffiliatePage() {
       select: {
         commissionRate: true,
       },
+    }).catch((error) => {
+      console.error("[affiliate] Unable to load affiliate program. Falling back to default commission.", error);
+      return null;
     }),
     getUserAffiliateStatus(user.id),
   ]);

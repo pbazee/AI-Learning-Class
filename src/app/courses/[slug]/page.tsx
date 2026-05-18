@@ -17,6 +17,7 @@ import { absoluteUrl, buildSiteMetadata, getSiteBranding } from "@/lib/site-serv
 import { resolveMediaUrl } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function generateMetadata({
   params,
@@ -58,8 +59,18 @@ export default async function CourseDetailPage({
   const [course, viewer, previewState, askAiSettings, catalogData] = await Promise.all([
     getCourseBySlug(slug),
     getCurrentUserProfile(),
-    getCoursePreviewState(slug),
-    getAskAiSettings(),
+    getCoursePreviewState(slug).catch((error) => {
+      console.error("[course-detail] Unable to load preview state. Continuing without it.", error);
+      return null;
+    }),
+    getAskAiSettings().catch((error) => {
+      console.error("[course-detail] Unable to load Ask AI settings. Falling back to defaults.", error);
+      return {
+        enabled: true,
+        assistantLabel: "Ask AI",
+        systemPrompt: "",
+      };
+    }),
     getPublicCourseCatalogData().catch((error) => {
       console.error("[course-detail] Unable to load related course catalog. Continuing without it.", error);
       return { categories: [], courses: [] };

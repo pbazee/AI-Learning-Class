@@ -51,7 +51,7 @@ import {
   PUBLIC_CACHE_TAGS,
   PUBLIC_PAGE_REVALIDATE_SECONDS,
 } from "@/lib/cache-config";
-import { env } from "@/lib/config";
+import { env, prismaConfig } from "@/lib/config";
 import { getLessonAssetDisplayTitle, inferLessonAssetKind, sortLessonAssets } from "@/lib/lesson-assets";
 
 type CourseWithCategory = Prisma.CourseGetPayload<{
@@ -477,6 +477,10 @@ function resolveFallback<T>(fallback: T | (() => T)) {
   return typeof fallback === "function" ? (fallback as () => T)() : fallback;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function safeDatabaseRead<T>(
   label: string,
   fallback: T | (() => T),
@@ -486,13 +490,22 @@ async function safeDatabaseRead<T>(
     return await query();
   } catch (error) {
     if (isPrismaConnectionError(error) || isPrismaSchemaMismatchError(error)) {
-      logPrismaConnectionEvent(
-        `safeDatabaseRead:${label}`,
-        `[database] ${label} failed. Returning a safe fallback while the database catches up.`,
-        error,
-        "warn"
-      );
-      return resolveFallback(fallback);
+      try {
+        await sleep(Math.max(500, prismaConfig.retryDelayMs));
+        return await query();
+      } catch (retryError) {
+        if (!isPrismaConnectionError(retryError) && !isPrismaSchemaMismatchError(retryError)) {
+          throw retryError;
+        }
+
+        logPrismaConnectionEvent(
+          `safeDatabaseRead:${label}`,
+          `[database] ${label} failed after retry. Returning a safe fallback while the database catches up.`,
+          retryError,
+          "warn"
+        );
+        return resolveFallback(fallback);
+      }
     }
 
     throw error;
