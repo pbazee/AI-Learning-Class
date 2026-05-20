@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -38,8 +38,8 @@ export function CourseCard({
   const { toast } = useToast();
   const { addItem, isInCart, removeItem } = useCartStore();
   const [enrolling, setEnrolling] = useState(false);
-  const [wishlistPending, setWishlistPending] = useState(false);
   const [wishlisted, setWishlisted] = useState(isWishlisted);
+  const wishlistRequestIdRef = useRef(0);
   const inCart = isInCart(course.id);
   const isFreeCourse = course.price === 0 || course.isFree;
   const hasAccess = Boolean(courseAccess?.hasAccess);
@@ -150,8 +150,8 @@ export function CourseCard({
     }
 
     const previousValue = wishlisted;
+    const requestId = ++wishlistRequestIdRef.current;
     setWishlisted((current) => !current);
-    setWishlistPending(true);
 
     try {
       const response = await fetch(`/api/wishlist/${course.id}`, {
@@ -161,6 +161,10 @@ export function CourseCard({
 
       if (!response.ok) {
         throw new Error(payload?.error || "Unable to update your wishlist right now.");
+      }
+
+      if (requestId !== wishlistRequestIdRef.current) {
+        return;
       }
 
       setWishlisted(Boolean(payload?.wishlisted));
@@ -173,10 +177,15 @@ export function CourseCard({
         router.refresh();
       }
     } catch (error) {
+      if (requestId !== wishlistRequestIdRef.current) {
+        return;
+      }
+
       setWishlisted(previousValue);
-      toast(error instanceof Error ? error.message : "Unable to update your wishlist right now.", "error");
-    } finally {
-      setWishlistPending(false);
+      toast(
+        error instanceof Error ? error.message : "Unable to update your wishlist right now.",
+        "error"
+      );
     }
   }
 
@@ -217,10 +226,9 @@ export function CourseCard({
               <button
                 type="button"
                 onClick={handleWishlistToggle}
-                disabled={wishlistPending}
                 aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
                 className={cn(
-                  "pointer-events-auto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/18 bg-black/30 text-white backdrop-blur-md transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                  "pointer-events-auto inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/18 bg-black/30 text-white backdrop-blur-md transition-all duration-300",
                   wishlisted
                     ? "border-white/30 bg-white/95 text-primary-blue shadow-[0_20px_36px_-20px_rgba(255,255,255,0.55)]"
                     : "hover:border-primary-blue/35 hover:bg-white/95 hover:text-primary-blue"

@@ -576,6 +576,7 @@ export function LessonPlayerClient({
   const [lastSavedContent, setLastSavedContent] = useState(initialNoteContent);
   const [, setIsNoteSaving] = useState(false);
   const [manualCompletionPending, setManualCompletionPending] = useState(false);
+  const [assetCompletionPending, setAssetCompletionPending] = useState(false);
   const [progressSyncState, setProgressSyncState] = useState<"idle" | "saving" | "saved" | "error">(
     "idle"
   );
@@ -1602,6 +1603,35 @@ export function LessonPlayerClient({
       }
 
       setManualCompletionPending(true);
+      const previousLessonProgress = currentLessonProgress;
+
+      updateCurrentLessonProgress({
+        isCompleted: nextCompletionState === "COMPLETE",
+        progressPercent: nextCompletionState === "COMPLETE" ? 100 : 0,
+        lastPosition: nextCompletionState === "COMPLETE" ? previousLessonProgress.lastPosition : null,
+        lastPage:
+          nextCompletionState === "COMPLETE"
+            ? currentContentType === "pdf"
+              ? Math.max(
+                  1,
+                  latestPdfSnapshotRef.current.page || previousLessonProgress.lastPage || 1
+                )
+              : previousLessonProgress.lastPage
+            : null,
+        lastPdfPage:
+          nextCompletionState === "COMPLETE"
+            ? currentContentType === "pdf"
+              ? Math.max(
+                  1,
+                  latestPdfSnapshotRef.current.page || previousLessonProgress.lastPage || 1
+                )
+              : previousLessonProgress.lastPdfPage
+            : null,
+        watchedSeconds:
+          nextCompletionState === "COMPLETE" ? previousLessonProgress.watchedSeconds : 0,
+        completedAt:
+          nextCompletionState === "COMPLETE" ? new Date().toISOString() : null,
+      });
 
       if (nextCompletionState === "INCOMPLETE") {
         lastPersistedPayloadRef.current = "";
@@ -1668,18 +1698,12 @@ export function LessonPlayerClient({
         }
 
         markProgressSaved();
+        router.refresh();
         return true;
       } catch (error) {
         console.error("[lesson-player] Failed to toggle lesson completion.", error);
         markProgressSyncError();
-
-        if (nextCompletionState === "INCOMPLETE") {
-          updateCurrentLessonProgress({
-            isCompleted: true,
-            progressPercent: 100,
-            completedAt: new Date().toISOString(),
-          });
-        }
+        updateCurrentLessonProgress(previousLessonProgress);
 
         return false;
       } finally {
@@ -1695,6 +1719,7 @@ export function LessonPlayerClient({
       hasFullCourseAccess,
       markProgressSaved,
       markProgressSyncError,
+      router,
       toast,
       updateCurrentLessonProgress,
       viewerId,
@@ -1865,11 +1890,22 @@ export function LessonPlayerClient({
       return;
     }
 
+    if (assetCompletionPending) {
+      return;
+    }
+
     const nextIsCompleted = !currentAssetProgress.isCompleted;
     const assetKey = getResourceProgressKey(currentLesson.id, activeViewerAsset.id);
+    const previousResourceProgressMap = resourceProgressMap;
+    const previousLessonProgress = currentLessonProgress;
     const nextResourceProgressState: ResourceProgressState = {
       isCompleted: nextIsCompleted,
-      kind: activeViewerAsset.kind === "pdf" ? "pdf" : activeViewerAsset.kind === "image" ? "image" : "media",
+      kind:
+        activeViewerAsset.kind === "pdf"
+          ? "pdf"
+          : activeViewerAsset.kind === "image"
+            ? "image"
+            : "media",
       lastPage:
         activeViewerAsset.kind === "pdf"
           ? nextIsCompleted
@@ -1885,6 +1921,18 @@ export function LessonPlayerClient({
       progressPercent: nextIsCompleted ? 100 : 0,
       updatedAt: Date.now(),
     };
+
+    const nextResourceProgressMap = {
+      ...resourceProgressMap,
+      [assetKey]: nextResourceProgressState,
+    };
+
+    setAssetCompletionPending(true);
+    setResourceProgressMap(nextResourceProgressMap);
+    updateCurrentLessonFromAssetProgress(
+      nextResourceProgressMap,
+      !activeResourceAsset ? resourceProgressToLessonProgressState(nextResourceProgressState) : undefined
+    );
 
     try {
       const response = await fetch("/api/progress", {
@@ -1932,18 +1980,8 @@ export function LessonPlayerClient({
           lessonProgressByLessonId?: Record<string, Partial<LessonProgressState>>;
         };
       };
-
-      const nextResourceProgressMap = {
-        ...resourceProgressMap,
-        [assetKey]: nextResourceProgressState,
-      };
-
-      setResourceProgressMap(nextResourceProgressMap);
-      updateCurrentLessonFromAssetProgress(
-        nextResourceProgressMap,
-        !activeResourceAsset ? resourceProgressToLessonProgressState(nextResourceProgressState) : undefined
-      );
       applyServerCourseProgress(payload.courseProgress);
+      router.refresh();
 
       if (!nextIsCompleted) {
         if (activeResourceAsset) {
@@ -1960,19 +1998,29 @@ export function LessonPlayerClient({
       markProgressSaved();
     } catch (error) {
       console.error("[lesson-player] Failed to toggle asset completion.", error);
+      setResourceProgressMap(previousResourceProgressMap);
+      setLessonProgressMap((prev) => ({
+        ...prev,
+        [currentLesson.id]: previousLessonProgress,
+      }));
       markProgressSyncError();
       toast("We couldn't update this asset right now.", "error");
+    } finally {
+      setAssetCompletionPending(false);
     }
   }, [
     activeResourceAsset,
     activeViewerAsset,
     applyServerCourseProgress,
+    assetCompletionPending,
     currentAssetProgress,
     currentLesson.id,
+    currentLessonProgress,
     hasFullCourseAccess,
     markProgressSaved,
     markProgressSyncError,
     resourceProgressMap,
+    router,
     toast,
     updateCurrentLessonFromAssetProgress,
     viewerId,
@@ -2859,7 +2907,7 @@ export function LessonPlayerClient({
                     <button
                       type="button"
                       onClick={toggleCurrentAssetCompletion}
-                      disabled={!viewerId || !hasFullCourseAccess}
+                      disabled={!viewerId || !hasFullCourseAccess || assetCompletionPending}
                       className={cn(
                         "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
                         currentAssetProgress.isCompleted
@@ -2867,12 +2915,18 @@ export function LessonPlayerClient({
                           : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-500/90"
                       )}
                     >
-                      {currentAssetProgress.isCompleted ? (
+                      {assetCompletionPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : currentAssetProgress.isCompleted ? (
                         <RotateCcw className="h-4 w-4" />
                       ) : (
                         <CheckCircle2 className="h-4 w-4" />
                       )}
-                      {currentAssetProgress.isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
+                      {assetCompletionPending
+                        ? "Saving..."
+                        : currentAssetProgress.isCompleted
+                          ? "Mark as Incomplete"
+                          : "Mark as Complete"}
                     </button>
                   </div>
                 ) : null}

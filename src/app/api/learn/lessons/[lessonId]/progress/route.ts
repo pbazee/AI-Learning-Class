@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getLessonProgressRequestContext, toLessonProgressErrorResponse } from "@/lib/lesson-progress-api";
@@ -50,6 +51,8 @@ export async function POST(
       lastPosition: payload.watchedSeconds,
       lastPage: payload.lastPdfPage,
     });
+
+    revalidatePath("/dashboard");
 
     return NextResponse.json({
       success: true,

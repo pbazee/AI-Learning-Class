@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getLessonProgressRequestContext, toLessonProgressErrorResponse } from "@/lib/lesson-progress-api";
@@ -88,6 +89,8 @@ export async function PATCH(request: Request) {
       lastPosition: payload.lastPosition,
       lastPage: payload.lastPage,
     });
+
+    revalidatePath("/dashboard");
 
     return NextResponse.json({
       success: true,
