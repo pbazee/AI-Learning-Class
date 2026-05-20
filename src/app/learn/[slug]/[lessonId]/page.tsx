@@ -5,8 +5,6 @@ import { getAskAiSettings } from "@/lib/ask-ai-settings";
 import { getCourseByLessonId, getCourseBySlug, getCurrentUserProfile, getUserCourseAccessMap } from "@/lib/data";
 import { getCourseProgressState, getLessonNotes } from "@/lib/lesson-player";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function LessonPlayerPage({
   params,

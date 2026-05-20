@@ -8,7 +8,12 @@ import { uploadToR2 } from "@/lib/r2";
 
 export const dynamic = "force-dynamic";
 
-const MAX_UPLOAD_SIZE_BYTES = 250 * 1024 * 1024;
+const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
 
 function sanitizeFileName(fileName: string) {
   return fileName
@@ -19,6 +24,20 @@ function sanitizeFileName(fileName: string) {
 }
 
 export async function POST(request: Request) {
+  console.log("[upload] Cloudflare R2 env check", {
+    endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
+    accessKeyIdDefined:
+      typeof (process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ?? process.env.R2_ACCESS_KEY_ID) !==
+      "undefined",
+    secretAccessKeyDefined:
+      typeof (process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ?? process.env.R2_SECRET_ACCESS_KEY) !==
+      "undefined",
+    bucketName:
+      process.env.CLOUDFLARE_R2_BUCKET_NAME ?? process.env.R2_BUCKET_NAME,
+    publicUrl:
+      process.env.CLOUDFLARE_R2_PUBLIC_URL ?? process.env.R2_PUBLIC_URL,
+  });
+
   try {
     const formData = await request.formData();
     const file = formData.get("file");
@@ -26,16 +45,19 @@ export async function POST(request: Request) {
     const bucket = String(formData.get("bucket") || ADMIN_STORAGE_BUCKET).trim() || ADMIN_STORAGE_BUCKET;
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "No file was provided." }, { status: 400 });
+      return NextResponse.json(
+        { error: "No file was provided." },
+        { status: 400, headers: CORS_HEADERS }
+      );
     }
 
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       return NextResponse.json(
         {
           error:
-            "This file is too large for the current buffered upload route. Increase the limit or add direct-to-R2 uploads before sending larger assets.",
+            "This legacy buffered upload route only supports small files. Use the presigned /api/admin/upload-url flow for large uploads.",
         },
-        { status: 413 }
+        { status: 413, headers: CORS_HEADERS }
       );
     }
     const safeFileName = sanitizeFileName(file.name || "upload");
@@ -57,20 +79,23 @@ export async function POST(request: Request) {
         });
     const responsePath = uploadResult ? `stream/${uploadResult.videoId}` : storagePath;
 
-    return NextResponse.json({
-      success: true,
-      bucket: uploadResult ? "cloudflare-stream" : bucket,
-      path: responsePath,
-      url: publicUrl,
-      fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
-      sizeBytes: file.size,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        bucket: uploadResult ? "cloudflare-stream" : bucket,
+        path: responsePath,
+        url: publicUrl,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+      },
+      { headers: CORS_HEADERS }
+    );
   } catch (error) {
     console.error("[upload] Admin upload failed.", error);
     return NextResponse.json(
       { error: "Unable to upload the file right now. Please try again." },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     );
   }
 }
@@ -81,17 +106,27 @@ export async function DELETE(request: Request) {
     const path = typeof payload?.path === "string" ? payload.path.trim() : "";
 
     if (!path) {
-      return NextResponse.json({ error: "A storage path is required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "A storage path is required." },
+        { status: 400, headers: CORS_HEADERS }
+      );
     }
 
     await deleteAdminStorageObjects([path]);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
   } catch (error) {
     console.error("[upload] Admin delete failed.", error);
     return NextResponse.json(
       { error: "Unable to remove the uploaded file right now." },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     );
   }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: CORS_HEADERS,
+  });
 }

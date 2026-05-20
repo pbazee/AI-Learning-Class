@@ -4,8 +4,6 @@ import { Footer } from "@/components/layout/Footer";
 import { AcceptTeamInviteCard } from "@/components/dashboard/AcceptTeamInviteCard";
 import { getCurrentUserProfile } from "@/lib/data";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function TeamInvitePage({
   params,

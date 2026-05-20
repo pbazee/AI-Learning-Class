@@ -120,7 +120,7 @@ type ResourceProgressState = {
 };
 
 const DESKTOP_BREAKPOINT = 1024;
-const MEDIA_SAVE_INTERVAL_SECONDS = 5;
+const MEDIA_SAVE_INTERVAL_SECONDS = 30;
 const PDF_SAVE_DEBOUNCE_MS = 500;
 const SAVED_PROGRESS_FEEDBACK_MS = 2500;
 const SIDEBAR_STORAGE_KEY = "lesson-player-sidebar-open";
@@ -180,6 +180,36 @@ function normalizeResourceProgressMap(value: unknown) {
   });
 
   return Object.fromEntries(entries) as Record<string, ResourceProgressState>;
+}
+
+function resourceProgressToLessonProgressState(
+  resourceProgress?: ResourceProgressState | null
+): LessonProgressState {
+  return normalizeLessonProgressEntry({
+    progressPercent: resourceProgress?.progressPercent ?? 0,
+    lastPosition: resourceProgress?.lastPosition ?? null,
+    lastPage: resourceProgress?.lastPage ?? null,
+    lastPdfPage: resourceProgress?.lastPage ?? null,
+    watchedSeconds: resourceProgress?.lastPosition ?? 0,
+    isCompleted: resourceProgress?.isCompleted ?? false,
+  });
+}
+
+function getAssetProgressState(
+  lessonId: string,
+  asset: ResolvedLessonAsset | null,
+  resourceProgressMap: Record<string, ResourceProgressState>,
+  fallback?: LessonProgressState | null
+) {
+  if (!asset) {
+    return normalizeLessonProgressEntry(fallback);
+  }
+
+  return resourceProgressMap[getResourceProgressKey(lessonId, asset.id)]
+    ? resourceProgressToLessonProgressState(
+        resourceProgressMap[getResourceProgressKey(lessonId, asset.id)]
+      )
+    : normalizeLessonProgressEntry(fallback);
 }
 
 function inferLessonRendererFromUrl(url?: string | null): LessonRendererKind | null {
@@ -619,6 +649,8 @@ export function LessonPlayerClient({
         : null
       : currentContentType;
   const activeViewerUrl = activeResourceAsset?.resolvedUrl ?? primaryAssetUrl;
+  const shouldShowPlayerSkeleton =
+    Boolean(activeViewerKind) && !activeViewerUrl;
   const activeResourcePdfUrl = activeResourceAsset?.resolvedUrl ?? null;
   const isPreviewOnlyLesson = currentLesson.isPreview && !hasFullCourseAccess;
   const previewPagesLimit =
@@ -635,6 +667,22 @@ export function LessonPlayerClient({
   const { completedLessons, overallProgress } = useMemo(
     () => calculateCourseProgress(allLessons, lessonProgressMap),
     [allLessons, lessonProgressMap]
+  );
+  const currentAssetProgress = useMemo(
+    () =>
+      getAssetProgressState(
+        currentLesson.id,
+        activeViewerAsset,
+        resourceProgressMap,
+        !activeResourceAsset ? currentLessonProgress : null
+      ),
+    [
+      activeResourceAsset,
+      activeViewerAsset,
+      currentLesson.id,
+      currentLessonProgress,
+      resourceProgressMap,
+    ]
   );
   const currentLessonAssetsCompleted = useMemo(() => {
     if (lessonAssetRows.length === 0) {
@@ -673,15 +721,21 @@ export function LessonPlayerClient({
   const progressFeedbackTimeoutRef = useRef<number | null>(null);
   const pdfSaveTimeoutRef = useRef<number | null>(null);
   const progressSaveQueueRef = useRef(Promise.resolve());
+  const assetProgressSaveQueueRef = useRef(Promise.resolve());
   const lastPersistedPayloadRef = useRef("");
+  const lastAssetPersistedPayloadRef = useRef<Record<string, string>>({});
   const lastMediaSavedCheckpointRef = useRef(currentLessonProgress.lastPosition ?? 0);
+  const lastActiveResourceSavedCheckpointRef = useRef(0);
   const latestMediaSnapshotRef = useRef<MediaPlayerSnapshot | null>(null);
+  const latestActiveResourceMediaSnapshotRef = useRef<MediaPlayerSnapshot | null>(null);
+  const selectedAssetProgressFetchKeyRef = useRef<string | null>(null);
   const latestPdfSnapshotRef = useRef({
     page: currentLessonProgress.lastPage ?? 1,
     totalPages: 0,
   });
   const autoCompletedPdfLessonRef = useRef<string | null>(null);
   const pdfScrollNonceRef = useRef(0);
+  const activeResourceResumeInitKeyRef = useRef<string | null>(null);
   const fullscreenActionButtonClass =
     "flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/35 text-white/85 backdrop-blur-md transition hover:bg-black/55 hover:text-white";
 
@@ -742,20 +796,36 @@ export function LessonPlayerClient({
   }, [isMounted, resourceProgressMap]);
 
   useEffect(() => {
-    setActiveResourceStartTime(0);
-    setActiveResourceInitialPage(1);
-    setResourceResumePrompt(null);
+    const activeResourceKey = activeResourceAsset
+      ? getResourceProgressKey(currentLesson.id, activeResourceAsset.id)
+      : null;
 
-    if (!activeResourceAsset) {
+    if (!activeResourceKey) {
+      activeResourceResumeInitKeyRef.current = null;
+      latestActiveResourceMediaSnapshotRef.current = null;
+      lastActiveResourceSavedCheckpointRef.current = 0;
+      setActiveResourceStartTime(0);
+      setActiveResourceInitialPage(1);
+      setResourceResumePrompt(null);
       return;
     }
 
-    const progressEntry =
-      resourceProgressMap[getResourceProgressKey(currentLesson.id, activeResourceAsset.id)];
+    if (activeResourceResumeInitKeyRef.current !== activeResourceKey) {
+      latestActiveResourceMediaSnapshotRef.current = null;
+      lastActiveResourceSavedCheckpointRef.current = 0;
+      setActiveResourceStartTime(0);
+      setActiveResourceInitialPage(1);
+      setResourceResumePrompt(null);
+    }
 
-    if (!progressEntry) {
+    const progressEntry = resourceProgressMap[activeResourceKey];
+
+    if (!progressEntry || activeResourceResumeInitKeyRef.current === activeResourceKey) {
       return;
     }
+
+    activeResourceResumeInitKeyRef.current = activeResourceKey;
+    lastActiveResourceSavedCheckpointRef.current = progressEntry.lastPosition ?? 0;
 
     if (progressEntry.isCompleted) {
       if (progressEntry.kind === "pdf" && progressEntry.lastPage) {
@@ -881,131 +951,116 @@ export function LessonPlayerClient({
     [currentLesson.id]
   );
 
-  useEffect(() => {
-    if (!viewerId || !hasFullCourseAccess || lessonAssetRows.length === 0) {
+  function handleActiveResourcePdfProgress(percent: number, currentPage: number, totalPages: number) {
+    if (!activeResourceAsset || activeResourceAsset.kind !== "pdf") {
       return;
     }
 
-    let cancelled = false;
+    updateResourceProgress(activeResourceAsset.id, {
+      kind: "pdf",
+      isCompleted: totalPages > 0 && currentPage >= totalPages,
+      lastPage: currentPage,
+      progressPercent: percent,
+    });
+    void persistAssetProgress(activeResourceAsset, {
+      progressPercent: percent,
+      lastPage: currentPage,
+      isCompleted: totalPages > 0 && currentPage >= totalPages,
+    });
+  }
 
-    async function hydrateAssetProgress() {
-      const responses = await Promise.all(
-        lessonAssetRows.map(async (asset) => {
-          if (asset.id === primaryLessonAsset?.id) {
-            return null;
-          }
-
-          try {
-            const response = await fetch(
-              `/api/progress?lessonId=${currentLesson.id}&assetId=${asset.id}`,
-              { cache: "no-store" }
-            );
-            const payload = await response.json().catch(() => null);
-            if (!response.ok || !payload?.progress) {
-              return null;
-            }
-
-            return { asset, progress: payload.progress as Partial<LessonProgressState> };
-          } catch {
-            return null;
-          }
-        })
-      );
-
-      if (cancelled) {
-        return;
-      }
-
-      responses.forEach((entry) => {
-        if (!entry) {
-          return;
-        }
-
-        updateResourceProgress(entry.asset.id, {
-          kind:
-            entry.asset.kind === "pdf"
-              ? "pdf"
-              : entry.asset.kind === "image"
-                ? "image"
-                : "media",
-          isCompleted: Boolean(entry.progress.isCompleted),
-          lastPage: entry.progress.lastPage ?? undefined,
-          lastPosition: entry.progress.lastPosition ?? undefined,
-          progressPercent: entry.progress.progressPercent ?? 0,
-        });
-      });
+  function handleActiveResourceMediaProgress(snapshot: MediaPlayerSnapshot) {
+    if (!activeResourceAsset || (activeResourceAsset.kind !== "video" && activeResourceAsset.kind !== "audio")) {
+      return;
     }
 
-    void hydrateAssetProgress();
+    updateResourceProgress(activeResourceAsset.id, {
+      kind: "media",
+      isCompleted:
+        snapshot.duration > 0 &&
+        snapshot.currentTime >= Math.max(snapshot.duration - 1, 0),
+      lastPosition: snapshot.currentTime,
+      progressPercent: snapshot.progressPercent,
+    });
 
-    return () => {
-      cancelled = true;
+    latestActiveResourceMediaSnapshotRef.current = {
+      currentTime: Math.max(0, Math.round(snapshot.currentTime)),
+      duration: snapshot.duration,
+      progressPercent: snapshot.progressPercent,
     };
-  }, [currentLesson.id, hasFullCourseAccess, lessonAssetRows, primaryLessonAsset?.id, updateResourceProgress, viewerId]);
 
-  const handleActiveResourcePdfProgress = useCallback(
-    (percent: number, currentPage: number, totalPages: number) => {
-      if (!activeResourceAsset || activeResourceAsset.kind !== "pdf") {
-        return;
-      }
-
-      updateResourceProgress(activeResourceAsset.id, {
-        kind: "pdf",
-        isCompleted: totalPages > 0 && currentPage >= totalPages,
-        lastPage: currentPage,
-        progressPercent: percent,
-      });
-      void fetch("/api/progress", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lessonId: currentLesson.id,
-          assetId: activeResourceAsset.id.startsWith("legacy-") ? null : activeResourceAsset.id,
-          contentType: "pdf",
-          progressPercent: percent,
-          lastPage: currentPage,
-          isCompleted: totalPages > 0 && currentPage >= totalPages,
-        }),
-        cache: "no-store",
-      }).catch(() => undefined);
-    },
-    [activeResourceAsset, currentLesson.id, updateResourceProgress]
-  );
-
-  const handleActiveResourceMediaProgress = useCallback(
-    (snapshot: MediaPlayerSnapshot) => {
-      if (!activeResourceAsset || (activeResourceAsset.kind !== "video" && activeResourceAsset.kind !== "audio")) {
-        return;
-      }
-
-      updateResourceProgress(activeResourceAsset.id, {
-        kind: "media",
+    if (
+      Math.abs(
+        Math.round(snapshot.currentTime) - lastActiveResourceSavedCheckpointRef.current
+      ) >= MEDIA_SAVE_INTERVAL_SECONDS
+    ) {
+      lastActiveResourceSavedCheckpointRef.current = Math.max(
+        lastActiveResourceSavedCheckpointRef.current,
+        Math.round(snapshot.currentTime)
+      );
+      void persistAssetProgress(activeResourceAsset, {
+        progressPercent: snapshot.progressPercent,
+        lastPosition: Math.round(snapshot.currentTime),
         isCompleted:
           snapshot.duration > 0 &&
           snapshot.currentTime >= Math.max(snapshot.duration - 1, 0),
-        lastPosition: snapshot.currentTime,
-        progressPercent: snapshot.progressPercent,
       });
-      if (Math.round(snapshot.currentTime) % 10 === 0 || snapshot.progressPercent >= 100) {
-        void fetch("/api/progress", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lessonId: currentLesson.id,
-            assetId: activeResourceAsset.id.startsWith("legacy-") ? null : activeResourceAsset.id,
-            contentType: activeResourceAsset.kind === "audio" ? "audio" : "video",
-            progressPercent: snapshot.progressPercent,
-            lastPosition: Math.round(snapshot.currentTime),
-            isCompleted:
-              snapshot.duration > 0 &&
-              snapshot.currentTime >= Math.max(snapshot.duration - 1, 0),
-          }),
-          cache: "no-store",
-        }).catch(() => undefined);
-      }
-    },
-    [activeResourceAsset, currentLesson.id, updateResourceProgress]
-  );
+    }
+  }
+
+  function handleActiveResourceMediaPause(snapshot: MediaPlayerSnapshot) {
+    if (!activeResourceAsset || (activeResourceAsset.kind !== "video" && activeResourceAsset.kind !== "audio")) {
+      return;
+    }
+
+    const currentTime = Math.max(0, Math.round(snapshot.currentTime));
+    latestActiveResourceMediaSnapshotRef.current = {
+      currentTime,
+      duration: snapshot.duration,
+      progressPercent: snapshot.progressPercent,
+    };
+    lastActiveResourceSavedCheckpointRef.current = Math.max(
+      lastActiveResourceSavedCheckpointRef.current,
+      currentTime
+    );
+
+    void persistAssetProgress(activeResourceAsset, {
+      progressPercent: snapshot.progressPercent,
+      lastPosition: currentTime,
+      isCompleted:
+        snapshot.duration > 0 &&
+        snapshot.currentTime >= Math.max(snapshot.duration - 1, 0),
+    });
+  }
+
+  function handleActiveResourceMediaEnded(snapshot: MediaPlayerSnapshot) {
+    if (!activeResourceAsset || (activeResourceAsset.kind !== "video" && activeResourceAsset.kind !== "audio")) {
+      return;
+    }
+
+    latestActiveResourceMediaSnapshotRef.current = {
+      currentTime: Math.max(0, Math.round(snapshot.currentTime)),
+      duration: snapshot.duration,
+      progressPercent: 100,
+    };
+    lastActiveResourceSavedCheckpointRef.current = Math.max(
+      lastActiveResourceSavedCheckpointRef.current,
+      Math.round(snapshot.currentTime)
+    );
+
+    updateResourceProgress(activeResourceAsset.id, {
+      kind: "media",
+      isCompleted: true,
+      lastPosition: Math.round(snapshot.currentTime),
+      progressPercent: 100,
+    });
+
+    void persistAssetProgress(activeResourceAsset, {
+      progressPercent: 100,
+      lastPosition: null,
+      isCompleted: true,
+    });
+  }
 
   const handleResourceResumePromptResume = useCallback(() => {
     if (!resourceResumePrompt) {
@@ -1098,6 +1153,47 @@ export function LessonPlayerClient({
     []
   );
 
+  const updateCurrentLessonFromAssetProgress = useCallback(
+    (
+      nextResourceProgressMap: Record<string, ResourceProgressState>,
+      primaryFallback?: LessonProgressState | null
+    ) => {
+      if (lessonAssetRows.length === 0) {
+        return;
+      }
+
+      const assetProgressEntries = lessonAssetRows.map((asset, index) =>
+        getAssetProgressState(
+          currentLesson.id,
+          asset,
+          nextResourceProgressMap,
+          index === 0 ? primaryFallback ?? currentLessonProgress : null
+        )
+      );
+      const progressPercent = Math.round(
+        assetProgressEntries.reduce((sum, entry) => sum + entry.progressPercent, 0) /
+          assetProgressEntries.length
+      );
+      const isCompleted = assetProgressEntries.every((entry) => entry.isCompleted);
+
+      setLessonProgressMap((prev) => ({
+        ...prev,
+        [currentLesson.id]: normalizeLessonProgressEntry({
+          ...prev[currentLesson.id],
+          contentType: assetProgressEntries[0]?.contentType ?? prev[currentLesson.id]?.contentType ?? null,
+          progressPercent: isCompleted ? 100 : progressPercent,
+          isCompleted,
+          completedAt: isCompleted ? new Date().toISOString() : null,
+          lastPosition: null,
+          lastPage: null,
+          watchedSeconds: 0,
+          lastPdfPage: null,
+        }),
+      }));
+    },
+    [currentLesson.id, currentLessonProgress, lessonAssetRows]
+  );
+
   const persistProgress = useCallback(
     (
       payload: {
@@ -1145,29 +1241,9 @@ export function LessonPlayerClient({
 
         lastPersistedPayloadRef.current = signature;
 
-        if (options?.keepalive) {
-          return;
+        if (!options?.keepalive) {
+          markProgressSaved();
         }
-
-        const data = (await response.json().catch(() => null)) as
-          | {
-              progress?: Partial<LessonProgressState>;
-              courseProgress?: {
-                completedLessonIds?: string[];
-                lessonProgressByLessonId?: Record<string, Partial<LessonProgressState>>;
-              };
-            }
-          | null;
-
-        if (data?.progress) {
-          updateCurrentLessonProgress(data.progress);
-        }
-
-        if (data?.courseProgress) {
-          applyServerCourseProgress(data.courseProgress);
-        }
-
-        markProgressSaved();
       };
 
       if (options?.keepalive) {
@@ -1182,30 +1258,71 @@ export function LessonPlayerClient({
       });
     },
     [
-      applyServerCourseProgress,
       canPersistProgress,
       currentContentType,
       currentLesson.id,
       markProgressSaved,
       markProgressSyncError,
-      updateCurrentLessonProgress,
     ]
   );
 
   const persistAssetProgress = useCallback(
     async (
-      _asset: ResolvedLessonAsset,
-      _payload: {
+      asset: ResolvedLessonAsset,
+      payload: {
         progressPercent?: number;
         lastPosition?: number | null;
         lastPage?: number | null;
         isCompleted?: boolean;
-      }
+      },
+      options?: { force?: boolean; keepalive?: boolean }
     ) => {
-      // Per-resource resume is stored locally because the live LessonProgress model
-      // in production currently supports lesson-level persistence only.
+      if (!viewerId || !hasFullCourseAccess) {
+        return;
+      }
+
+      const body = {
+        lessonId: currentLesson.id,
+        assetId: asset.id.startsWith("legacy-") ? null : asset.id,
+        contentType: asset.kind === "audio" ? "audio" : asset.kind === "pdf" ? "pdf" : "video",
+        ...payload,
+      };
+      const signature = JSON.stringify(body);
+      const persistKey = getResourceProgressKey(currentLesson.id, asset.id);
+
+      if (!options?.force && lastAssetPersistedPayloadRef.current[persistKey] === signature) {
+        return;
+      }
+
+      const runSave = async () => {
+        const response = await fetch("/api/progress", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+          keepalive: options?.keepalive,
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to save resource progress (${response.status}).`);
+        }
+
+        lastAssetPersistedPayloadRef.current[persistKey] = signature;
+      };
+
+      if (options?.keepalive) {
+        lastAssetPersistedPayloadRef.current[persistKey] = signature;
+        void runSave().catch(() => undefined);
+        return;
+      }
+
+      assetProgressSaveQueueRef.current = assetProgressSaveQueueRef.current.then(runSave, runSave).catch((error) => {
+        console.error("[lesson-player] Failed to save resource progress.", error);
+      });
     },
-    []
+    [currentLesson.id, hasFullCourseAccess, viewerId]
   );
 
   useEffect(() => {
@@ -1237,6 +1354,27 @@ export function LessonPlayerClient({
     }
 
     clearPdfSaveTimeout();
+
+    if (
+      activeResourceAsset &&
+      (activeResourceAsset.kind === "video" || activeResourceAsset.kind === "audio")
+    ) {
+      const snapshot = latestActiveResourceMediaSnapshotRef.current;
+      const currentTime = Math.max(0, Math.round(snapshot?.currentTime ?? 0));
+      const isCompleted =
+        (snapshot?.duration ?? 0) > 0 &&
+        currentTime >= Math.max(Math.round((snapshot?.duration ?? 0)) - 1, 0);
+
+      void persistAssetProgress(
+        activeResourceAsset,
+        {
+          progressPercent: isCompleted ? 100 : snapshot?.progressPercent ?? 0,
+          lastPosition: isCompleted ? null : currentTime,
+          isCompleted,
+        },
+        { force: true, keepalive: true }
+      );
+    }
 
     if (currentContentType === "pdf") {
       const currentPage = latestPdfSnapshotRef.current.page;
@@ -1426,6 +1564,8 @@ export function LessonPlayerClient({
       completeCurrentMediaLesson,
       persistProgress,
       previewMinutesLimitSeconds,
+      activeResourceAsset,
+      persistAssetProgress,
     ]
   );
 
@@ -1720,6 +1860,124 @@ export function LessonPlayerClient({
     await setLessonCompletionState(nextCompletionState);
   }, [currentLessonProgress.isCompleted, setLessonCompletionState]);
 
+  const toggleCurrentAssetCompletion = useCallback(async () => {
+    if (!activeViewerAsset || !viewerId || !hasFullCourseAccess || activeViewerAsset.kind === "file") {
+      return;
+    }
+
+    const nextIsCompleted = !currentAssetProgress.isCompleted;
+    const assetKey = getResourceProgressKey(currentLesson.id, activeViewerAsset.id);
+    const nextResourceProgressState: ResourceProgressState = {
+      isCompleted: nextIsCompleted,
+      kind: activeViewerAsset.kind === "pdf" ? "pdf" : activeViewerAsset.kind === "image" ? "image" : "media",
+      lastPage:
+        activeViewerAsset.kind === "pdf"
+          ? nextIsCompleted
+            ? currentAssetProgress.lastPage ?? 1
+            : undefined
+          : undefined,
+      lastPosition:
+        activeViewerAsset.kind === "video" || activeViewerAsset.kind === "audio"
+          ? nextIsCompleted
+            ? undefined
+            : 0
+          : undefined,
+      progressPercent: nextIsCompleted ? 100 : 0,
+      updatedAt: Date.now(),
+    };
+
+    try {
+      const response = await fetch("/api/progress", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lessonId: currentLesson.id,
+          assetId: activeViewerAsset.id.startsWith("legacy-") ? null : activeViewerAsset.id,
+          contentType:
+            activeViewerAsset.kind === "audio"
+              ? "audio"
+              : activeViewerAsset.kind === "pdf"
+                ? "pdf"
+                : activeViewerAsset.kind === "image"
+                  ? "image"
+                  : "video",
+          isCompleted: nextIsCompleted,
+          resetProgress: !nextIsCompleted,
+          progressPercent: nextIsCompleted ? 100 : 0,
+          lastPosition:
+            activeViewerAsset.kind === "video" || activeViewerAsset.kind === "audio"
+              ? nextIsCompleted
+                ? null
+                : 0
+              : undefined,
+          lastPage:
+            activeViewerAsset.kind === "pdf"
+              ? nextIsCompleted
+                ? currentAssetProgress.lastPage ?? 1
+                : 1
+              : undefined,
+        }),
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update asset progress (${response.status}).`);
+      }
+
+      const payload = (await response.json()) as {
+        courseProgress?: {
+          completedLessonIds?: string[];
+          lessonProgressByLessonId?: Record<string, Partial<LessonProgressState>>;
+        };
+      };
+
+      const nextResourceProgressMap = {
+        ...resourceProgressMap,
+        [assetKey]: nextResourceProgressState,
+      };
+
+      setResourceProgressMap(nextResourceProgressMap);
+      updateCurrentLessonFromAssetProgress(
+        nextResourceProgressMap,
+        !activeResourceAsset ? resourceProgressToLessonProgressState(nextResourceProgressState) : undefined
+      );
+      applyServerCourseProgress(payload.courseProgress);
+
+      if (!nextIsCompleted) {
+        if (activeResourceAsset) {
+          setResourceResumePrompt(null);
+          setActiveResourceStartTime(0);
+          setActiveResourceInitialPage(1);
+        } else {
+          setResumePrompt(null);
+          setMediaStartTime(0);
+          setPdfInitialPage(1);
+        }
+      }
+
+      markProgressSaved();
+    } catch (error) {
+      console.error("[lesson-player] Failed to toggle asset completion.", error);
+      markProgressSyncError();
+      toast("We couldn't update this asset right now.", "error");
+    }
+  }, [
+    activeResourceAsset,
+    activeViewerAsset,
+    applyServerCourseProgress,
+    currentAssetProgress,
+    currentLesson.id,
+    hasFullCourseAccess,
+    markProgressSaved,
+    markProgressSyncError,
+    resourceProgressMap,
+    toast,
+    updateCurrentLessonFromAssetProgress,
+    viewerId,
+  ]);
+
   useEffect(() => {
     setIsMounted(true);
     if (typeof window === "undefined") {
@@ -1863,45 +2121,70 @@ export function LessonPlayerClient({
     const loadSavedProgress = async () => {
       try {
         const response = await fetch(`/api/progress?lessonId=${currentLesson.id}`, {
-          cache: "no-store",
         });
 
         if (!response.ok) {
           return;
         }
 
-        const data = (await response.json()) as { progress?: Partial<LessonProgressState> | null };
-        if (cancelled || !data.progress) {
+        const data = (await response.json()) as {
+          progress?: Partial<LessonProgressState> | null;
+          allProgress?: Array<
+            Partial<LessonProgressState> & {
+              assetId?: string | null;
+              contentType?: "video" | "audio" | "pdf" | null;
+            }
+          >;
+        };
+        if (cancelled) {
           return;
         }
 
-        const normalized = normalizeLessonProgressEntry(data.progress);
-        setLessonProgressMap((prev) => ({
-          ...prev,
-          [currentLesson.id]: normalized,
-        }));
+        if (data.progress) {
+          const normalized = normalizeLessonProgressEntry(data.progress);
+          setLessonProgressMap((prev) => ({
+            ...prev,
+            [currentLesson.id]: normalized,
+          }));
+        }
 
-        if (normalized.isCompleted) {
-          setResumePrompt(null);
+        const allProgress = Array.isArray(data.allProgress) ? data.allProgress : null;
+
+        if (!allProgress) {
           return;
         }
 
-        if (currentContentType === "pdf") {
-          if ((normalized.lastPage ?? 1) > 1) {
-            setPdfInitialPage(1);
-            setResumePrompt({ kind: "pdf", page: normalized.lastPage ?? 1 });
-          } else {
-            setPdfInitialPage(normalized.lastPage ?? 1);
-          }
-          return;
-        }
+        setResourceProgressMap((prev) => {
+          const next = { ...prev };
 
-        if ((normalized.lastPosition ?? 0) > 10) {
-          setMediaStartTime(0);
-          setResumePrompt({ kind: "media", position: normalized.lastPosition ?? 0 });
-        } else {
-          setMediaStartTime(normalized.lastPosition ?? 0);
-        }
+          allProgress.forEach((entry) => {
+            if (!entry.assetId) {
+              return;
+            }
+
+            const kind =
+              entry.contentType === "pdf"
+                ? "pdf"
+                : entry.contentType === "audio" || entry.contentType === "video"
+                  ? "media"
+                  : null;
+
+            if (!kind) {
+              return;
+            }
+
+            next[getResourceProgressKey(currentLesson.id, entry.assetId)] = {
+              kind,
+              isCompleted: Boolean(entry.isCompleted),
+              lastPage: entry.lastPage ?? undefined,
+              lastPosition: entry.lastPosition ?? undefined,
+              progressPercent: clampPercentage(entry.progressPercent ?? 0),
+              updatedAt: Date.now(),
+            };
+          });
+
+          return next;
+        });
       } catch (error) {
         console.error("[lesson-player] Failed to load saved lesson progress.", error);
       }
@@ -1912,7 +2195,142 @@ export function LessonPlayerClient({
     return () => {
       cancelled = true;
     };
-  }, [canPersistProgress, currentContentType, currentLesson.id, isMounted]);
+  }, [canPersistProgress, currentLesson.id, isMounted]);
+
+  useEffect(() => {
+    const selectedAsset = activeViewerAsset;
+
+    if (
+      !isMounted ||
+      !canPersistProgress ||
+      !selectedAsset ||
+      selectedAsset.id.startsWith("legacy-") ||
+      selectedAsset.kind === "file" ||
+      selectedAsset.kind === "image"
+    ) {
+      selectedAssetProgressFetchKeyRef.current = null;
+      return;
+    }
+
+    const assetKey = `${currentLesson.id}:${selectedAsset.id}`;
+
+    if (selectedAssetProgressFetchKeyRef.current === assetKey) {
+      return;
+    }
+
+    selectedAssetProgressFetchKeyRef.current = assetKey;
+    const controller = new AbortController();
+
+    const applySelectedAssetProgress = (progress: LessonProgressState) => {
+      setResourceProgressMap((prev) => ({
+        ...prev,
+        [getResourceProgressKey(currentLesson.id, selectedAsset.id)]: {
+          isCompleted: progress.isCompleted,
+          kind: selectedAsset.kind === "pdf" ? "pdf" : "media",
+          lastPage: progress.lastPage ?? undefined,
+          lastPosition: progress.lastPosition ?? undefined,
+          progressPercent: progress.progressPercent,
+          updatedAt: Date.now(),
+        },
+      }));
+
+      if (activeResourceAsset) {
+        if (progress.isCompleted) {
+          setResourceResumePrompt(null);
+          setActiveResourceInitialPage(progress.lastPage ?? 1);
+          setActiveResourceStartTime(progress.lastPosition ?? 0);
+          return;
+        }
+
+        if (selectedAsset.kind === "pdf") {
+          if ((progress.lastPage ?? 1) > 1) {
+            setActiveResourceInitialPage(1);
+            setResourceResumePrompt({ kind: "pdf", page: progress.lastPage ?? 1 });
+          } else {
+            setActiveResourceInitialPage(progress.lastPage ?? 1);
+            setResourceResumePrompt(null);
+          }
+          return;
+        }
+
+        if ((progress.lastPosition ?? 0) > 10) {
+          setActiveResourceStartTime(0);
+          setResourceResumePrompt({ kind: "media", position: progress.lastPosition ?? 0 });
+        } else {
+          setActiveResourceStartTime(progress.lastPosition ?? 0);
+          setResourceResumePrompt(null);
+        }
+        return;
+      }
+
+      if (progress.isCompleted) {
+        setResumePrompt(null);
+        setPdfInitialPage(progress.lastPage ?? 1);
+        setMediaStartTime(progress.lastPosition ?? 0);
+        return;
+      }
+
+      if (selectedAsset.kind === "pdf") {
+        if ((progress.lastPage ?? 1) > 1) {
+          setPdfInitialPage(1);
+          setResumePrompt({ kind: "pdf", page: progress.lastPage ?? 1 });
+        } else {
+          setPdfInitialPage(progress.lastPage ?? 1);
+          setResumePrompt(null);
+        }
+        return;
+      }
+
+      if ((progress.lastPosition ?? 0) > 10) {
+        setMediaStartTime(0);
+        setResumePrompt({ kind: "media", position: progress.lastPosition ?? 0 });
+      } else {
+        setMediaStartTime(progress.lastPosition ?? 0);
+        setResumePrompt(null);
+      }
+    };
+
+    void fetch(
+      `/api/progress?lessonId=${encodeURIComponent(currentLesson.id)}&assetId=${encodeURIComponent(
+        selectedAsset.id
+      )}`,
+      {
+        cache: "no-store",
+        signal: controller.signal,
+      }
+    )
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load selected asset progress (${response.status}).`);
+        }
+
+        return (await response.json()) as {
+          progress?: Partial<LessonProgressState> | null;
+        };
+      })
+      .then((payload) => {
+        if (controller.signal.aborted || !payload.progress) {
+          return;
+        }
+
+        applySelectedAssetProgress(normalizeLessonProgressEntry(payload.progress));
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        console.error("[lesson-player] Failed to load selected asset progress.", error);
+      });
+
+    return () => controller.abort();
+  }, [
+    activeResourceAsset,
+    activeViewerAsset,
+    canPersistProgress,
+    currentLesson.id,
+    isMounted,
+  ]);
 
   useEffect(() => {
     if (!isMounted) {
@@ -2080,8 +2498,13 @@ export function LessonPlayerClient({
                                 <div className="ml-6 mt-2 space-y-1.5 border-l border-white/10 pl-3">
                                   {lessonAssetsForSidebar.map((asset, assetIndex) => {
                                     const progress =
-                                      lesson.id === currentLesson.id && asset.id === primaryLessonAsset?.id
-                                        ? currentLessonProgress
+                                      lesson.id === currentLesson.id
+                                        ? getAssetProgressState(
+                                            lesson.id,
+                                            asset,
+                                            resourceProgressMap,
+                                            assetIndex === 0 ? currentLessonProgress : null
+                                          )
                                         : resourceProgressMap[getResourceProgressKey(lesson.id, asset.id)];
                                     const isActiveResource =
                                       lesson.id === currentLesson.id &&
@@ -2157,7 +2580,10 @@ export function LessonPlayerClient({
                 <div className="mt-4 space-y-3">
                   <button
                     onClick={toggleLessonCompletion}
-                    disabled={manualCompletionPending || !currentLessonAssetsCompleted}
+                    disabled={
+                      manualCompletionPending ||
+                      (!currentLessonAssetsCompleted && !currentLessonProgress.isCompleted)
+                    }
                     className={cn(
                       "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
                       currentLessonProgress.isCompleted
@@ -2237,6 +2663,14 @@ export function LessonPlayerClient({
                     </div>
                   ) : null}
 
+                  {shouldShowPlayerSkeleton ? (
+                    <div className="flex min-h-[400px] w-full animate-pulse flex-col justify-center gap-4 rounded-2xl border border-white/10 bg-[#08101d]/92 p-6 shadow-2xl">
+                      <div className="h-8 w-44 rounded-xl bg-white/10" />
+                      <div className="h-64 rounded-2xl bg-white/8" />
+                      <div className="h-4 w-2/3 rounded bg-white/10" />
+                    </div>
+                  ) : null}
+
                   {activeViewerKind === "pdf" && activeViewerUrl ? (
                     <div
                       ref={pdfViewportRef}
@@ -2272,10 +2706,10 @@ export function LessonPlayerClient({
                             activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaProgress
                           }
                           onPause={
-                            activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaPause
+                            activeResourceAsset ? handleActiveResourceMediaPause : handleMediaPause
                           }
                           onEnded={
-                            activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaEnded
+                            activeResourceAsset ? handleActiveResourceMediaEnded : handleMediaEnded
                           }
                           onFullscreenChange={setIsMediaFullscreen}
                           fullscreenActions={
@@ -2360,16 +2794,16 @@ export function LessonPlayerClient({
                           activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaProgress
                         }
                         onPause={
-                          activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaPause
+                          activeResourceAsset ? handleActiveResourceMediaPause : handleMediaPause
                         }
                         onEnded={
-                          activeResourceAsset ? handleActiveResourceMediaProgress : handleMediaEnded
+                          activeResourceAsset ? handleActiveResourceMediaEnded : handleMediaEnded
                         }
                       />
                     </div>
                   ) : null}
 
-                  {!activeViewerKind && mainImageAssets.length === 0 ? (
+                  {!shouldShowPlayerSkeleton && !activeViewerKind && mainImageAssets.length === 0 ? (
                     <div className="flex min-h-[400px] w-full flex-col items-center justify-center gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-6 shadow-2xl">
                       <AlertCircle className="h-12 w-12 text-rose-400" />
                       <div className="max-w-md text-center">
@@ -2403,6 +2837,45 @@ export function LessonPlayerClient({
                     />
                   </AnimatePresence>
                 </motion.div>
+
+                {activeViewerAsset && activeViewerAsset.kind !== "file" ? (
+                  <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#08101d]/88 p-4 shadow-xl sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="truncate text-base font-semibold text-white">
+                          {activeViewerAsset.displayTitle || currentLesson.title}
+                        </h2>
+                        {currentAssetProgress.isCompleted ? (
+                          <span className="inline-flex items-center rounded-full border border-emerald-400/25 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                            Completed
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Track this asset separately from the rest of the lesson.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={toggleCurrentAssetCompletion}
+                      disabled={!viewerId || !hasFullCourseAccess}
+                      className={cn(
+                        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
+                        currentAssetProgress.isCompleted
+                          ? "border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                          : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-500/90"
+                      )}
+                    >
+                      {currentAssetProgress.isCompleted ? (
+                        <RotateCcw className="h-4 w-4" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      {currentAssetProgress.isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
+                    </button>
+                  </div>
+                ) : null}
 
                 {activeResourceAsset ? (
                   <div className="hidden mt-5 rounded-2xl border border-white/10 bg-[#08101d]/90 p-4 shadow-xl">
@@ -2545,14 +3018,14 @@ export function LessonPlayerClient({
                           <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black">
                             <MediaPlayer
                               src={activeResourceAsset.resolvedUrl}
-                              type="video"
-                              initialTime={activeResourceStartTime}
-                              maxDuration={previewMinutesLimitSeconds || undefined}
-                              isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
-                              onTimeUpdate={handleActiveResourceMediaProgress}
-                              onPause={handleActiveResourceMediaProgress}
-                              onEnded={handleActiveResourceMediaProgress}
-                            />
+                          type="video"
+                          initialTime={activeResourceStartTime}
+                          maxDuration={previewMinutesLimitSeconds || undefined}
+                          isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
+                          onTimeUpdate={handleActiveResourceMediaProgress}
+                          onPause={handleActiveResourceMediaPause}
+                          onEnded={handleActiveResourceMediaEnded}
+                        />
                             <AnimatePresence>
                               <ResumeOverlay
                                 prompt={resourceResumePrompt}
@@ -2572,8 +3045,8 @@ export function LessonPlayerClient({
                               maxDuration={previewMinutesLimitSeconds || undefined}
                               isLocked={isPreviewOnlyLesson && previewMinutesLimitSeconds > 0}
                               onTimeUpdate={handleActiveResourceMediaProgress}
-                              onPause={handleActiveResourceMediaProgress}
-                              onEnded={handleActiveResourceMediaProgress}
+                              onPause={handleActiveResourceMediaPause}
+                              onEnded={handleActiveResourceMediaEnded}
                             />
                             <AnimatePresence>
                               <ResumeOverlay

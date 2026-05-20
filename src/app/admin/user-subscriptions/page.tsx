@@ -1,8 +1,6 @@
 import { UserSubscriptionsManager } from "@/components/admin/user-subscriptions-manager";
 import { prisma } from "@/lib/prisma";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function AdminUserSubscriptionsPage() {
   const { subscriptions, lessonActivity, includedCourses } = await (async () => {

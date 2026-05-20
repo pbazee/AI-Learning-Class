@@ -7,8 +7,6 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserProfile, getUserAffiliateStatus } from "@/lib/data";
 import { ScrollToTopOnMount } from "@/components/layout/ScrollToTopOnMount";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 const steps = [
   {

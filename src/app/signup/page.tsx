@@ -100,7 +100,6 @@ export default function SignupPage() {
     siteName: DEFAULT_SITE_NAME,
     logoUrl: "",
   });
-  const [brandingLoaded, setBrandingLoaded] = useState(false);
 
   const currentQuizQuestion = quizQuestions[quizStep];
   const currentStepIndex = stepConfig.findIndex((entry) => entry.id === step);
@@ -209,10 +208,6 @@ export default function SignupPage() {
         });
       } catch {
         // The default logo fallback is good enough if settings fail to load.
-      } finally {
-        if (mounted) {
-          setBrandingLoaded(true);
-        }
       }
     }
 
@@ -227,6 +222,15 @@ export default function SignupPage() {
     let mounted = true;
 
     async function loadOnboardingState() {
+      const supabase = getSupabaseClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return;
+      }
+
       try {
         const response = await fetch("/api/account/onboarding", {
           cache: "no-store",
@@ -303,7 +307,9 @@ export default function SignupPage() {
       recommendedCourses,
     };
 
-    window.localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(nextState));
+    if (step !== "account" || Object.keys(answers).length > 0 || recommendedCourses.length > 0) {
+      window.localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(nextState));
+    }
   }, [answers, quizStep, recommendedCourses, step]);
 
   async function syncNewsletterPreference(nextEmail: string, nextName?: string) {
@@ -476,7 +482,7 @@ export default function SignupPage() {
     setError(null);
 
     try {
-      await fetch("/api/account/onboarding", {
+      const response = await fetch("/api/account/onboarding", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -485,15 +491,30 @@ export default function SignupPage() {
           recommendationIds: options?.skipPersonalization ? [] : options?.recommendationIds ?? recommendedCourses.map((course) => course.id),
         }),
       });
-    } catch (completionError) {
-      console.error("Onboarding completion save failed silently:", completionError);
-    } finally {
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error || "We couldn't finish saving your onboarding just yet."
+        );
+      }
+
       if (typeof window !== "undefined") {
         window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
       }
 
       router.push(destination);
       router.refresh();
+    } catch (completionError) {
+      console.error("Onboarding completion save failed:", completionError);
+      setError(
+        completionError instanceof Error
+          ? completionError.message
+          : "We couldn't finish saving your onboarding just yet."
+      );
+      return;
+    } finally {
       setOnboardingLoading(false);
     }
   }
@@ -523,10 +544,6 @@ export default function SignupPage() {
       setStep("quiz");
       setOnboardingLoading(false);
     }
-  }
-
-  if (!brandingLoaded) {
-    return <div className="min-h-screen bg-slate-50" />;
   }
 
   return (
@@ -595,14 +612,14 @@ export default function SignupPage() {
                   <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-sky-100">
                     <Mail className="h-8 w-8 text-sky-700" />
                   </div>
-                  <h3 className="mb-2 text-lg font-bold text-white">Confirm your email</h3>
-                  <p className="mb-4 text-sm text-white/85">
-                    We sent a confirmation link to <strong className="text-white">{email}</strong>. Click it to activate your account and start learning.
+                  <h3 className="mb-2 text-lg font-bold text-slate-900">Confirm your email</h3>
+                  <p className="mb-4 text-sm text-slate-600">
+                    We sent a confirmation link to <strong className="text-slate-900">{email}</strong>. Click it to activate your account and start learning.
                   </p>
                   <button
                     type="button"
                     onClick={() => setEmailConfirmSent(false)}
-                    className="text-xs font-semibold text-white transition hover:text-white/80"
+                    className="text-xs font-semibold text-primary-blue transition hover:text-primary-blue/80"
                   >
                     Use a different email
                   </button>

@@ -10,6 +10,7 @@ import { StorefrontPersonalizationProvider } from "@/components/storefront/Store
 import {
   getPublicHomepageData,
 } from "@/lib/data";
+import { resolveMediaUrl } from "@/lib/media";
 import { buildHomepageJsonLd } from "@/lib/seo";
 import { buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 
@@ -45,13 +46,22 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 });
 
 export const revalidate = 300;
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export async function generateMetadata(): Promise<Metadata> {
+  const { slides } = await getPublicHomepageData();
+  const shareImage =
+    resolveMediaUrl({
+      url: slides[0]?.imageUrl,
+      fallback: "",
+    }) || undefined;
+
   return buildSiteMetadata("/", {
     title: "AI GENIUS LAB | Practical AI Courses, Projects, and Mentorship",
     description:
+      "Learn practical AI with guided courses, LLM engineering projects, and real-world machine learning tracks built for modern teams and ambitious learners.",
+    image: shareImage,
+    openGraphTitle: "AI GENIUS LAB | Practical AI Courses, Projects, and Mentorship",
+    openGraphDescription:
       "Learn practical AI with guided courses, LLM engineering projects, and real-world machine learning tracks built for modern teams and ambitious learners.",
   });
 }

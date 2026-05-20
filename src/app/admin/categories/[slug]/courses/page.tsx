@@ -2,8 +2,6 @@ import { notFound } from "next/navigation";
 import { CategoryCoursesView } from "@/components/admin/category-courses-view";
 import { prisma } from "@/lib/prisma";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function AdminCategoryCoursesPage({
   params,

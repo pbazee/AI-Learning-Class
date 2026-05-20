@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import {
@@ -7,12 +6,7 @@ import {
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
 import { env } from "@/lib/config";
-
-type CookieToSet = {
-  name: string;
-  value: string;
-  options: CookieOptions;
-};
+import { createSupabaseServerClientWithCookies } from "@/lib/supabase-server";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -23,31 +17,24 @@ export async function GET(request: NextRequest) {
 
   const cookieStore = await cookies();
 
-  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
   }
 
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet: CookieToSet[]) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-          } catch {
-            // Route handler cookie writes can fail during static evaluation.
-          }
-        },
-      },
-    }
-  );
+  const supabase = createSupabaseServerClientWithCookies({
+    getAll() {
+      return cookieStore.getAll();
+    },
+    setAll(cookiesToSet) {
+      try {
+        cookiesToSet.forEach(({ name, value, options }) =>
+          cookieStore.set(name, value, options)
+        );
+      } catch {
+        // Route handler cookie writes can fail during static evaluation.
+      }
+    },
+  });
 
   async function syncUserProfile() {
     const {

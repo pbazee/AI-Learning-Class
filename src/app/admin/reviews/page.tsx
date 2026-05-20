@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ReviewsManager } from "@/components/admin/reviews-manager";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",

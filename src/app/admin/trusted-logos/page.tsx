@@ -1,8 +1,6 @@
 import { TrustedLogosManager } from "@/components/admin/trusted-logos-manager";
 import { prisma } from "@/lib/prisma";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function AdminTrustedLogosPage() {
   const logos = await (async () => {

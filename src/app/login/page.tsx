@@ -56,7 +56,6 @@ function LoginPageInner() {
     siteName: DEFAULT_SITE_NAME,
     logoUrl: "",
   });
-  const [brandingLoaded, setBrandingLoaded] = useState(false);
   const [error, setError] = useState<string | null>(
     callbackError === "oauth_failed"
       ? "Google sign-in failed. Please try again."
@@ -92,10 +91,6 @@ function LoginPageInner() {
         });
       } catch {
         // Auth pages fall back to the default brand mark if settings are unavailable.
-      } finally {
-        if (mounted) {
-          setBrandingLoaded(true);
-        }
       }
     }
 
@@ -105,10 +100,6 @@ function LoginPageInner() {
       mounted = false;
     };
   }, []);
-
-  if (!brandingLoaded) {
-    return <div className="min-h-screen bg-slate-50" />;
-  }
 
   async function syncNewsletterPreference(nextEmail: string) {
     if (!newsletterOptIn || !nextEmail.trim()) {
@@ -280,18 +271,18 @@ function LoginPageInner() {
           </div>
 
           {magicSent ? (
-            <div className="py-8 text-center">
+            <div className="rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-[0_20px_50px_-38px_rgba(15,23,42,0.22)]">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-sky-100">
                 <Mail className="h-8 w-8 text-sky-700" />
               </div>
-              <h3 className="mb-2 text-lg font-bold text-white">Check your email</h3>
-              <p className="mb-4 text-sm text-white/85">
-                We sent a magic link to <strong className="text-white">{email}</strong>. Click it to sign in instantly.
+              <h3 className="mb-2 text-lg font-bold text-slate-900">Check your email</h3>
+              <p className="mb-4 text-sm text-slate-600">
+                We sent a magic link to <strong className="text-slate-900">{email}</strong>. Click it to sign in instantly.
               </p>
               <button
                 type="button"
                 onClick={() => setMagicSent(false)}
-                className="text-xs font-semibold text-white transition hover:text-white/80"
+                className="text-xs font-semibold text-primary-blue transition hover:text-primary-blue/80"
               >
                 Use a different email
               </button>
@@ -396,7 +387,7 @@ function LoginPageInner() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_30%),linear-gradient(180deg,#2563eb_0%,#2563eb_50%,#ffffff_50%,#ffffff_100%)]" />}>
       <LoginPageInner />
     </Suspense>
   );

@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { BlogsManager } from "@/components/admin/blogs-manager";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 const publishedFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",

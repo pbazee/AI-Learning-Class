@@ -80,6 +80,7 @@ export function SimpleCrudManager<T extends { id: string }, FormState extends Re
   buildPayload,
   onSave,
   onDelete,
+  saveLabel = "Save Changes",
   dialogSize = "xl",
   dialogScrollBody = false,
   dialogStickyFooter = false,
@@ -101,6 +102,7 @@ export function SimpleCrudManager<T extends { id: string }, FormState extends Re
   buildPayload: (form: FormState) => any;
   onSave: (payload: any) => CrudActionResult;
   onDelete: (id: string) => CrudActionResult;
+  saveLabel?: string;
   dialogSize?: "md" | "lg" | "xl" | "2xl";
   dialogScrollBody?: boolean;
   dialogStickyFooter?: boolean;
@@ -243,7 +245,7 @@ export function SimpleCrudManager<T extends { id: string }, FormState extends Re
               Cancel
             </AdminButton>
             <AdminButton type="button" busy={busy} onClick={handleSubmit}>
-              Save Changes
+              {saveLabel}
             </AdminButton>
           </div>
         }

@@ -20,9 +20,9 @@ const EnvSchema = z.object({
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   CLOUDFLARE_STREAM_API_TOKEN: z.string().optional(),
-  CLOUDFLARE_WORKERS: z.string().optional(),
 
   // Cloudflare R2
+  CLOUDFLARE_R2_ENDPOINT: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET_NAME: z.string().optional(),
@@ -84,11 +84,16 @@ const raw = {
   CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
   CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
   CLOUDFLARE_STREAM_API_TOKEN: process.env.CLOUDFLARE_STREAM_API_TOKEN,
-  CLOUDFLARE_WORKERS: process.env.CLOUDFLARE_WORKERS,
-  R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
-  R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
-  R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
-  R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
+  CLOUDFLARE_R2_ENDPOINT: process.env.CLOUDFLARE_R2_ENDPOINT,
+  R2_ACCESS_KEY_ID:
+    process.env.R2_ACCESS_KEY_ID ?? process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY:
+    process.env.R2_SECRET_ACCESS_KEY ??
+    process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+  R2_BUCKET_NAME:
+    process.env.R2_BUCKET_NAME ?? process.env.CLOUDFLARE_R2_BUCKET_NAME,
+  R2_PUBLIC_URL:
+    process.env.R2_PUBLIC_URL ?? process.env.CLOUDFLARE_R2_PUBLIC_URL,
   ADMIN_EMAIL: process.env.ADMIN_EMAIL,
   DATABASE_URL: process.env.DATABASE_URL,
   DIRECT_URL: process.env.DIRECT_URL,

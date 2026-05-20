@@ -6,8 +6,6 @@ import { Award, Shield } from "lucide-react";
 import { CertificateCardActions } from "@/components/certificates/CertificateCardActions";
 import { getCurrentUserProfile, getUserCertificates } from "@/lib/data";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function CertificatesPage() {
   const user = await getCurrentUserProfile();

@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_ASK_AI_NAME, DEFAULT_SITE_NAME } from "@/lib/site";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 function readSocialLinks(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {

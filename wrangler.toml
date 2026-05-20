@@ -1,27 +1,2 @@
-name = "ai-genius-lab"
-account_id = "00d89852dbf5409a64da20ac12fe3920"
-keep_vars = true
-
-main = ".open-next/worker.js"
-compatibility_date = "2025-01-01"
-compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
-
-[assets]
-directory = ".open-next/assets"
-binding = "ASSETS"
-run_worker_first = false
-
-[vars]
-NEXT_PUBLIC_APP_URL = "https://ai-genius-lab.daviswapeti.workers.dev"
-CLOUDFLARE_WORKERS = "true"
-
-[[hyperdrive]]
-binding = "HYPERDRIVE"
-id = "5aef010ec09e4da78062aa7391194374"
-
-[[r2_buckets]]
-binding = "MEDIA_BUCKET"
-bucket_name = "ai-genius-lab-assets"
-
-[build]
-command = "npx @opennextjs/cloudflare build"
+# Cloudflare Workers deployment config intentionally cleared.
+# This app now deploys on Vercel while keeping Cloudflare R2 and Stream integrations in app code/env.

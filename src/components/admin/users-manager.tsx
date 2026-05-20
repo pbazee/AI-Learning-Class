@@ -1,10 +1,10 @@
 "use client";
 
-import { startTransition, useMemo, useState } from "react";
-import { ArrowRight, Award, CreditCard, ShieldCheck, UserCircle2 } from "lucide-react";
+import { startTransition, useEffect, useMemo, useState } from "react";
+import { ArrowRight, Award, CreditCard, Search, ShieldCheck, UserCircle2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getUserDetailsAction, updateUserRoleAction } from "@/app/admin/actions";
-import { AdminButton, AdminCard, AdminDrawer, AdminModal, AdminPageIntro, AdminStatCard, AdminStatGrid, StatusPill } from "@/components/admin/ui";
+import { AdminButton, AdminCard, AdminDrawer, AdminInput, AdminModal, AdminPageIntro, AdminStatCard, AdminStatGrid, StatusPill } from "@/components/admin/ui";
 import { useToast } from "@/components/ui/ToastProvider";
 import { formatPrice } from "@/lib/utils";
 
@@ -88,7 +88,19 @@ const detailFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
-export function UsersManager({ users }: { users: UserRow[] }) {
+export function UsersManager({
+  users,
+  title = "Users",
+  description = "Review learner profiles, progress, payments, and certificates from a premium detail workspace.",
+  resultLabel = "users",
+}: {
+  users: UserRow[];
+  title?: string;
+  description?: string;
+  resultLabel?: string;
+}) {
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeUser, setActiveUser] = useState<UserRow | null>(null);
@@ -109,6 +121,27 @@ export function UsersManager({ users }: { users: UserRow[] }) {
     () => users.reduce((sum, user) => sum + user.totalSpent, 0),
     [users]
   );
+  const filteredUsers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) {
+      return users;
+    }
+
+    return users.filter((user) => {
+      const name = user.name?.toLowerCase() || "";
+      const email = user.email.toLowerCase();
+      return name.includes(query) || email.includes(query);
+    });
+  }, [searchQuery, users]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchInput]);
 
   function openDetails(user: UserRow) {
     setActiveUser(user);
@@ -165,8 +198,8 @@ export function UsersManager({ users }: { users: UserRow[] }) {
     <div className="space-y-6">
       <AdminPageIntro
         eyebrow="Audience"
-        title="Users"
-        description="Review learner profiles, progress, payments, and certificates from a premium detail workspace."
+        title={title}
+        description={description}
       />
 
       <AdminStatGrid>
@@ -179,6 +212,36 @@ export function UsersManager({ users }: { users: UserRow[] }) {
       </AdminStatGrid>
 
       <AdminCard className="overflow-hidden">
+        <div className="border-b border-white/10 px-4 py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full max-w-xl">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <AdminInput
+                type="text"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Search by name or email..."
+                className="bg-slate-950/70 pl-10 pr-11 text-slate-100 placeholder:text-slate-500"
+              />
+              {searchInput ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchInput("");
+                    setSearchQuery("");
+                  }}
+                  className="absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+            <p className="text-sm text-slate-400">
+              Showing {filteredUsers.length} of {users.length} {resultLabel}
+            </p>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -191,7 +254,7 @@ export function UsersManager({ users }: { users: UserRow[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/10">
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-white/[0.02]">
                   <td className="px-4 py-4">
                     <div>
@@ -218,6 +281,13 @@ export function UsersManager({ users }: { users: UserRow[] }) {
                   </td>
                 </tr>
               ))}
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
+                    No {resultLabel} match your search yet.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

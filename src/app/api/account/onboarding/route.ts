@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
 import { getPublicCourseCatalogData } from "@/lib/data";
+import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import { isValidOnboardingQuizAnswers } from "@/lib/onboarding";
-import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import { prisma } from "@/lib/prisma";
 import { isPrismaSchemaMismatchError } from "@/lib/prisma-errors";
+import { sanitizeSupabaseAuthMetadata } from "@/lib/supabase-auth-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import type { Course, OnboardingQuizAnswers } from "@/types";
 import { Prisma } from "@prisma/client";
 
 type OnboardingMetadata = {
-  onboarding_answers?: OnboardingQuizAnswers;
-  onboarding_recommendations?: string[];
   onboarding_completed_at?: string | null;
 };
 
@@ -29,6 +28,21 @@ async function getAuthenticatedUser() {
   } = await supabase.auth.getUser();
 
   return user ?? null;
+}
+
+async function ensureOnboardingUserRecord(
+  user: Awaited<ReturnType<typeof getAuthenticatedUser>>
+) {
+  if (!user) {
+    return null;
+  }
+
+  try {
+    return await syncAuthenticatedUser(user);
+  } catch (error) {
+    console.error("[account.onboarding] Unable to ensure local user profile.", error);
+    return null;
+  }
 }
 
 function normalizeAnswers(value: unknown) {
@@ -213,13 +227,30 @@ async function getOnboardingProfile(userId: string) {
 }
 
 async function updateOnboardingProfileAnswers(
-  userId: string,
+  user: NonNullable<Awaited<ReturnType<typeof getAuthenticatedUser>>>,
   answers: OnboardingQuizAnswers,
   recommendationIds: string[]
 ) {
+  await ensureOnboardingUserRecord(user);
+
   try {
-    await prisma.user.update({
-      where: { id: userId },
+    const result = await prisma.user.updateMany({
+      where: { id: user.id },
+      data: {
+        quizAnswers: toJsonb(answers),
+        ...(recommendationIds.length > 0
+          ? { onboardingRecommendations: recommendationIds }
+          : {}),
+      },
+    });
+
+    if (result.count > 0) {
+      return;
+    }
+
+    await ensureOnboardingUserRecord(user);
+    await prisma.user.updateMany({
+      where: { id: user.id },
       data: {
         quizAnswers: toJsonb(answers),
         ...(recommendationIds.length > 0
@@ -229,8 +260,8 @@ async function updateOnboardingProfileAnswers(
     });
   } catch (error) {
     if (isRecommendationSerializationError(error)) {
-      await prisma.user.update({
-        where: { id: userId },
+      await prisma.user.updateMany({
+        where: { id: user.id },
         data: {
           quizAnswers: toJsonb(answers),
         },
@@ -246,10 +277,15 @@ async function updateOnboardingProfileAnswers(
   }
 }
 
-async function markOnboardingCompleted(userId: string, completedAt: Date) {
+async function markOnboardingCompleted(
+  user: NonNullable<Awaited<ReturnType<typeof getAuthenticatedUser>>>,
+  completedAt: Date
+) {
+  await ensureOnboardingUserRecord(user);
+
   try {
-    await prisma.user.update({
-      where: { id: userId },
+    await prisma.user.updateMany({
+      where: { id: user.id },
       data: {
         onboardingCompleted: true,
         onboardingCompletedAt: completedAt,
@@ -263,7 +299,7 @@ async function markOnboardingCompleted(userId: string, completedAt: Date) {
 }
 
 async function updateOnboardingCompletionState(
-  userId: string,
+  user: NonNullable<Awaited<ReturnType<typeof getAuthenticatedUser>>>,
   {
     onboardingCompleted,
     onboardingCompletedAt,
@@ -274,9 +310,25 @@ async function updateOnboardingCompletionState(
     recommendationIds: string[];
   }
 ) {
+  await ensureOnboardingUserRecord(user);
+
   try {
-    await prisma.user.update({
-      where: { id: userId },
+    const result = await prisma.user.updateMany({
+      where: { id: user.id },
+      data: {
+        onboardingCompleted,
+        onboardingCompletedAt,
+        onboardingRecommendations: recommendationIds,
+      },
+    });
+
+    if (result.count > 0) {
+      return;
+    }
+
+    await ensureOnboardingUserRecord(user);
+    await prisma.user.updateMany({
+      where: { id: user.id },
       data: {
         onboardingCompleted,
         onboardingCompletedAt,
@@ -285,8 +337,8 @@ async function updateOnboardingCompletionState(
     });
   } catch (error) {
     if (isRecommendationSerializationError(error)) {
-      await prisma.user.update({
-        where: { id: userId },
+      await prisma.user.updateMany({
+        where: { id: user.id },
         data: {
           onboardingCompleted,
           onboardingCompletedAt,
@@ -301,22 +353,12 @@ async function updateOnboardingCompletionState(
 
 async function updateOnboardingMetadata(
   userId: string,
-  existingMetadata: Record<string, unknown>,
   nextMetadata: OnboardingMetadata
 ) {
-  const supabaseAdmin = getSupabaseAdminClient();
-  const mergedMetadata = {
-    ...existingMetadata,
-    ...nextMetadata,
-  };
-
-  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-    user_metadata: mergedMetadata,
+  await sanitizeSupabaseAuthMetadata({
+    authUserId: userId,
+    onboardingCompletedAt: nextMetadata.onboarding_completed_at,
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
 export async function GET() {
@@ -326,6 +368,8 @@ export async function GET() {
     if (!user) {
       return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
     }
+
+    await ensureOnboardingUserRecord(user);
 
     const [courses, categories, profile] = await Promise.all([
       getPublicCourseCatalogData().then((result) => result.courses),
@@ -379,22 +423,17 @@ export async function POST(request: Request) {
       );
     }
 
+    await ensureOnboardingUserRecord(user);
+
     const recommendations = await getRecommendations(body.answers, 3);
 
     await updateOnboardingProfileAnswers(
-      user.id,
+      user,
       body.answers,
       recommendations.map((course) => course.id)
     );
 
-    await updateOnboardingMetadata(
-      user.id,
-      (user.user_metadata as Record<string, unknown>) ?? {},
-      {
-        onboarding_answers: body.answers,
-        onboarding_recommendations: recommendations.map((course) => course.id),
-      }
-    );
+    await updateOnboardingMetadata(user.id, {});
 
     return NextResponse.json({
       recommendations,
@@ -416,6 +455,8 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
     }
 
+    await ensureOnboardingUserRecord(user);
+
     const existingProfile = await getOnboardingProfile(user.id);
     const body = await request.json().catch(() => ({}));
     const recommendationIds = Array.isArray(body.recommendationIds)
@@ -425,20 +466,15 @@ export async function PATCH(request: Request) {
 
     const completedAt = new Date();
 
-    await updateOnboardingCompletionState(user.id, {
+    await updateOnboardingCompletionState(user, {
       onboardingCompleted: true,
       onboardingCompletedAt: completedAt,
       recommendationIds: resetRecommendations ? [] : recommendationIds,
     });
 
-    await updateOnboardingMetadata(
-      user.id,
-      (user.user_metadata as Record<string, unknown>) ?? {},
-      {
-        onboarding_recommendations: resetRecommendations ? [] : recommendationIds,
-        onboarding_completed_at: completedAt.toISOString(),
-      }
-    );
+    await updateOnboardingMetadata(user.id, {
+      onboarding_completed_at: completedAt.toISOString(),
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -458,20 +494,17 @@ export async function DELETE() {
       return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
     }
 
-    await updateOnboardingCompletionState(user.id, {
+    await ensureOnboardingUserRecord(user);
+
+    await updateOnboardingCompletionState(user, {
       onboardingCompleted: false,
       onboardingCompletedAt: null,
       recommendationIds: [],
     });
 
-    await updateOnboardingMetadata(
-      user.id,
-      (user.user_metadata as Record<string, unknown>) ?? {},
-      {
-        onboarding_recommendations: [],
-        onboarding_completed_at: null,
-      }
-    );
+    await updateOnboardingMetadata(user.id, {
+      onboarding_completed_at: null,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

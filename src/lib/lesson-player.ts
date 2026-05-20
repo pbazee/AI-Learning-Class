@@ -54,6 +54,7 @@ export type SerializedLessonProgress = {
 type LessonProgressRow = {
   id: string;
   lessonId: string;
+  assetId: string | null;
   contentType: CourseAssetType | null;
   isCompleted: boolean;
   progressPercent: number;
@@ -210,7 +211,7 @@ function serializeLessonProgress(row: LessonProgressRow): SerializedLessonProgre
 
   return {
     lessonId: row.lessonId,
-    assetId: null,
+    assetId: row.assetId,
     contentType: toSerializedContentType(row.contentType),
     progressPercent,
     lastPosition,
@@ -222,6 +223,29 @@ function serializeLessonProgress(row: LessonProgressRow): SerializedLessonProgre
     updatedAt: row.updatedAt.toISOString(),
   };
 }
+
+function buildLessonProgressWhere(userId: string, lessonId: string, assetId?: string | null) {
+  return {
+    userId,
+    lessonId,
+    assetId: assetId ?? null,
+  };
+}
+
+const lessonProgressSelect = {
+  id: true,
+  lessonId: true,
+  assetId: true,
+  contentType: true,
+  isCompleted: true,
+  progressPercent: true,
+  watchedSeconds: true,
+  lastPosition: true,
+  lastPdfPage: true,
+  lastPage: true,
+  completedAt: true,
+  updatedAt: true,
+} as const;
 
 function clampWholeSeconds(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -311,6 +335,26 @@ export async function ensureLessonProgressColumns() {
           WHERE lp."lessonId" = l.id
             AND lp."courseId" IS NULL
         `);
+        await prisma.$executeRaw(Prisma.sql`
+          ALTER TABLE "LessonProgress"
+          DROP CONSTRAINT IF EXISTS "LessonProgress_userId_lessonId_key"
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          DROP INDEX IF EXISTS "LessonProgress_userId_lessonId_key"
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          DROP INDEX IF EXISTS "lesson_progress_user_lesson_key"
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          CREATE UNIQUE INDEX IF NOT EXISTS "lesson_progress_user_lesson_primary_unique"
+          ON "LessonProgress" ("userId", "lessonId")
+          WHERE "assetId" IS NULL
+        `);
+        await prisma.$executeRaw(Prisma.sql`
+          CREATE UNIQUE INDEX IF NOT EXISTS "lesson_progress_user_lesson_asset_unique"
+          ON "LessonProgress" ("userId", "lessonId", "assetId")
+          WHERE "assetId" IS NOT NULL
+        `);
 
         lessonProgressColumnsAvailable = true;
         return true;
@@ -381,6 +425,7 @@ export async function getCourseProgressState(userId: string, courseId: string) {
             select: {
               id: true,
               lessonId: true,
+              assetId: true,
               contentType: true,
               isCompleted: true,
               progressPercent: true,
@@ -396,7 +441,7 @@ export async function getCourseProgressState(userId: string, courseId: string) {
 
     const assetProgressByKey = Object.fromEntries(
       (progressRows as LessonProgressRow[]).map((row) => [
-        `${row.lessonId}:primary`,
+        `${row.lessonId}:${row.assetId ?? "primary"}`,
         serializeLessonProgress(row),
       ])
     );
@@ -407,7 +452,7 @@ export async function getCourseProgressState(userId: string, courseId: string) {
         const assetEntries = assetIds.map((assetId) => {
           const key = `${lesson.id}:${assetId ?? "primary"}`;
           return (
-            assetProgressByKey[`${lesson.id}:primary`] ?? {
+            assetProgressByKey[key] ?? {
               lessonId: lesson.id,
               assetId: null,
               contentType: null,
@@ -496,26 +541,33 @@ export async function getLessonProgressEntry(userId: string, lessonId: string, a
   await ensureLessonProgressColumns();
 
   const row = await (prisma.lessonProgress as any).findFirst({
+    where: buildLessonProgressWhere(userId, lessonId, assetId),
+    select: lessonProgressSelect,
+  });
+
+  return row ? serializeLessonProgress(row) : null;
+}
+
+export async function getLessonProgressEntries(userId: string, lessonId: string) {
+  await ensureLessonProgressColumns();
+
+  const rows = await (prisma.lessonProgress as any).findMany({
     where: {
       userId,
       lessonId,
     },
-    select: {
-      id: true,
-      lessonId: true,
-      contentType: true,
-      isCompleted: true,
-      progressPercent: true,
-      watchedSeconds: true,
-      lastPosition: true,
-      lastPdfPage: true,
-      lastPage: true,
-      completedAt: true,
-      updatedAt: true,
-    },
+    orderBy: [
+      {
+        assetId: "asc",
+      },
+      {
+        updatedAt: "desc",
+      },
+    ],
+    select: lessonProgressSelect,
   });
 
-  return row ? serializeLessonProgress(row) : null;
+  return (rows as LessonProgressRow[]).map(serializeLessonProgress);
 }
 
 export async function upsertLessonProgressEntry({
@@ -536,23 +588,8 @@ export async function upsertLessonProgressEntry({
   await ensureLessonProgressColumns();
 
   const existingProgress = await (prisma.lessonProgress as any).findFirst({
-    where: {
-      userId,
-      lessonId,
-    },
-    select: {
-      id: true,
-      lessonId: true,
-      contentType: true,
-      isCompleted: true,
-      progressPercent: true,
-      watchedSeconds: true,
-      lastPosition: true,
-      lastPdfPage: true,
-      lastPage: true,
-      completedAt: true,
-      updatedAt: true,
-    },
+    where: buildLessonProgressWhere(userId, lessonId, assetId),
+    select: lessonProgressSelect,
   });
 
   if (touchOnly) {
@@ -564,42 +601,19 @@ export async function upsertLessonProgressEntry({
               increment: 0,
             },
           },
-          select: {
-            id: true,
-            lessonId: true,
-            contentType: true,
-            isCompleted: true,
-            progressPercent: true,
-            watchedSeconds: true,
-            lastPosition: true,
-            lastPdfPage: true,
-            lastPage: true,
-            completedAt: true,
-            updatedAt: true,
-          },
+          select: lessonProgressSelect,
         })
       : await (prisma.lessonProgress as any).create({
           data: {
             userId,
             lessonId,
+            assetId: assetId ?? null,
             contentType: toStoredContentType(contentType, lessonType),
             isCompleted: false,
             progressPercent: 0,
             completedAt: null,
           },
-          select: {
-            id: true,
-            lessonId: true,
-            contentType: true,
-            isCompleted: true,
-            progressPercent: true,
-            watchedSeconds: true,
-            lastPosition: true,
-            lastPdfPage: true,
-            lastPage: true,
-            completedAt: true,
-            updatedAt: true,
-          },
+          select: lessonProgressSelect,
         });
 
     const courseProgress = await getCourseProgressState(userId, courseId);
@@ -670,6 +684,7 @@ export async function upsertLessonProgressEntry({
     ? await (prisma.lessonProgress as any).update({
         where: { id: existingProgress.id },
         data: {
+          assetId: assetId ?? null,
           contentType: storedContentType,
           isCompleted: nextIsCompleted,
           progressPercent: nextProgressPercent,
@@ -679,24 +694,13 @@ export async function upsertLessonProgressEntry({
           lastPage: nextLastPage,
           completedAt: nextIsCompleted ? new Date() : null,
         },
-        select: {
-          id: true,
-          lessonId: true,
-          contentType: true,
-          isCompleted: true,
-          progressPercent: true,
-          watchedSeconds: true,
-          lastPosition: true,
-          lastPdfPage: true,
-          lastPage: true,
-          completedAt: true,
-          updatedAt: true,
-        },
+        select: lessonProgressSelect,
       })
     : await (prisma.lessonProgress as any).create({
         data: {
           userId,
           lessonId,
+          assetId: assetId ?? null,
           contentType: storedContentType,
           isCompleted: nextIsCompleted,
           progressPercent: nextProgressPercent,
@@ -706,19 +710,7 @@ export async function upsertLessonProgressEntry({
           lastPage: nextLastPage,
           completedAt: nextIsCompleted ? new Date() : null,
         },
-        select: {
-          id: true,
-          lessonId: true,
-          contentType: true,
-          isCompleted: true,
-          progressPercent: true,
-          watchedSeconds: true,
-          lastPosition: true,
-          lastPdfPage: true,
-          lastPage: true,
-          completedAt: true,
-          updatedAt: true,
-        },
+        select: lessonProgressSelect,
       });
 
   const courseProgress = await getCourseProgressState(userId, courseId);

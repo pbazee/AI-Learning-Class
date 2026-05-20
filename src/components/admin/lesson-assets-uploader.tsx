@@ -11,8 +11,14 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react";
-import { AdminButton, AdminCard, AdminInput, StatusPill } from "@/components/admin/ui";
+import {
+  AdminButton,
+  AdminCard,
+  AdminInput,
+  StatusPill,
+} from "@/components/admin/ui";
 import { useToast } from "@/components/ui/ToastProvider";
+import { uploadAdminFileDirect } from "@/lib/admin-direct-upload";
 import {
   getLessonAssetDisplayTitle,
   inferLessonAssetKind,
@@ -39,15 +45,6 @@ type PendingUpload = {
   progress: number;
   status: "uploading" | "error";
   errorMessage?: string;
-};
-
-type UploadedAssetPayload = {
-  bucket: string;
-  path: string;
-  url: string;
-  fileName?: string;
-  mimeType?: string;
-  sizeBytes?: number;
 };
 
 const acceptedAssetTypes = [
@@ -133,65 +130,6 @@ async function parseJsonResponse(response: Response) {
   }
 }
 
-function uploadFileWithProgress(
-  folder: string,
-  file: File,
-  onProgress: (progress: number) => void
-) {
-  return new Promise<UploadedAssetPayload>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/admin/upload", true);
-
-    xhr.upload.onprogress = (event) => {
-      if (!event.lengthComputable) {
-        return;
-      }
-
-      onProgress(Math.max(5, Math.round((event.loaded / event.total) * 100)));
-    };
-
-    xhr.onerror = () => reject(new Error("Network error while uploading."));
-    xhr.onload = () => {
-      const payload = (() => {
-        try {
-          return JSON.parse(xhr.responseText) as Record<string, unknown>;
-        } catch {
-          return null;
-        }
-      })();
-
-      if (xhr.status >= 200 && xhr.status < 300) {
-        onProgress(100);
-        if (
-          payload &&
-          typeof payload.path === "string" &&
-          typeof payload.url === "string" &&
-          typeof payload.bucket === "string"
-        ) {
-          resolve(payload as UploadedAssetPayload);
-          return;
-        }
-
-        reject(new Error("Upload completed, but the server response was incomplete."));
-        return;
-      }
-
-      reject(
-        new Error(
-          typeof payload?.error === "string"
-            ? payload.error
-            : "Upload failed before the file reached storage."
-        )
-      );
-    };
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("folder", folder);
-    xhr.send(formData);
-  });
-}
-
 async function deleteUploadedFile(path?: string) {
   if (!path) {
     return;
@@ -263,7 +201,10 @@ export function LessonAssetsUploader({
       commitAssets(nextAssets);
       toast("Lesson asset removed.", "success");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Unable to remove the asset.", "error");
+      toast(
+        error instanceof Error ? error.message : "Unable to remove the asset.",
+        "error"
+      );
     }
   }
 
@@ -288,17 +229,17 @@ export function LessonAssetsUploader({
         const pendingId = uploadRows[fileIndex].id;
 
         try {
-          const uploadedAsset = await uploadFileWithProgress(
-            `courses/lessons/${courseId}`,
+          const uploadedAsset = await uploadAdminFileDirect({
             file,
-            (progress) => {
-            setPendingUploads((current) =>
-              current.map((upload) =>
-                upload.id === pendingId ? { ...upload, progress } : upload
-              )
-            );
-            }
-          );
+            folder: `courses/lessons/${courseId}`,
+            onProgress: (progress) => {
+              setPendingUploads((current) =>
+                current.map((upload) =>
+                  upload.id === pendingId ? { ...upload, progress } : upload
+                )
+              );
+            },
+          });
 
           const inferredKind = inferLessonAssetKind({
             fileName: file.name,
@@ -310,7 +251,7 @@ export function LessonAssetsUploader({
                 ? "PDF"
                 : inferredKind === "VIDEO"
                   ? "VIDEO"
-                : inferredKind === "IMAGE"
+                  : inferredKind === "IMAGE"
                     ? "IMAGE"
                     : "FILE",
             assetUrl: uploadedAsset.url,
@@ -324,7 +265,9 @@ export function LessonAssetsUploader({
           };
 
           commitAssets([...latestAssetsRef.current, nextAsset]);
-          setPendingUploads((current) => current.filter((upload) => upload.id !== pendingId));
+          setPendingUploads((current) =>
+            current.filter((upload) => upload.id !== pendingId)
+          );
         } catch (error) {
           setPendingUploads((current) =>
             current.map((upload) =>
@@ -383,7 +326,8 @@ export function LessonAssetsUploader({
           <div>
             <p className="text-sm font-semibold text-white">Lesson Assets</p>
             <p className="mt-1 text-xs text-slate-400">
-              Drag in multiple videos, images, audios, PDFs, and supporting files. The first item becomes the primary lesson asset.
+              Drag in multiple videos, images, audios, PDFs, and supporting
+              files. The first item becomes the primary lesson asset.
             </p>
           </div>
           <AdminButton
@@ -402,9 +346,13 @@ export function LessonAssetsUploader({
             <AdminCard key={upload.id} className="p-4">
               <div className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">{upload.fileName}</p>
+                  <p className="truncate text-sm font-semibold text-white">
+                    {upload.fileName}
+                  </p>
                   <p className="mt-1 text-xs text-slate-400">
-                    {upload.status === "error" ? upload.errorMessage : "Uploading to Cloudflare storage..."}
+                    {upload.status === "error"
+                      ? upload.errorMessage
+                      : "Uploading directly to Cloudflare R2..."}
                   </p>
                 </div>
                 {upload.status === "uploading" ? (
@@ -418,7 +366,12 @@ export function LessonAssetsUploader({
                   className={`h-full rounded-full ${
                     upload.status === "error" ? "bg-rose-500" : "bg-primary-blue"
                   }`}
-                  style={{ width: `${Math.min(100, Math.max(upload.progress, upload.status === "error" ? 100 : 0))}%` }}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(upload.progress, upload.status === "error" ? 100 : 0)
+                    )}%`,
+                  }}
                 />
               </div>
             </AdminCard>
@@ -437,7 +390,9 @@ export function LessonAssetsUploader({
                 key={`${asset.id || asset.assetPath}-${assetIndex}`}
                 className="p-4"
                 draggable
-                onDragStart={() => setDraggingAssetId(asset.id || asset.assetPath || String(assetIndex))}
+                onDragStart={() =>
+                  setDraggingAssetId(asset.id || asset.assetPath || String(assetIndex))
+                }
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => {
                   const activeId = draggingAssetId;
@@ -476,9 +431,13 @@ export function LessonAssetsUploader({
                           {asset.fileName || getLessonAssetDisplayTitle(asset)}
                         </p>
                         <StatusPill tone="info">{getAssetBadge(kind)}</StatusPill>
-                        {assetIndex === 0 ? <StatusPill tone="success">Primary</StatusPill> : null}
+                        {assetIndex === 0 ? (
+                          <StatusPill tone="success">Primary</StatusPill>
+                        ) : null}
                       </div>
-                      <p className="mt-1 truncate text-xs text-slate-400">{asset.assetUrl}</p>
+                      <p className="mt-1 truncate text-xs text-slate-400">
+                        {asset.assetUrl}
+                      </p>
                     </div>
                   </div>
 

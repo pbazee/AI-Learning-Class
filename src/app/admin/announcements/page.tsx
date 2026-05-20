@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AnnouncementsManager } from "@/components/admin/announcements-manager";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function AdminAnnouncementsPage() {
   const announcements = await (async () => {

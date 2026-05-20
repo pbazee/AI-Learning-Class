@@ -66,9 +66,9 @@ export function MobileBottomNav() {
 
   return (
     <>
-      <div className="h-[var(--mobile-bottom-nav-height)] lg:hidden" />
-      <nav className="fixed inset-x-0 bottom-0 z-[95] border-t border-slate-200/80 bg-white/96 px-2 pb-[env(safe-area-inset-bottom)] pt-2 shadow-[0_-18px_50px_-32px_rgba(15,23,42,0.35)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/96 lg:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+      <div className="h-[calc(var(--mobile-bottom-nav-height)+1rem+env(safe-area-inset-bottom))] lg:hidden" />
+      <nav className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] z-[95] px-2 lg:hidden">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1 rounded-[28px] border border-slate-200/80 bg-white/96 px-2 pb-2 pt-2 shadow-[0_18px_50px_-24px_rgba(15,23,42,0.35)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/96">
           {items.map(({ label, href, icon: Icon }) => {
             const active =
               (href === "/" && pathname === "/") ||

@@ -1,7 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  engineType = "client"
-  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -259,6 +257,8 @@ model LessonProgress {
   lesson          Lesson    @relation(fields: [lessonId], references: [id])
   user            User      @relation(fields: [userId], references: [id])
 
+  @@index([lessonId], map: "lesson_progress_lesson_idx")
+  @@index([assetId], map: "lesson_progress_asset_idx")
   @@index([userId, lessonId], map: "lesson_progress_user_lesson_idx")
   @@index([userId, lessonId, assetId], map: "lesson_progress_user_lesson_asset_idx")
 }

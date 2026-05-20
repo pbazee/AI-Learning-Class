@@ -4,8 +4,6 @@ import { Footer } from "@/components/layout/Footer";
 import { AffiliateDashboard } from "@/components/affiliate/AffiliateDashboard";
 import { getCurrentUserProfile } from "@/lib/data";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function AffiliateDashboardPage() {
   const user = await getCurrentUserProfile();

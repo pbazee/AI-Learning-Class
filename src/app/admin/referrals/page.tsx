@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ReferralsManager } from "@/components/admin/referrals-manager";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function AdminReferralsPage() {
   const { program, referrals } = await (async () => {

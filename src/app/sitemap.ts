@@ -2,8 +2,6 @@ import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/prisma";
 import { absoluteUrl } from "@/lib/site-server";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 const staticPages: Array<{
   path: string;

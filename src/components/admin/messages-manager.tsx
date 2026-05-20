@@ -2,9 +2,13 @@
 
 import { startTransition, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { MailOpen, MessageSquareReply, RefreshCw, Reply, UserRound } from "lucide-react";
+import { MailOpen, MessageSquareReply, RefreshCw, Reply, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { replyToContactMessageAction, updateContactMessageStatusAction } from "@/app/admin/actions";
+import {
+  deleteContactMessageAction,
+  replyToContactMessageAction,
+  updateContactMessageStatusAction,
+} from "@/app/admin/actions";
 import {
   AdminButton,
   AdminCard,
@@ -71,6 +75,25 @@ export function MessagesManager({ messages }: { messages: ContactMessageThread[]
         toast(result.message, result.success ? "success" : "error");
         if (result.success) {
           setReplyBody("");
+          router.refresh();
+        }
+      } finally {
+        setBusyAction(null);
+      }
+    });
+  }
+
+  function handleDelete(id: string) {
+    setBusyAction(`delete:${id}`);
+    startTransition(async () => {
+      try {
+        const result = await deleteContactMessageAction({ id });
+        toast(result.message, result.success ? "success" : "error");
+        if (result.success) {
+          if (selectedId === id) {
+            const nextMessage = messages.find((message) => message.id !== id);
+            setSelectedId(nextMessage?.id ?? null);
+          }
           router.refresh();
         }
       } finally {
@@ -173,6 +196,15 @@ export function MessagesManager({ messages }: { messages: ContactMessageThread[]
                     </div>
 
                     <div className="flex flex-wrap gap-2">
+                      <AdminButton
+                        type="button"
+                        variant="danger"
+                        busy={busyAction === `delete:${selectedMessage.id}`}
+                        icon={<Trash2 className="h-4 w-4" />}
+                        onClick={() => handleDelete(selectedMessage.id)}
+                      >
+                        Delete
+                      </AdminButton>
                       <AdminButton
                         type="button"
                         variant="secondary"

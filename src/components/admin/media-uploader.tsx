@@ -2,18 +2,20 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { FileAudio, FileImage, FileText, FileVideo, Trash2, UploadCloud } from "lucide-react";
+import {
+  FileAudio,
+  FileImage,
+  FileText,
+  FileVideo,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { AdminButton, AdminCard } from "@/components/admin/ui";
 import { useToast } from "@/components/ui/ToastProvider";
-
-export type UploadedAsset = {
-  bucket: string;
-  path: string;
-  url: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-};
+import {
+  type UploadedAsset,
+  uploadAdminFileDirect,
+} from "@/lib/admin-direct-upload";
 
 function getFileIcon(mimeType?: string) {
   if (mimeType?.startsWith("image/")) return FileImage;
@@ -68,54 +70,43 @@ export function MediaUploader({
   hint?: string;
   folder: string;
   accept: string;
-  value?: { url?: string | null; path?: string | null; fileName?: string | null; mimeType?: string | null };
+  value?: {
+    url?: string | null;
+    path?: string | null;
+    fileName?: string | null;
+    mimeType?: string | null;
+  };
   onUploaded: (file: UploadedAsset) => void;
   onRemoved?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [pendingFileName, setPendingFileName] = useState("");
   const { toast } = useToast();
 
   async function handleUpload(file: File) {
     setBusy(true);
+    setPendingFileName(file.name);
+    setUploadProgress(0);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", folder);
-
-      const uploadResponse = await fetch("/api/admin/upload", {
-        method: "POST",
-        body: formData,
+      const uploadedFile = await uploadAdminFileDirect({
+        file,
+        folder,
+        onProgress: setUploadProgress,
       });
-      const uploadPayload = await parseJsonResponse(uploadResponse);
-
-      if (
-        !uploadResponse.ok ||
-        typeof uploadPayload?.bucket !== "string" ||
-        typeof uploadPayload?.path !== "string" ||
-        typeof uploadPayload?.url !== "string"
-      ) {
-        throw new Error(
-          typeof uploadPayload?.error === "string"
-            ? uploadPayload.error
-            : "Upload failed."
-        );
-      }
-
-      onUploaded({
-        bucket: uploadPayload.bucket,
-        path: uploadPayload.path,
-        url: uploadPayload.url,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        sizeBytes: file.size,
-      });
+      onUploaded(uploadedFile);
       toast("File uploaded successfully.", "success");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Upload failed. Please try again.", "error");
+      toast(
+        error instanceof Error ? error.message : "Upload failed. Please try again.",
+        "error"
+      );
     } finally {
       setBusy(false);
+      setPendingFileName("");
+      setUploadProgress(0);
       if (inputRef.current) {
         inputRef.current.value = "";
       }
@@ -130,14 +121,22 @@ export function MediaUploader({
       onRemoved?.();
       toast("File removed successfully.", "success");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Unable to remove the file right now.", "error");
+      toast(
+        error instanceof Error
+          ? error.message
+          : "Unable to remove the file right now.",
+        "error"
+      );
     } finally {
       setBusy(false);
     }
   }
 
   const FileIcon = getFileIcon(value?.mimeType || undefined);
-  const isImage = Boolean(value?.mimeType?.startsWith("image/") || value?.url?.match(/\.(png|jpg|jpeg|webp|gif|svg)$/i));
+  const isImage = Boolean(
+    value?.mimeType?.startsWith("image/") ||
+      value?.url?.match(/\.(png|jpg|jpeg|webp|gif|svg)$/i)
+  );
 
   return (
     <div className="space-y-3">
@@ -162,8 +161,12 @@ export function MediaUploader({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">{value.fileName || "Uploaded file"}</p>
-            <p className="text-xs text-muted-foreground">{value.mimeType || "Stored in Cloudflare storage"}</p>
+            <p className="truncate text-sm font-semibold text-foreground">
+              {value.fileName || "Uploaded file"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {value.mimeType || "Stored in Cloudflare R2"}
+            </p>
           </div>
           <AdminButton
             type="button"
@@ -191,8 +194,13 @@ export function MediaUploader({
           />
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-foreground">Upload to Cloudflare storage</p>
-              <p className="mt-1 text-xs text-muted-foreground">Images and files go to R2, while videos go to Cloudflare Stream.</p>
+              <p className="text-sm font-semibold text-foreground">
+                Upload to Cloudflare R2
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Files upload directly from the browser with a presigned URL, so
+                large assets never hit the Next.js server.
+              </p>
             </div>
             <AdminButton
               type="button"
@@ -203,6 +211,20 @@ export function MediaUploader({
               {busy ? "Uploading" : "Choose File"}
             </AdminButton>
           </div>
+          {busy ? (
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="truncate">{pendingFileName || "Uploading file..."}</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary-blue transition-[width]"
+                  style={{ width: `${Math.min(100, Math.max(uploadProgress, 0))}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
         </AdminCard>
       )}
     </div>

@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { UsersManager } from "@/components/admin/users-manager";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 const joinedFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -41,6 +39,9 @@ export default async function AdminLearnersPage() {
 
   return (
     <UsersManager
+      title="Learners"
+      description="Review learner profiles, enrollments, subscriptions, and payment history from one focused workspace."
+      resultLabel="learners"
       users={users.map((user) => ({
         id: user.id,
         name: user.name,

@@ -1,8 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { SubscribersManager } from "@/components/admin/subscribers-manager";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",

@@ -3,7 +3,12 @@ import { Prisma, type Role } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getPrimaryAdminEmail, normalizeEmail } from "./admin-email";
 import { isPrismaConnectionError, isPrismaSchemaMismatchError } from "./prisma-errors";
-import { getSupabaseAuthRole, syncSupabaseAuthRole } from "./supabase-auth-admin";
+import {
+  getSupabaseAuthRole,
+  hasBulkySupabaseUserMetadata,
+  sanitizeSupabaseAuthMetadata,
+  syncSupabaseAuthRole,
+} from "./supabase-auth-admin";
 
 function generateReferralCode() {
   return Math.random().toString(36).slice(2, 10).toUpperCase();
@@ -282,6 +287,17 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
       role,
     }).catch((error) => {
       console.warn("[auth.sync] Unable to update Supabase auth metadata for the current user.", error);
+    });
+  }
+
+  if (hasBulkySupabaseUserMetadata(user.user_metadata)) {
+    await sanitizeSupabaseAuthMetadata({
+      authUserId: user.id,
+      email,
+      role,
+      onboardingCompletedAt: onboardingCompletedAt?.toISOString() ?? null,
+    }).catch((error) => {
+      console.warn("[auth.sync] Unable to trim bulky Supabase auth metadata.", error);
     });
   }
 

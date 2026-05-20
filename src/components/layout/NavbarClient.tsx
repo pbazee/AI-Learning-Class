@@ -460,7 +460,20 @@ export function NavbarClient({
                   ) : null}</AnimatePresence>
                 </div>
               ) : (
-                <Link href="/login" className="inline-flex h-10 items-center rounded-full bg-primary-blue px-4 text-sm font-bold text-white shadow-[0_18px_40px_-24px_rgba(0,86,210,0.95)] transition hover:bg-primary-blue/90">Login</Link>
+                <>
+                  <Link
+                    href="/signup"
+                    className="inline-flex h-10 items-center rounded-full bg-emerald-500 px-4 text-sm font-bold text-white shadow-[0_18px_40px_-24px_rgba(16,185,129,0.95)] transition hover:bg-emerald-500/90"
+                  >
+                    Get Started for Free
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="inline-flex h-10 items-center rounded-full border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 transition hover:border-primary-blue/35 hover:text-primary-blue dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  >
+                    Login
+                  </Link>
+                </>
               )}
               <Dialog.Trigger asChild>
                 <button
@@ -551,9 +564,12 @@ export function NavbarClient({
                     <>
                       <p className="text-sm font-semibold text-slate-950 dark:text-white">Account</p>
                       <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Sign in to manage your dashboard, wishlist, and course progress.</p>
-                      <Link href="/login" onClick={() => setMenuOpen(false)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary-blue px-4 py-3 text-sm font-bold text-white transition hover:bg-primary-blue/90">
+                      <Link href="/login" onClick={() => setMenuOpen(false)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition hover:border-primary-blue/30 hover:text-primary-blue dark:border-slate-700 dark:bg-slate-950 dark:text-white">
                         <UserRound className="h-4 w-4" />
                         Login
+                      </Link>
+                      <Link href="/signup" onClick={() => setMenuOpen(false)} className="mt-3 inline-flex w-full items-center justify-center rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500/90">
+                        Get Started for Free
                       </Link>
                     </>
                   )}

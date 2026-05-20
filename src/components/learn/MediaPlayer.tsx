@@ -86,6 +86,7 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingSeekRef = useRef<number | null>(initialTime > 0 ? initialTime : null);
   const lastReportedTimeRef = useRef(initialTime);
+  const currentTimeRef = useRef(initialTime);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -135,6 +136,7 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
     const boundedTime = Math.max(0, Math.round(time));
     const element = mediaRef.current;
     pendingSeekRef.current = boundedTime;
+    currentTimeRef.current = boundedTime;
     if (!element) return;
     try {
       element.currentTime = boundedTime;
@@ -206,14 +208,15 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
         await mediaRef.current.play();
       },
       pause: () => mediaRef.current?.pause(),
-      getCurrentTime: () => mediaRef.current?.currentTime ?? currentTime,
+      getCurrentTime: () => mediaRef.current?.currentTime ?? currentTimeRef.current,
     }),
-    [applySeek, currentTime]
+    [applySeek]
   );
 
   useEffect(() => {
+    pendingSeekRef.current = initialTime > 0 ? initialTime : 0;
     applySeek(initialTime);
-  }, [applySeek, initialTime, src]);
+  }, [applySeek, src]);
 
   // ── Media event handlers ──────────────────────────────────────────────────
 
@@ -239,6 +242,7 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
       snapshot.duration > 0 && snapshot.currentTime >= Math.max(snapshot.duration - 1, 0);
     if (!(diff >= 0.5 || snapshot.currentTime === 0 || nearEnd)) return;
     lastReportedTimeRef.current = snapshot.currentTime;
+    currentTimeRef.current = snapshot.currentTime;
     setCurrentTime(snapshot.currentTime);
     onTimeUpdate?.(snapshot);
   }, [buildSnapshot, duration, getEffectiveDuration, onTimeUpdate]);
@@ -247,6 +251,7 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
     setIsPlaying(false);
     if (!mediaRef.current) return;
     const snapshot = buildSnapshot(mediaRef.current);
+    currentTimeRef.current = snapshot.currentTime;
     setCurrentTime(snapshot.currentTime);
     onPause?.(snapshot);
   }, [buildSnapshot, onPause]);
@@ -255,6 +260,7 @@ export const MediaPlayer = forwardRef<MediaPlayerHandle, MediaPlayerProps>(funct
     setIsPlaying(false);
     if (!mediaRef.current) return;
     const snapshot = buildSnapshot(mediaRef.current);
+    currentTimeRef.current = snapshot.currentTime;
     setCurrentTime(snapshot.currentTime);
     onEnded?.(snapshot);
   }, [buildSnapshot, onEnded]);

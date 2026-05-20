@@ -5,8 +5,6 @@ import { CategoriesGrid } from "@/components/landing/CategoriesGrid";
 import { getCategories } from "@/lib/data";
 import { buildSiteMetadata } from "@/lib/site-server";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export async function generateMetadata(): Promise<Metadata> {
   return buildSiteMetadata("/categories", {

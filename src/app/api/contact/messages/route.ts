@@ -37,6 +37,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      id: savedMessage.id,
       message: "Your message has been sent. Our team will get back to you soon.",
     });
   } catch (error) {

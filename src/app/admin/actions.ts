@@ -260,6 +260,10 @@ const contactMessageReplySchema = z.object({
   body: z.string().trim().min(3, "Reply message is required."),
 });
 
+const contactMessageDeleteSchema = z.object({
+  id: z.string().min(1),
+});
+
 const couponSchema = z.object({
   id: z.string().optional(),
   code: z.string().min(2, "Coupon code is required."),
@@ -2021,6 +2025,22 @@ export async function replyToContactMessageAction(
       return reply;
     },
     "Reply sent successfully."
+  );
+}
+
+export async function deleteContactMessageAction(
+  input: z.input<typeof contactMessageDeleteSchema>
+) {
+  return runValidatedAdminAction(
+    contactMessageDeleteSchema,
+    input,
+    "deleteContactMessage",
+    ["/admin/messages", "/dashboard"],
+    async (values) =>
+      prisma.contactMessage.delete({
+        where: { id: values.id },
+      }),
+    "Message deleted successfully."
   );
 }
 

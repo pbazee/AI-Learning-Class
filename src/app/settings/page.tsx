@@ -6,8 +6,6 @@ import { ResetOnboardingButton } from "@/components/onboarding/ResetOnboardingBu
 import { findCountryCodeByName } from "@/lib/countries";
 import { getCurrentUserProfile } from "@/lib/data";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function SettingsPage() {
   const user = await getCurrentUserProfile();

@@ -5,8 +5,6 @@ import { ensureLessonAssetsTable } from "@/lib/lesson-assets-table";
 import { ensureSubscriptionPlansTable } from "@/lib/subscription-plans";
 import { getLessonAssetDisplayTitle, inferLessonAssetKind } from "@/lib/lesson-assets";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
 
 export default async function AdminCoursesPage() {
   await ensureLessonPreviewColumns();

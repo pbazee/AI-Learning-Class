@@ -24,6 +24,20 @@ type CategoryRow = {
   courseCount: number;
 };
 
+async function parseJsonResponse(response: Response) {
+  const text = await response.text();
+
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { error: text };
+  }
+}
+
 export function CategoriesManager({
   categories,
   parentOptions,
@@ -34,6 +48,64 @@ export function CategoriesManager({
   const [busyId, setBusyId] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
+
+  async function handleSaveCategory(payload: {
+    id?: string;
+    name: string;
+    slug?: string;
+    description?: string;
+    imageUrl?: string | null;
+    imagePath?: string | null;
+    icon?: string;
+    color?: string;
+    isActive: boolean;
+    parentId?: string | null;
+  }) {
+    const hasId = Boolean(payload.id);
+    const endpoint = hasId
+      ? `/api/admin/categories/${payload.id}`
+      : "/api/admin/categories";
+    const method = hasId ? "PUT" : "POST";
+
+    console.log("[categories] Saving category", {
+      method,
+      endpoint,
+      payload,
+    });
+
+    const response = await fetch(endpoint, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const result = await parseJsonResponse(response);
+
+    console.log("[categories] Save category response", {
+      method,
+      endpoint,
+      ok: response.ok,
+      status: response.status,
+      result,
+    });
+
+    return {
+      success:
+        response.ok &&
+        typeof result?.success === "boolean"
+          ? result.success
+          : response.ok,
+      message:
+        typeof result?.message === "string"
+          ? result.message
+          : typeof result?.error === "string"
+            ? result.error
+            : response.ok
+              ? "Category saved successfully."
+              : "Unable to save the category right now.",
+    };
+  }
 
   function toggleCategory(category: CategoryRow) {
     setBusyId(category.id);
@@ -106,15 +178,19 @@ export function CategoriesManager({
         name: form.name,
         slug: form.slug,
         description: form.description,
-        imageUrl: form.imageUrl,
-        imagePath: form.imagePath,
+        imageUrl: form.imageUrl?.trim() ? form.imageUrl : null,
+        imagePath: form.imagePath?.trim() ? form.imagePath : null,
         icon: form.icon,
         color: form.color,
         isActive: Boolean(form.isActive),
         parentId: form.parentId || null,
       })}
-      onSave={saveCategoryAction}
+      onSave={handleSaveCategory}
       onDelete={deleteCategoryAction}
+      saveLabel="Save Category"
+      dialogScrollBody
+      dialogStickyFooter
+      dialogBodyClassName="pb-8"
       fields={[
         { name: "name", label: "Name", type: "text", placeholder: "Machine Learning" },
         { name: "slug", label: "Slug", type: "text", placeholder: "machine-learning", hint: "Leave blank to auto-generate." },

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getLessonProgressRequestContext, toLessonProgressErrorResponse } from "@/lib/lesson-progress-api";
-import { getLessonProgressEntry, upsertLessonProgressEntry } from "@/lib/lesson-player";
+import { getLessonProgressEntries, getLessonProgressEntry, upsertLessonProgressEntry } from "@/lib/lesson-player";
 
 const patchProgressSchema = z.object({
   lessonId: z.string().min(1),
@@ -27,9 +27,21 @@ export async function GET(request: Request) {
 
     const { profile } = await getLessonProgressRequestContext(lessonId);
     const assetId = searchParams.get("assetId");
-    const progress = await getLessonProgressEntry(profile.id, lessonId, assetId);
+    const allProgress = await getLessonProgressEntries(profile.id, lessonId);
+    const progress =
+      assetId != null
+        ? allProgress.find((entry) => entry.assetId === assetId) ?? null
+        : allProgress.find((entry) => entry.assetId == null) ??
+          (await getLessonProgressEntry(profile.id, lessonId, null));
 
-    return NextResponse.json({ progress });
+    return NextResponse.json(
+      { progress, allProgress },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=10",
+        },
+      }
+    );
   } catch (error) {
     const handled = toLessonProgressErrorResponse(error);
     if (handled) {
