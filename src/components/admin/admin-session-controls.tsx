@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/ToastProvider";
+import { ONBOARDING_STORAGE_KEY } from "@/lib/onboarding-storage";
 import { getSupabaseClient } from "@/lib/supabase";
 
 export function AdminSessionControls() {
@@ -20,6 +21,10 @@ export function AdminSessionControls() {
 
       if (error) {
         throw error;
+      }
+
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
       }
 
       toast("Signed out successfully.", "success");

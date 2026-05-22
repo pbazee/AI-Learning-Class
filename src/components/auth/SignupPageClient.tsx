@@ -25,6 +25,7 @@ import {
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { logger } from "@/lib/logger";
 import { onboardingQuizQuestions as quizQuestions } from "@/lib/onboarding";
+import { ONBOARDING_STORAGE_KEY } from "@/lib/onboarding-storage";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { Category, Course, OnboardingQuizAnswers } from "@/types";
 
@@ -42,8 +43,6 @@ const defaultCategories: Category[] = [
   { id: "tools", name: "AI Tools for Content & Marketing", slug: "tools" },
   { id: "agents", name: "Building AI Agents & Automations", slug: "agents" },
 ];
-
-const ONBOARDING_STORAGE_KEY = "ai-learning-signup-onboarding";
 
 const stepConfig: Array<{ id: SignupStep; label: string }> = [
   { id: "account", label: "Account" },
@@ -98,6 +97,7 @@ export function SignupPageClient({
   const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(false);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
+  const [authResolved, setAuthResolved] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -160,39 +160,6 @@ export function SignupPageClient({
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      const savedState = window.localStorage.getItem(ONBOARDING_STORAGE_KEY);
-      if (!savedState) {
-        return;
-      }
-
-      const parsed = JSON.parse(savedState) as Partial<StoredOnboardingState>;
-
-      if (parsed.answers && typeof parsed.answers === "object") {
-        setAnswers(parsed.answers as Partial<OnboardingQuizAnswers>);
-      }
-
-      if (typeof parsed.quizStep === "number" && parsed.quizStep >= 0) {
-        setQuizStep(Math.min(parsed.quizStep, quizQuestions.length - 1));
-      }
-
-      if (parsed.step && ["account", "quiz", "roadmap"].includes(parsed.step)) {
-        setStep(parsed.step as SignupStep);
-      }
-
-      if (Array.isArray(parsed.recommendedCourses)) {
-        setRecommendedCourses(parsed.recommendedCourses as Course[]);
-      }
-    } catch {
-      // Ignore invalid cached onboarding state.
-    }
-  }, []);
-
-  useEffect(() => {
     let mounted = true;
 
     async function loadOnboardingState() {
@@ -202,6 +169,15 @@ export function SignupPageClient({
       } = await supabase.auth.getUser();
 
       if (!user) {
+        if (!mounted) {
+          return;
+        }
+
+        setStep("account");
+        setQuizStep(0);
+        setAnswers({});
+        setRecommendedCourses([]);
+        setAuthResolved(true);
         return;
       }
 
@@ -226,6 +202,33 @@ export function SignupPageClient({
 
         if (!mounted || !payload) {
           return;
+        }
+
+        if (typeof window !== "undefined") {
+          try {
+            const savedState = window.localStorage.getItem(ONBOARDING_STORAGE_KEY);
+            if (savedState) {
+              const parsed = JSON.parse(savedState) as Partial<StoredOnboardingState>;
+
+              if (parsed.answers && typeof parsed.answers === "object") {
+                setAnswers(parsed.answers as Partial<OnboardingQuizAnswers>);
+              }
+
+              if (typeof parsed.quizStep === "number" && parsed.quizStep >= 0) {
+                setQuizStep(Math.min(parsed.quizStep, quizQuestions.length - 1));
+              }
+
+              if (parsed.step && ["account", "quiz", "roadmap"].includes(parsed.step)) {
+                setStep(parsed.step as SignupStep);
+              }
+
+              if (Array.isArray(parsed.recommendedCourses)) {
+                setRecommendedCourses(parsed.recommendedCourses as Course[]);
+              }
+            }
+          } catch {
+            // Ignore invalid cached onboarding state.
+          }
         }
 
         const savedAnswers =
@@ -267,6 +270,10 @@ export function SignupPageClient({
         setStep("quiz");
       } catch {
         // If onboarding state fails to load we keep the local flow usable.
+      } finally {
+        if (mounted) {
+          setAuthResolved(true);
+        }
       }
     }
 
@@ -523,9 +530,23 @@ export function SignupPageClient({
       setRecommendedCourses([]);
       setAnswers({});
       setQuizStep(0);
-      setStep("quiz");
+      setStep("account");
       setOnboardingLoading(false);
     }
+  }
+
+  if (!authResolved) {
+    return (
+      <AuthShell
+        badge="Create Your Account"
+        siteName={initialBranding.siteName}
+        logoUrl={initialBranding.logoUrl}
+        title="Join the next generation of AI builders"
+        subtitle="Open a polished workspace for courses, guided onboarding, and the production-focused paths your team can actually use."
+      >
+        <div className="right-panel w-full rounded-[32px] border border-white/30 bg-primary-blue p-6 text-white shadow-[0_34px_100px_-44px_rgba(37,99,235,0.55)] sm:p-8" />
+      </AuthShell>
+    );
   }
 
   return (

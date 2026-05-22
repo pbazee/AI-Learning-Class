@@ -33,7 +33,7 @@ export function AnalyticsScripts({ measurementId }: { measurementId?: string }) 
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           gtag('js', new Date());
-          gtag('consent', 'default', { analytics_storage: 'granted' });
+  gtag('consent', 'default', { analytics_storage: 'denied' });
           gtag('config', '${measurementId}', { anonymize_ip: true });
         `}
       </Script>

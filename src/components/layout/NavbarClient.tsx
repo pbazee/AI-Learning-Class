@@ -26,6 +26,7 @@ import { SiteLogo } from "@/components/layout/SiteLogo";
 import { useTheme } from "next-themes";
 import type { CourseSearchSuggestion } from "@/types";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
+import { ONBOARDING_STORAGE_KEY } from "@/lib/onboarding-storage";
 import { getSupabaseClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
@@ -362,6 +363,9 @@ export function NavbarClient({
   async function handleSignOut() {
     const supabase = getSupabaseClient();
     await supabase.auth.signOut();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
+    }
     setUserRole(null);
     Promise.resolve(router.replace("/")).catch(() => {});
     window.location.assign("/");
