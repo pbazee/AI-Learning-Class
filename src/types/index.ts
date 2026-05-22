@@ -63,10 +63,13 @@ export interface CourseAccessState {
   lessonHref: string;
   progress: number;
   completedLessons: number;
+  completedAssets?: number;
   totalLessons: number;
+  totalAssets?: number;
   lastLessonTitle?: string;
   accessSource?: "purchase" | "free_enrollment" | "subscription" | "team";
   expiresAt?: string | null;
+  remainingMinutes?: number;
 }
 
 export interface CoursePreviewLessonState {

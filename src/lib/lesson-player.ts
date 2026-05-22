@@ -528,8 +528,23 @@ export async function getCourseProgressState(userId: string, courseId: string) {
     const totalAssets = lessons.reduce((sum, lesson) => sum + Math.max(lesson.lessonAssets.length, 1), 0);
     const completedAssetCount = Object.values(assetProgressByKey).filter((entry) => entry.isCompleted).length;
     const percentage =
-      totalLessons > 0
-        ? Math.round((completedCount / totalLessons) * 100)
+      totalAssets > 0
+        ? Math.round(
+            lessons.reduce((sum, lesson) => {
+              const assetIds =
+                lesson.lessonAssets.length > 0 ? lesson.lessonAssets.map((asset) => asset.id) : [null];
+              const assetProgress = assetIds.map((assetId) => {
+                const key = `${lesson.id}:${assetId ?? "primary"}`;
+                return (
+                  assetProgressByKey[key] ?? {
+                    progressPercent: lessonProgressByLessonId[lesson.id]?.progressPercent ?? 0,
+                  }
+                );
+              });
+
+              return sum + assetProgress.reduce((assetSum, entry) => assetSum + (entry.progressPercent ?? 0), 0);
+            }, 0) / totalAssets
+          )
         : 0;
 
     const latestIncompleteLesson = lessons.reduce<{ id: string; updatedAt: string } | null>(

@@ -19,7 +19,9 @@ type DashboardCourseEnrollment = {
   id: string;
   progress: number;
   completedLessons: number;
+  completedAssets?: number;
   totalLessons: number;
+  totalAssets?: number;
   lastLessonTitle?: string;
   lessonHref: string;
   actionLabel: "Continue Learning" | "Go to Classroom";
@@ -104,7 +106,10 @@ function DashboardCoursesListContent({
       ) : null}
 
       {enrollments.map((enrollment) => (
-        <div key={enrollment.id} className="rounded-2xl border border-border p-5">
+        <div
+          key={enrollment.id}
+          className="rounded-2xl border border-border bg-gradient-to-br from-background via-background to-primary-blue/[0.03] p-5 shadow-sm transition-all hover:border-primary-blue/20 hover:shadow-md"
+        >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className="relative h-44 w-full overflow-hidden rounded-xl sm:h-16 sm:w-24 sm:shrink-0">
               <Image
@@ -119,12 +124,17 @@ function DashboardCoursesListContent({
               />
             </div>
             <div className="min-w-0 flex-1">
-              <Link
-                href={`/courses/${enrollment.course.slug}`}
-                className="line-clamp-1 text-sm font-bold text-foreground transition-colors hover:text-primary-blue"
-              >
-                {enrollment.course.title}
-              </Link>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <Link
+                  href={`/courses/${enrollment.course.slug}`}
+                  className="line-clamp-1 text-sm font-bold text-foreground transition-colors hover:text-primary-blue"
+                >
+                  {enrollment.course.title}
+                </Link>
+                <span className="inline-flex rounded-full border border-primary-blue/15 bg-primary-blue/10 px-2.5 py-1 text-[11px] font-semibold text-primary-blue">
+                  {enrollment.progress}% complete
+                </span>
+              </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {enrollment.lastLessonTitle
                   ? `Latest progress: ${enrollment.lastLessonTitle}`
@@ -132,9 +142,9 @@ function DashboardCoursesListContent({
               </p>
               <div className="mt-2">
                 <div className="flex items-center gap-3">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full rounded-full bg-primary-blue transition-[width] duration-300"
+                      className="h-full rounded-full bg-gradient-to-r from-primary-blue via-sky-500 to-cyan-400 transition-[width] duration-500"
                       style={{ width: `${enrollment.progress}%` }}
                     />
                   </div>
@@ -142,12 +152,17 @@ function DashboardCoursesListContent({
                     {enrollment.progress}%
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {enrollment.completedLessons}/{enrollment.totalLessons} lessons completed
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {formatDuration(enrollment.remainingMinutes)} left
-                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <p>
+                    {enrollment.completedLessons}/{enrollment.totalLessons} lessons completed
+                  </p>
+                  {enrollment.totalAssets && enrollment.totalAssets > enrollment.totalLessons ? (
+                    <p>
+                      {enrollment.completedAssets ?? 0}/{enrollment.totalAssets} assets completed
+                    </p>
+                  ) : null}
+                  <p>{formatDuration(enrollment.remainingMinutes)} left</p>
+                </div>
               </div>
             </div>
             <Link

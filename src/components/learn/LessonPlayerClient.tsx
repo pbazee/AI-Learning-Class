@@ -112,7 +112,7 @@ type PdfScrollRequest = {
 
 type ResourceProgressState = {
   isCompleted: boolean;
-  kind: "media" | "pdf" | "image";
+  kind: "media" | "pdf" | "image" | "file";
   lastPage?: number;
   lastPosition?: number;
   progressPercent: number;
@@ -148,6 +148,8 @@ function normalizeResourceProgressMap(value: unknown) {
           ? "media"
           : resourceEntry.kind === "image"
             ? "image"
+            : resourceEntry.kind === "file"
+              ? "file"
             : null;
 
     if (!kind) {
@@ -193,6 +195,96 @@ function resourceProgressToLessonProgressState(
     watchedSeconds: resourceProgress?.lastPosition ?? 0,
     isCompleted: resourceProgress?.isCompleted ?? false,
   });
+}
+
+function getResourceProgressKind(kind: LessonResourceKind): ResourceProgressState["kind"] {
+  if (kind === "pdf") {
+    return "pdf";
+  }
+
+  if (kind === "image") {
+    return "image";
+  }
+
+  if (kind === "file") {
+    return "file";
+  }
+
+  return "media";
+}
+
+function buildInitialResourceProgressMap(
+  allLessons: CourseLesson[],
+  assetProgressByKey: Record<
+    string,
+    Partial<LessonProgressState> & {
+      assetId?: string | null;
+      progressPercent?: number;
+      updatedAt?: string | null;
+    }
+  >
+) {
+  if (!assetProgressByKey || Object.keys(assetProgressByKey).length === 0) {
+    return {} as Record<string, ResourceProgressState>;
+  }
+
+  const assetKindById = new Map<string, LessonResourceKind>();
+
+  allLessons.forEach((lesson) => {
+    resolveLessonAssets(lesson).forEach((asset) => {
+      assetKindById.set(asset.id, asset.kind);
+    });
+  });
+
+  return normalizeResourceProgressMap(
+    Object.fromEntries(
+      Object.entries(assetProgressByKey).flatMap(([key, progress]) => {
+        const keyParts = key.split(":");
+        const rawAssetId = keyParts.length > 1 ? keyParts.slice(1).join(":") : null;
+        const assetId =
+          progress.assetId ?? (rawAssetId && rawAssetId !== "primary" ? rawAssetId : null);
+
+        if (!assetId) {
+          return [];
+        }
+
+        const assetKind = assetKindById.get(assetId);
+
+        if (!assetKind) {
+          return [];
+        }
+
+        return [[
+          `${keyParts[0]}:${assetId}`,
+          {
+            isCompleted: Boolean(progress.isCompleted),
+            kind: getResourceProgressKind(assetKind),
+            lastPage: progress.lastPage ?? undefined,
+            lastPosition: progress.lastPosition ?? undefined,
+            progressPercent: clampPercentage(progress.progressPercent ?? 0),
+            updatedAt: progress.updatedAt ? new Date(progress.updatedAt).getTime() : Date.now(),
+          } satisfies ResourceProgressState,
+        ]];
+      })
+    )
+  );
+}
+
+function mergeResourceProgressMaps(
+  current: Record<string, ResourceProgressState>,
+  incoming: Record<string, ResourceProgressState>
+) {
+  const merged = { ...current };
+
+  Object.entries(incoming).forEach(([key, value]) => {
+    const existing = merged[key];
+
+    if (!existing || existing.updatedAt <= value.updatedAt) {
+      merged[key] = value;
+    }
+  });
+
+  return merged;
 }
 
 function getAssetProgressState(
@@ -432,11 +524,17 @@ function areLessonProgressStatesEqual(
   );
 }
 
-function calculateCourseProgress(allLessons: CourseLesson[], lessonProgressMap: LessonProgressMap) {
+function calculateCourseProgress(
+  allLessons: CourseLesson[],
+  lessonProgressMap: LessonProgressMap,
+  resourceProgressMap: Record<string, ResourceProgressState>
+) {
   if (allLessons.length === 0) {
     return {
+      completedAssets: 0,
       completedLessons: 0,
       overallProgress: 0,
+      totalAssets: 0,
     };
   }
 
@@ -444,11 +542,36 @@ function calculateCourseProgress(allLessons: CourseLesson[], lessonProgressMap: 
     normalizeLessonProgressEntry(lessonProgressMap[lesson.id])
   );
   const completedLessons = progressEntries.filter((entry) => entry.isCompleted).length;
-  const overallProgress = Math.round((completedLessons / allLessons.length) * 100);
+  const assetProgressEntries = allLessons.flatMap((lesson) => {
+    const lessonAssets = resolveLessonAssets(lesson);
+
+    if (lessonAssets.length === 0) {
+      return [normalizeLessonProgressEntry(lessonProgressMap[lesson.id])];
+    }
+
+    return lessonAssets.map((asset, index) =>
+      getAssetProgressState(
+        lesson.id,
+        asset,
+        resourceProgressMap,
+        index === 0 ? lessonProgressMap[lesson.id] : null
+      )
+    );
+  });
+  const completedAssets = assetProgressEntries.filter((entry) => entry.isCompleted).length;
+  const totalAssets = assetProgressEntries.length;
+  const overallProgress =
+    totalAssets > 0
+      ? Math.round(
+          assetProgressEntries.reduce((sum, entry) => sum + entry.progressPercent, 0) / totalAssets
+        )
+      : 0;
 
   return {
+    completedAssets,
     completedLessons,
     overallProgress,
+    totalAssets,
   };
 }
 
@@ -545,6 +668,7 @@ export function LessonPlayerClient({
   viewerId,
   initialCompletedLessonIds,
   initialLessonProgressMap,
+  initialAssetProgressMap,
   initialNotes: _initialNotes,
   initialNoteContent,
   hasFullCourseAccess,
@@ -556,6 +680,13 @@ export function LessonPlayerClient({
   viewerId: string | null;
   initialCompletedLessonIds: string[];
   initialLessonProgressMap: Record<string, Partial<LessonProgressState>>;
+  initialAssetProgressMap: Record<
+    string,
+    Partial<LessonProgressState> & {
+      assetId?: string | null;
+      updatedAt?: string | null;
+    }
+  >;
   initialNotes: LessonPlayerNote[];
   initialNoteContent: string;
   hasFullCourseAccess: boolean;
@@ -587,7 +718,11 @@ export function LessonPlayerClient({
   const [isMediaFullscreen, setIsMediaFullscreen] = useState(false);
   const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
   const [fetchedLessonAssets, setFetchedLessonAssets] = useState<CourseLesson["assets"] | null>(null);
-  const [resourceProgressMap, setResourceProgressMap] = useState<Record<string, ResourceProgressState>>({});
+  const modules = course.modules ?? [];
+  const allLessons = useMemo(() => modules.flatMap((module) => module.lessons), [modules]);
+  const [resourceProgressMap, setResourceProgressMap] = useState<Record<string, ResourceProgressState>>(() =>
+    buildInitialResourceProgressMap(allLessons, initialAssetProgressMap)
+  );
   const [activeResourceStartTime, setActiveResourceStartTime] = useState(0);
   const [activeResourceInitialPage, setActiveResourceInitialPage] = useState(1);
   const [resourceResumePrompt, setResourceResumePrompt] = useState<ResumePromptState>(null);
@@ -595,9 +730,6 @@ export function LessonPlayerClient({
   const [pendingLessonId, setPendingLessonId] = useState(initialLessonId);
   const [isLessonNavigating, setIsLessonNavigating] = useState(false);
   const { toast } = useToast();
-
-  const modules = course.modules ?? [];
-  const allLessons = useMemo(() => modules.flatMap((module) => module.lessons), [modules]);
   const currentLesson =
     allLessons.find((lesson) => lesson.id === currentLessonId) ?? allLessons[0];
   const currentIndex = allLessons.findIndex((lesson) => lesson.id === currentLesson.id);
@@ -639,6 +771,43 @@ export function LessonPlayerClient({
       ? resourceProgressMap[getResourceProgressKey(currentLesson.id, activeResourceAsset.id)] ?? null
       : null;
   const activeViewerAsset = activeResourceAsset ?? primaryLessonAsset;
+  const lessonSequence = useMemo(() => {
+    return allLessons.flatMap((lesson) => {
+      const lessonAssets =
+        lesson.id === currentLesson.id ? lessonAssetRows : resolveLessonAssets(lesson);
+
+      if (lessonAssets.length === 0) {
+        return [
+          {
+            assetId: null,
+            assetTitle: lesson.title,
+            lessonId: lesson.id,
+            lessonTitle: lesson.title,
+          },
+        ];
+      }
+
+      return lessonAssets.map((asset, index) => ({
+        assetId: index === 0 ? null : asset.id,
+        assetTitle: asset.displayTitle,
+        lessonId: lesson.id,
+        lessonTitle: lesson.title,
+      }));
+    });
+  }, [allLessons, currentLesson.id, lessonAssetRows]);
+  const activeSequenceIndex = useMemo(() => {
+    return lessonSequence.findIndex(
+      (entry) =>
+        entry.lessonId === currentLesson.id &&
+        (entry.assetId ?? null) === (activeResourceId ?? null)
+    );
+  }, [activeResourceId, currentLesson.id, lessonSequence]);
+  const previousSequenceEntry =
+    activeSequenceIndex > 0 ? lessonSequence[activeSequenceIndex - 1] : null;
+  const nextSequenceEntry =
+    activeSequenceIndex >= 0 && activeSequenceIndex < lessonSequence.length - 1
+      ? lessonSequence[activeSequenceIndex + 1]
+      : null;
   const activeViewerKind =
     activeResourceAsset
       ? activeResourceAsset.kind === "pdf" ||
@@ -663,9 +832,9 @@ export function LessonPlayerClient({
       ? currentLesson.previewMinutes * 60
       : 0;
   const canPersistProgress = Boolean(viewerId && hasFullCourseAccess && currentContentType);
-  const { completedLessons, overallProgress } = useMemo(
-    () => calculateCourseProgress(allLessons, lessonProgressMap),
-    [allLessons, lessonProgressMap]
+  const { completedAssets, completedLessons, overallProgress, totalAssets } = useMemo(
+    () => calculateCourseProgress(allLessons, lessonProgressMap, resourceProgressMap),
+    [allLessons, lessonProgressMap, resourceProgressMap]
   );
   const resumeLesson = useMemo(() => {
     return (
@@ -700,23 +869,35 @@ export function LessonPlayerClient({
       resourceProgressMap,
     ]
   );
+  const currentLessonAssetProgressEntries = useMemo(() => {
+    if (lessonAssetRows.length === 0) {
+      return [normalizeLessonProgressEntry(lessonProgressMap[currentLesson.id])];
+    }
+
+    return lessonAssetRows.map((asset, index) =>
+      getAssetProgressState(
+        currentLesson.id,
+        asset,
+        resourceProgressMap,
+        index === 0 ? lessonProgressMap[currentLesson.id] : null
+      )
+    );
+  }, [currentLesson.id, lessonAssetRows, lessonProgressMap, resourceProgressMap]);
+  const remainingCurrentLessonAssetCount = currentLessonAssetProgressEntries.filter(
+    (entry) => !entry.isCompleted
+  ).length;
   const currentLessonAssetsCompleted = useMemo(() => {
     if (lessonAssetRows.length === 0) {
       return currentLessonProgress.isCompleted;
     }
 
-    return lessonAssetRows.every((asset, index) => {
-      if (index === 0) {
-        return currentLessonProgress.isCompleted;
-      }
-
-      return Boolean(resourceProgressMap[getResourceProgressKey(currentLesson.id, asset.id)]?.isCompleted);
-    });
-  }, [currentLesson.id, currentLessonProgress.isCompleted, lessonAssetRows, resourceProgressMap]);
+    return currentLessonAssetProgressEntries.every((entry) => entry.isCompleted);
+  }, [currentLessonAssetProgressEntries, currentLessonProgress.isCompleted, lessonAssetRows.length]);
 
   useEffect(() => {
     setCurrentLessonId(initialLessonId);
     setPendingLessonId(initialLessonId);
+    setActiveResourceId(null);
     setIsLessonNavigating(false);
   }, [initialLessonId]);
 
@@ -772,16 +953,12 @@ export function LessonPlayerClient({
         window.history.replaceState(
           window.history.state,
           "",
-          `/learn/${course.slug}/${initialLessonId}?lesson=${lessonId}`
+          `/learn/${course.slug}/${lessonId}${assetId ? `?asset=${assetId}` : ""}`
         );
       }, 150);
     },
-    [course.slug, initialLessonId]
+    [course.slug]
   );
-
-  useEffect(() => {
-    setActiveResourceId(null);
-  }, [currentLesson.id]);
 
   useEffect(() => {
     if (!isMounted) {
@@ -794,7 +971,9 @@ export function LessonPlayerClient({
         return;
       }
 
-      setResourceProgressMap(normalizeResourceProgressMap(JSON.parse(rawValue)));
+      setResourceProgressMap((prev) =>
+        mergeResourceProgressMaps(prev, normalizeResourceProgressMap(JSON.parse(rawValue)))
+      );
     } catch (error) {
       console.error("[lesson-player] Failed to load resource progress.", error);
     }
@@ -1154,6 +1333,13 @@ export function LessonPlayerClient({
     (courseProgress?: {
       completedLessonIds?: string[];
       lessonProgressByLessonId?: Record<string, Partial<LessonProgressState>>;
+      assetProgressByKey?: Record<
+        string,
+        Partial<LessonProgressState> & {
+          assetId?: string | null;
+          updatedAt?: string | null;
+        }
+      >;
     }) => {
       if (!courseProgress?.lessonProgressByLessonId) {
         return;
@@ -1165,8 +1351,17 @@ export function LessonPlayerClient({
           courseProgress.lessonProgressByLessonId
         )
       );
+
+      if (courseProgress.assetProgressByKey) {
+        setResourceProgressMap((prev) =>
+          mergeResourceProgressMaps(
+            prev,
+            buildInitialResourceProgressMap(allLessons, courseProgress.assetProgressByKey ?? {})
+          )
+        );
+      }
     },
-    []
+    [allLessons]
   );
 
   const updateCurrentLessonFromAssetProgress = useCallback(
@@ -1901,7 +2096,7 @@ export function LessonPlayerClient({
   }, [currentLessonProgress.isCompleted, setLessonCompletionState]);
 
   const toggleCurrentAssetCompletion = useCallback(async () => {
-    if (!activeViewerAsset || !viewerId || !hasFullCourseAccess || activeViewerAsset.kind === "file") {
+    if (!activeViewerAsset || !viewerId || !hasFullCourseAccess) {
       return;
     }
 
@@ -1920,6 +2115,8 @@ export function LessonPlayerClient({
           ? "pdf"
           : activeViewerAsset.kind === "image"
             ? "image"
+            : activeViewerAsset.kind === "file"
+              ? "file"
             : "media",
       lastPage:
         activeViewerAsset.kind === "pdf"
@@ -1965,6 +2162,8 @@ export function LessonPlayerClient({
                 ? "pdf"
                 : activeViewerAsset.kind === "image"
                   ? "image"
+                  : activeViewerAsset.kind === "file"
+                    ? undefined
                   : "video",
           isCompleted: nextIsCompleted,
           resetProgress: !nextIsCompleted,
@@ -2219,18 +2418,17 @@ export function LessonPlayerClient({
 
         setResourceProgressMap((prev) => {
           const next = { ...prev };
+          const lessonAssetsById = new Map(
+            resolveLessonAssets(currentLesson).map((asset) => [asset.id, asset.kind])
+          );
 
           allProgress.forEach((entry) => {
             if (!entry.assetId) {
               return;
             }
 
-            const kind =
-              entry.contentType === "pdf"
-                ? "pdf"
-                : entry.contentType === "audio" || entry.contentType === "video"
-                  ? "media"
-                  : null;
+            const assetKind = lessonAssetsById.get(entry.assetId);
+            const kind = assetKind ? getResourceProgressKind(assetKind) : null;
 
             if (!kind) {
               return;
@@ -2568,7 +2766,12 @@ export function LessonPlayerClient({
                                             resourceProgressMap,
                                             assetIndex === 0 ? currentLessonProgress : null
                                           )
-                                        : resourceProgressMap[getResourceProgressKey(lesson.id, asset.id)];
+                                        : getAssetProgressState(
+                                            lesson.id,
+                                            asset,
+                                            resourceProgressMap,
+                                            assetIndex === 0 ? lessonProgressMap[lesson.id] : null
+                                          );
                                     const isActiveResource =
                                       lesson.id === currentLesson.id &&
                                       ((activeResourceId === asset.id) ||
@@ -2579,14 +2782,14 @@ export function LessonPlayerClient({
                                       <button
                                         key={asset.id}
                                         type="button"
-                                        disabled={!isUnlocked || asset.kind === "file"}
+                                        disabled={!isUnlocked}
                                         onClick={() => handleLessonSelect(lesson.id, assetIndex === 0 ? null : asset.id)}
                                         className={cn(
                                           "w-full rounded-lg border px-3 py-2 text-left",
                                           isActiveResource
                                             ? "border-primary-blue/40 bg-primary-blue/12"
                                             : "border-white/5 bg-white/[0.03]",
-                                          (!isUnlocked || asset.kind === "file") && "cursor-not-allowed opacity-70"
+                                          !isUnlocked && "cursor-not-allowed opacity-70"
                                         )}
                                       >
                                         <div className="flex items-center gap-2">
@@ -2660,57 +2863,70 @@ export function LessonPlayerClient({
                   </div>
                   <ProgressBar progress={overallProgress} size="sm" />
                   <p className="mt-2 text-[11px] text-slate-400">
-                    {completedLessons}/{allLessons.length} lessons completed
+                    {completedAssets}/{totalAssets} assets completed
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {completedLessons}/{allLessons.length} lessons fully completed
                   </p>
                 </div>
                 <div className="mt-4 space-y-3">
-                  <button
-                    onClick={toggleLessonCompletion}
-                    disabled={
-                      manualCompletionPending ||
-                      (!currentLessonAssetsCompleted && !currentLessonProgress.isCompleted)
-                    }
-                    className={cn(
-                      "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
-                      currentLessonProgress.isCompleted
-                        ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
-                        : "bg-primary-blue text-white shadow-lg shadow-primary-blue/30 hover:bg-primary-blue/90"
-                    )}
-                  >
-                    {manualCompletionPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    {currentLessonProgress.isCompleted
-                      ? "Mark as Incomplete"
-                      : currentLessonAssetsCompleted
-                        ? "Mark as Complete"
-                        : "View all assets to complete"}
-                  </button>
+                  {currentLessonProgress.isCompleted || currentLessonAssetsCompleted ? (
+                    <button
+                      onClick={toggleLessonCompletion}
+                      disabled={manualCompletionPending}
+                      className={cn(
+                        "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
+                        currentLessonProgress.isCompleted
+                          ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                          : "bg-primary-blue text-white shadow-lg shadow-primary-blue/30 hover:bg-primary-blue/90"
+                      )}
+                    >
+                      {manualCompletionPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      {currentLessonProgress.isCompleted ? "Mark as Incomplete" : "Mark as Complete"}
+                    </button>
+                  ) : null}
 
                   <div className="grid grid-cols-1 gap-2">
-                    {currentIndex > 0 ? (
+                    {previousSequenceEntry ? (
                       <button
                         type="button"
-                        onClick={() => handleLessonSelect(allLessons[currentIndex - 1].id)}
+                        onClick={() =>
+                          handleLessonSelect(
+                            previousSequenceEntry.lessonId,
+                            previousSequenceEntry.assetId
+                          )
+                        }
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition-all duration-200 hover:bg-white/10 hover:text-white"
                       >
                         <ChevronLeft className="h-4 w-4" />
-                        Previous Lesson
+                        Previous Asset
                       </button>
                     ) : null}
-                    {currentIndex < allLessons.length - 1 ? (
+                    {nextSequenceEntry ? (
                       <button
                         type="button"
-                        onClick={() => handleLessonSelect(allLessons[currentIndex + 1].id)}
+                        onClick={() =>
+                          handleLessonSelect(nextSequenceEntry.lessonId, nextSequenceEntry.assetId)
+                        }
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary-blue/30 transition-all duration-200 hover:bg-primary-blue/90"
                       >
-                        Next Lesson
+                        Next Asset
                         <ChevronRight className="h-4 w-4" />
                       </button>
                     ) : null}
                   </div>
+
+                  {!currentLessonAssetsCompleted && !currentLessonProgress.isCompleted ? (
+                    <div className="rounded-xl border border-amber-400/15 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                      {remainingCurrentLessonAssetCount > 0
+                        ? `Complete the remaining ${remainingCurrentLessonAssetCount} asset${remainingCurrentLessonAssetCount === 1 ? "" : "s"} in this lesson before marking the lesson complete.`
+                        : "Finish every asset in this lesson before marking the lesson complete."}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -2895,15 +3111,27 @@ export function LessonPlayerClient({
                       <div className="max-w-md text-center">
                         <h3 className="mb-2 text-lg font-bold text-white">
                           {activeResourceAsset?.kind === "file"
-                            ? "Resource unavailable in classroom"
+                            ? "Download this resource"
                             : resolvedLessonRenderer.fallbackTitle}
                         </h3>
                         <p className="text-sm text-slate-400">
                           {activeResourceAsset?.kind === "file"
-                            ? "This file type is not viewable inside the classroom yet."
+                            ? "This file opens outside the classroom player. Download it, then mark it complete when you're done."
                             : resolvedLessonRenderer.fallbackMessage}
                         </p>
                       </div>
+                      {activeResourceAsset?.kind === "file" ? (
+                        <a
+                          href={activeResourceAsset.resolvedUrl}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                        >
+                          <Download className="h-4 w-4" />
+                          Download File
+                        </a>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -2924,7 +3152,7 @@ export function LessonPlayerClient({
                   </AnimatePresence>
                 </motion.div>
 
-                {activeViewerAsset && activeViewerAsset.kind !== "file" ? (
+                {activeViewerAsset ? (
                   <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#08101d]/88 p-4 shadow-xl sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -2938,34 +3166,51 @@ export function LessonPlayerClient({
                         ) : null}
                       </div>
                       <p className="mt-1 text-xs text-slate-400">
-                        Track this asset separately from the rest of the lesson.
+                        {activeViewerAsset.kind === "file"
+                          ? "Download this file resource, then mark it complete to keep your lesson progress moving."
+                          : "Track this asset separately from the rest of the lesson."}
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={toggleCurrentAssetCompletion}
-                      disabled={!viewerId || !hasFullCourseAccess || assetCompletionPending}
-                      className={cn(
-                        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
-                        currentAssetProgress.isCompleted
-                          ? "border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
-                          : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-500/90"
-                      )}
-                    >
-                      {assetCompletionPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : currentAssetProgress.isCompleted ? (
-                        <RotateCcw className="h-4 w-4" />
-                      ) : (
-                        <CheckCircle2 className="h-4 w-4" />
-                      )}
-                      {assetCompletionPending
-                        ? "Saving..."
-                        : currentAssetProgress.isCompleted
-                          ? "Mark as Incomplete"
-                          : "Mark as Complete"}
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                      {activeViewerAsset.kind === "file" ? (
+                        <a
+                          href={activeViewerAsset.resolvedUrl}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                        >
+                          <Download className="h-4 w-4" />
+                          Download
+                        </a>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={toggleCurrentAssetCompletion}
+                        disabled={!viewerId || !hasFullCourseAccess || assetCompletionPending}
+                        className={cn(
+                          "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
+                          currentAssetProgress.isCompleted
+                            ? "border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                            : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-500/90"
+                        )}
+                      >
+                        {assetCompletionPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : currentAssetProgress.isCompleted ? (
+                          <RotateCcw className="h-4 w-4" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" />
+                        )}
+                        {assetCompletionPending
+                          ? "Saving..."
+                          : currentAssetProgress.isCompleted
+                            ? "Mark as Incomplete"
+                            : "Mark as Complete"}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 

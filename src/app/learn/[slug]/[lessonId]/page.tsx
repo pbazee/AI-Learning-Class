@@ -84,6 +84,7 @@ export default async function LessonPlayerPage({
       viewerId={viewer?.id ?? null}
       initialCompletedLessonIds={progressAndNotes?.progress.completedLessonIds ?? []}
       initialLessonProgressMap={progressAndNotes?.progress.lessonProgressByLessonId ?? {}}
+      initialAssetProgressMap={progressAndNotes?.progress.assetProgressByKey ?? {}}
       initialNotes={progressAndNotes?.notes ?? []}
       initialNoteContent={progressAndNotes?.notes[0]?.content ?? ""}
       hasFullCourseAccess={hasFullCourseAccess}

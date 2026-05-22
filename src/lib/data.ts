@@ -107,7 +107,9 @@ export type DashboardEnrollment = {
   enrolledAt: string;
   progress: number;
   completedLessons: number;
+  completedAssets?: number;
   totalLessons: number;
+  totalAssets?: number;
   lastLessonTitle?: string;
   lessonHref: string;
   actionLabel: "Continue Learning" | "Go to Classroom";
@@ -1071,6 +1073,7 @@ async function computeUserCourseAccess(
               select: {
                 id: true,
                 title: true,
+                duration: true,
                 lessonAssets: {
                   select: {
                     id: true,
@@ -1136,6 +1139,16 @@ async function computeUserCourseAccess(
       const isCompleted =
         assetRows.length > 0 &&
         assetRows.every((row) => Boolean(row?.isCompleted || (row?.progressPercent ?? 0) >= 100));
+      const progressPercent =
+        assetRows.length > 0
+          ? Math.round(
+              assetRows.reduce(
+                (sum, row) =>
+                  sum + Math.max(0, Math.min(100, Math.round(row?.progressPercent ?? 0))),
+                0
+              ) / assetRows.length
+            )
+          : 0;
       const latestUpdatedAt = assetRows.reduce<Date | null>((latest, row) => {
         if (!row?.updatedAt) {
           return latest;
@@ -1152,6 +1165,10 @@ async function computeUserCourseAccess(
         lessonId: lesson.id,
         title: lesson.title,
         isCompleted,
+        progressPercent: isCompleted ? 100 : progressPercent,
+        assetCount: assetIds.length,
+        completedAssetCount: assetRows.filter((row) => Boolean(row?.isCompleted || (row?.progressPercent ?? 0) >= 100)).length,
+        duration: lesson.duration ?? 0,
         updatedAt: latestUpdatedAt,
       };
     });
@@ -1159,6 +1176,8 @@ async function computeUserCourseAccess(
       lessonProgress.filter((lesson) => lesson.isCompleted).map((lesson) => lesson.lessonId)
     );
     const completedLessons = completedLessonIds.size;
+    const totalAssets = lessonProgress.reduce((sum, lesson) => sum + lesson.assetCount, 0);
+    const completedAssets = lessonProgress.reduce((sum, lesson) => sum + lesson.completedAssetCount, 0);
     const totalLessons = orderedLessons.length || course.totalLessons;
     const latestIncompleteLesson =
       lessonProgress
@@ -1181,7 +1200,24 @@ async function computeUserCourseAccess(
       latestTouchedLesson?.lessonId ??
       firstIncompleteLesson?.id;
     const progress =
-      totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+      totalLessons > 0
+        ? Math.round(
+            lessonProgress.reduce((sum, lesson) => sum + lesson.progressPercent, 0) / totalLessons
+          )
+        : 0;
+    const totalDurationSeconds = lessonProgress.reduce(
+      (sum, lesson) => sum + lesson.duration,
+      0
+    );
+    const remainingMinutes = Math.max(
+      0,
+      Math.ceil(
+        lessonProgress.reduce(
+          (sum, lesson) => sum + lesson.duration * (1 - lesson.progressPercent / 100),
+          0
+        ) / 60
+      )
+    );
 
     return {
       courseId: course.id,
@@ -1192,11 +1228,14 @@ async function computeUserCourseAccess(
       lessonHref: resumeLessonId ? `/learn/${course.slug}/${resumeLessonId}` : `/courses/${course.slug}`,
       progress,
       completedLessons,
+      completedAssets,
       totalLessons,
+      totalAssets,
       lastLessonTitle: latestIncompleteLesson?.title ?? latestTouchedLesson?.title,
       completedLessonIds: Array.from(completedLessonIds),
       accessSource: accessByCourseId?.get(course.id)?.source,
       expiresAt: accessByCourseId?.get(course.id)?.expiresAt?.toISOString() ?? null,
+      remainingMinutes,
     };
   });
 }
@@ -2306,33 +2345,18 @@ export async function getUserEnrollments(userId: string): Promise<DashboardEnrol
         enrollment.course.modules.reduce((sum, module) => sum + module.lessons.length, 0) ||
         enrollment.course.totalLessons;
       const completedLessons = courseAccess?.completedLessons ?? 0;
-      const totalDurationSeconds = enrollment.course.modules.reduce(
-        (sum, module) =>
-          sum +
-          module.lessons.reduce((lessonSum, lesson) => lessonSum + (lesson.duration ?? 0), 0),
-        0
-      );
       const orderedLessons = enrollment.course.modules.flatMap((module) => module.lessons);
       const firstLessonId = orderedLessons[0]?.id;
-      const completedLessonIds = new Set(courseAccess?.completedLessonIds ?? []);
-      const completedDurationSeconds = orderedLessons.reduce((sum, lesson) => {
-        if (completedLessonIds.has(lesson.id)) {
-          return sum + (lesson.duration ?? 0);
-        }
-
-        return sum;
-      }, 0);
-      const remainingMinutes = Math.max(
-        0,
-        Math.ceil((totalDurationSeconds - completedDurationSeconds) / 60)
-      );
+      const remainingMinutes = courseAccess?.remainingMinutes ?? 0;
 
       return {
         id: enrollment.id,
         enrolledAt: enrollment.enrolledAt.toISOString(),
         progress: courseAccess?.progress ?? (totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0),
         completedLessons,
+        completedAssets: courseAccess?.completedAssets,
         totalLessons,
+        totalAssets: courseAccess?.totalAssets,
         lastLessonTitle: courseAccess?.lastLessonTitle,
         lessonHref:
           courseAccess?.lessonHref ??
