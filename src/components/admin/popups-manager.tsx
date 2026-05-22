@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useState } from "react";
+import Image from "next/image";
 import { Layers3, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { deletePopupAction, savePopupAction } from "@/app/admin/actions";
@@ -329,7 +330,13 @@ export function PopupsManager({ popups }: { popups: PopupRow[] }) {
             <div className="mt-5 rounded-[28px] border border-white/10 bg-[#070b12] p-6">
               {form.imageUrl ? (
                 <div className="mb-5 overflow-hidden rounded-2xl border border-white/10">
-                  <img src={form.imageUrl} alt={form.title || "Popup preview"} className="h-40 w-full object-cover" />
+                  <Image
+                    src={form.imageUrl}
+                    alt={form.title || "Popup preview"}
+                    width={640}
+                    height={160}
+                    className="h-40 w-full object-cover"
+                  />
                 </div>
               ) : null}
               <p className="text-2xl font-black text-white">{form.title || "Popup title"}</p>

@@ -8,6 +8,7 @@ import { JsonLd } from "@/components/seo/JsonLd";
 import { Clock, ArrowLeft, Tag, BookOpen } from "lucide-react";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { getBlogPostBySlug, getBlogPosts } from "@/lib/data";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { buildBlogPostJsonLd } from "@/lib/seo";
 import { resolveMediaUrl } from "@/lib/media";
 import { absoluteUrl, buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
@@ -83,6 +84,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                 src={post.coverImage}
                 alt={post.title}
                 fill
+                priority
                 quality={75}
                 placeholder="blur"
                 blurDataURL={IMAGE_BLUR_DATA_URL}
@@ -193,7 +195,9 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                   key={index}
                   className="text-sm leading-relaxed text-muted-foreground"
                   dangerouslySetInnerHTML={{
-                    __html: block.replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>'),
+                    __html: sanitizeHtml(
+                      block.replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>')
+                    ),
                   }}
                 />
               );

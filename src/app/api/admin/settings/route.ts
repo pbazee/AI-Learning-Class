@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,20 +14,6 @@ const socialKeyMap: Record<string, string> = {
   tiktokUrl: "tiktok",
   whatsappNumber: "whatsapp",
 };
-
-async function isAdmin() {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user?.email) return false;
-  const dbUser = await prisma.user.findUnique({
-    where: { email: user.email },
-    select: { role: true },
-  });
-  return dbUser?.role === "ADMIN" || dbUser?.role === "SUPER_ADMIN";
-}
 
 export async function POST(request: NextRequest) {
   if (!(await isAdmin())) {

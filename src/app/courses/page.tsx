@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Navbar } from "@/components/layout/Navbar";
+import { Suspense } from "react";
 import { Footer } from "@/components/layout/Footer";
 import { CoursesCatalog } from "@/components/courses/CoursesCatalog";
 import { StorefrontPersonalizationProvider } from "@/components/storefront/StorefrontPersonalizationProvider";
@@ -23,10 +23,12 @@ export default async function CoursesPage() {
       <StorefrontPersonalizationProvider
         courseIds={courses.map((course) => course.id)}
       >
-        <CoursesCatalog
-          courses={courses}
-          categories={categories}
-        />
+        <Suspense fallback={null}>
+          <CoursesCatalog
+            courses={courses}
+            categories={categories}
+          />
+        </Suspense>
       </StorefrontPersonalizationProvider>
       <Footer />
     </div>

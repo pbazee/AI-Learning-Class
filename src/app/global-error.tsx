@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 
 export default function GlobalError({
   error,
@@ -10,6 +11,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   console.error("[app.global-error] Unhandled application failure:", error);
+  Sentry.captureException(error);
 
   return (
     <html lang="en">

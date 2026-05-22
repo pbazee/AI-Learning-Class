@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { isAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -40,24 +40,6 @@ function nullableString(value?: string | null) {
 function nullableMediaField(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
-}
-
-async function isAdmin() {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user?.email) {
-    return false;
-  }
-
-  const dbUser = await prisma.user.findUnique({
-    where: { email: user.email },
-    select: { role: true },
-  });
-
-  return dbUser?.role === "ADMIN" || dbUser?.role === "SUPER_ADMIN";
 }
 
 function revalidateCategoryPages() {
@@ -101,13 +83,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[admin.categories] Unable to create category.", error);
-    const message =
-      error instanceof z.ZodError
-        ? error.issues[0]?.message || "Please review the category details."
-        : error instanceof Error
-          ? error.message
-          : "Unable to save the category right now.";
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: error.issues[0]?.message || "Please review the category details." },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return new Response("Internal server error", { status: 500 });
   }
 }

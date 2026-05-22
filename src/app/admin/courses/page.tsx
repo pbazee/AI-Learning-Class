@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { CoursesManager } from "@/components/admin/courses-manager";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
@@ -89,8 +90,9 @@ export default async function AdminCoursesPage() {
   });
 
   return (
-    <CoursesManager
-      courses={courses.map((course) => ({
+    <Suspense fallback={null}>
+      <CoursesManager
+        courses={courses.map((course) => ({
         id: course.id,
         title: course.title,
         slug: course.slug,
@@ -197,10 +199,11 @@ export default async function AdminCoursesPage() {
         label: category.name,
         value: category.id,
       }))}
-      instructorOptions={instructors.map((instructor) => ({
+        instructorOptions={instructors.map((instructor) => ({
         label: instructor.name || instructor.email || "Unknown instructor",
         value: instructor.id,
-      }))}
-    />
+        }))}
+      />
+    </Suspense>
   );
 }

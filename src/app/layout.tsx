@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
+import { MotionConfig } from "framer-motion";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
+import { AnalyticsScripts } from "@/components/analytics/AnalyticsScripts";
 import { AnnouncementBarWrapper } from "@/components/landing/AnnouncementBarWrapper";
 import { AppChrome } from "@/components/layout/AppChrome";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { RouteScrollReset } from "@/components/layout/RouteScrollReset";
 import { ThemeProvider } from "@/components/shared/ThemeProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
+import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
+import { env } from "@/lib/config";
 import { buildSiteMetadata } from "@/lib/site-server";
 import { Navbar } from "@/components/layout/Navbar";
 import { getMetadataBase } from "@/lib/site-server";
@@ -64,32 +68,42 @@ export default async function RootLayout({
         />
       </head>
       <body className={bodyClassName}>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-background focus:px-4 focus:py-2 focus:text-foreground focus:shadow-lg"
+        >
+          Skip to main content
+        </a>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >
-          <ToastProvider>
-            <Suspense fallback={null}>
-              <RouteScrollReset />
-            </Suspense>
-            <AppChrome
-              announcementBar={
-                <Suspense fallback={null}>
-                  <AnnouncementBarWrapper />
-                </Suspense>
-              }
-              popupCampaigns={
-                <Suspense fallback={null}>
-                  <PopupCampaigns />
-                </Suspense>
-              }
-              navbar={<Navbar />}
-            />
-            {children}
-            <MobileBottomNav />
-          </ToastProvider>
+          <MotionConfig reducedMotion="user">
+            <ToastProvider>
+              <Suspense fallback={null}>
+                <RouteScrollReset />
+              </Suspense>
+              <AppChrome
+                announcementBar={
+                  <Suspense fallback={null}>
+                    <AnnouncementBarWrapper />
+                  </Suspense>
+                }
+                popupCampaigns={
+                  <Suspense fallback={null}>
+                    <PopupCampaigns />
+                  </Suspense>
+                }
+                navbar={<Navbar />}
+              />
+              <main id="main-content">{children}</main>
+              <MobileBottomNav />
+              <CookieConsentBanner />
+              <AnalyticsScripts measurementId={env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
+            </ToastProvider>
+          </MotionConfig>
         </ThemeProvider>
       </body>
     </html>

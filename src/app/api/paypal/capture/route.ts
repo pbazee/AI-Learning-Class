@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decodeProviderState, finalizeCheckoutOrder } from "@/lib/payments";
+import { captureException } from "@/lib/monitoring";
 import { capturePaypalOrder } from "@/lib/paypal";
 
 export async function POST(request: NextRequest) {
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, sessionId: payload.id });
   } catch (error) {
+    captureException(error, { route: "api.paypal.capture" });
     console.error("[paypal.capture] Unable to capture PayPal order.", error);
     return NextResponse.json({ error: "Unable to confirm PayPal payment." }, { status: 500 });
   }

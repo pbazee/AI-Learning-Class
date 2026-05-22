@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { env } from "@/lib/config";
+import { sendCourseEnrollmentEmail } from "@/lib/email";
 import { recordUserCourseOwnership } from "@/lib/learner-records";
 import { syncCourseEnrollmentCount } from "@/lib/course-metrics";
 import { prisma } from "@/lib/prisma";
@@ -31,6 +33,7 @@ export async function POST(
       where: { id: courseId },
       select: {
         id: true,
+        title: true,
         slug: true,
         price: true,
         isFree: true,
@@ -82,6 +85,16 @@ export async function POST(
     await syncCourseEnrollmentCount(course.id);
 
     const firstLessonId = course.modules.flatMap((module) => module.lessons.map((lesson) => lesson.id))[0];
+
+    void sendCourseEnrollmentEmail({
+      userId: profile.id,
+      email: profile.email,
+      courseName: course.title,
+      courseHref: `${env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/courses/${course.slug}`,
+      orderId: `free-${course.id}-${profile.id}`,
+    }).catch((nextError) => {
+      console.error("[courses.enroll] Unable to send enrollment email.", nextError);
+    });
 
     return NextResponse.json({
       success: true,

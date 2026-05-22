@@ -2,6 +2,7 @@ import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { Prisma, type Role } from "@prisma/client";
 import { prisma } from "./prisma";
 import { getPrimaryAdminEmail, normalizeEmail } from "./admin-email";
+import { ensureEmailPreferenceForUser, sendWelcomeEmail } from "./email";
 import { isPrismaConnectionError, isPrismaSchemaMismatchError } from "./prisma-errors";
 import {
   getSupabaseAuthRole,
@@ -303,16 +304,28 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
 
   if (existingById) {
     const referralCode = await getExistingReferralCodeOrNull(existingById.id);
-
-    return updateUserDefensively(existingById.id, referralCode);
+    const updatedUser = await updateUserDefensively(existingById.id, referralCode);
+    await ensureEmailPreferenceForUser(existingById.id);
+    return updatedUser;
   }
 
   if (existingByEmail) {
     const referralCode = await getExistingReferralCodeOrNull(existingByEmail.id);
-
-    return updateUserDefensively(existingByEmail.id, referralCode);
+    const updatedUser = await updateUserDefensively(existingByEmail.id, referralCode);
+    await ensureEmailPreferenceForUser(existingByEmail.id);
+    return updatedUser;
   }
 
-  return createUserDefensively();
+  const createdUser = await createUserDefensively();
+  await ensureEmailPreferenceForUser(createdUser.id);
+  void sendWelcomeEmail({
+    userId: createdUser.id,
+    email: createdUser.email,
+    name: createdUser.name,
+  }).catch((error) => {
+    console.warn("[auth.sync] Unable to send welcome email.", error);
+  });
+
+  return createdUser;
 }
 

@@ -21,6 +21,26 @@ function toJsonb(value: unknown) {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
+function normalizeOnboardingAnswerValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : String(entry ?? "")))
+      .filter(Boolean)
+      .join(",");
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        normalizeOnboardingAnswerValue(entry),
+      ])
+    );
+  }
+
+  return value;
+}
+
 async function getAuthenticatedUser() {
   const supabase = await createServerSupabaseClient();
   const {
@@ -416,7 +436,9 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
 
-    if (!isValidOnboardingQuizAnswers(body.answers)) {
+    const normalizedAnswers = normalizeOnboardingAnswerValue(body.answers);
+
+    if (!isValidOnboardingQuizAnswers(normalizedAnswers)) {
       return NextResponse.json(
         { error: "Answer all four onboarding questions to continue." },
         { status: 400 }
@@ -425,11 +447,11 @@ export async function POST(request: Request) {
 
     await ensureOnboardingUserRecord(user);
 
-    const recommendations = await getRecommendations(body.answers, 3);
+    const recommendations = await getRecommendations(normalizedAnswers, 3);
 
     await updateOnboardingProfileAnswers(
       user,
-      body.answers,
+      normalizedAnswers,
       recommendations.map((course) => course.id)
     );
 

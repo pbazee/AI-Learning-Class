@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Check, Zap } from "lucide-react";
+import { RefundPolicyNotice, type RefundPolicyNoticeProps } from "@/components/legal/RefundPolicyNotice";
 import {
   type BillingCycle,
   getBillingCycleLabel,
@@ -19,7 +20,13 @@ const planCtaCopy: Record<string, { href: string; label: string }> = {
   teams: { href: "/checkout?plan=teams", label: "Choose Teams" },
 };
 
-export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
+export function PricingSection({
+  plans,
+  refundNotice,
+}: {
+  plans: SubscriptionPlan[];
+  refundNotice?: RefundPolicyNoticeProps;
+}) {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
 
   if (plans.length === 0) {
@@ -183,10 +190,24 @@ export function PricingSection({ plans }: { plans: SubscriptionPlan[] }) {
                   ))}
                 </ul>
 
+                {!isFreePlan && refundNotice ? (
+                  <RefundPolicyNotice
+                    {...refundNotice}
+                    compact
+                    tone={plan.isPopular ? "inverse" : "default"}
+                    className={cn(
+                      "mt-4",
+                      plan.isPopular
+                        ? "border-white/20 bg-white/10 shadow-none"
+                        : "border-slate-300/80 bg-slate-50/95"
+                    )}
+                  />
+                ) : null}
+
                 <Link
                   href={cta.href}
                   className={cn(
-                    "rounded-2xl px-4 py-3.5 text-center text-sm font-semibold transition-colors",
+                    "mt-4 rounded-2xl px-4 py-3.5 text-center text-sm font-semibold transition-colors",
                     plan.isPopular
                       ? "bg-white text-primary-blue hover:bg-white/95"
                       : "bg-primary-blue text-white hover:bg-primary-blue/90"

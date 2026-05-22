@@ -49,7 +49,7 @@ function buildCertificateCode(courseId: string) {
 async function ensureUserWishlistsTable() {
   if (!userWishlistsTableReady) {
     userWishlistsTableReady = (async () => {
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS user_wishlists (
           id BIGSERIAL PRIMARY KEY,
           user_id TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
@@ -59,7 +59,7 @@ async function ensureUserWishlistsTable() {
         );
       `);
 
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE INDEX IF NOT EXISTS user_wishlists_lookup_idx
         ON user_wishlists (user_id, created_at DESC);
       `);
@@ -75,7 +75,7 @@ async function ensureUserWishlistsTable() {
 export async function ensureUserCoursesTable() {
   if (!userCoursesTableReady) {
     userCoursesTableReady = (async () => {
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE TABLE IF NOT EXISTS user_courses (
           id BIGSERIAL PRIMARY KEY,
           user_id TEXT NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
@@ -91,12 +91,12 @@ export async function ensureUserCoursesTable() {
         );
       `);
 
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE INDEX IF NOT EXISTS user_courses_lookup_idx
         ON user_courses (user_id, completed, updated_at DESC);
       `);
 
-      await prisma.$executeRawUnsafe(`
+      await prisma.$executeRaw(Prisma.sql`
         CREATE INDEX IF NOT EXISTS user_courses_access_idx
         ON user_courses (user_id, lifetime_access, expires_at, updated_at DESC);
       `);

@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import type { PopupShowOn } from "@/types";
 import { prisma } from "@/lib/prisma";
-import {
-  POPUP_DATA_REVALIDATE_SECONDS,
-  PUBLIC_CACHE_TAGS,
-} from "@/lib/cache-config";
+import { PUBLIC_CACHE_TAGS } from "@/lib/cache-config";
 import { withRequestTiming } from "@/lib/server-performance";
+
+export const revalidate = 60;
 
 function resolveEligiblePlacements(pathname: string): PopupShowOn[] {
   if (pathname === "/") {
@@ -66,7 +65,7 @@ const getCachedActivePopup = unstable_cache(
   },
   ["active-popup-by-path"],
   {
-    revalidate: POPUP_DATA_REVALIDATE_SECONDS,
+    revalidate: 60,
     tags: [PUBLIC_CACHE_TAGS.popups],
   }
 );
@@ -80,7 +79,7 @@ export async function GET(request: NextRequest) {
 
       response.headers.set(
         "Cache-Control",
-        `public, s-maxage=${POPUP_DATA_REVALIDATE_SECONDS}, stale-while-revalidate=${POPUP_DATA_REVALIDATE_SECONDS}`
+        "s-maxage=60, stale-while-revalidate=300"
       );
 
       return response;

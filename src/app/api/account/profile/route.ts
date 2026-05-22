@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import { findCountryCodeByName, getCountryNameFromCode } from "@/lib/countries";
 import { prisma } from "@/lib/prisma";
+import { sanitizeText } from "@/lib/sanitize";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 const supportedCurrencies = new Set(["USD", "KES", "GHS", "NGN", "ZAR"]);
@@ -74,8 +75,8 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    const bio = typeof body.bio === "string" ? body.bio.trim() : "";
+    const name = typeof body.name === "string" ? sanitizeText(body.name).trim() : "";
+    const bio = typeof body.bio === "string" ? sanitizeText(body.bio).trim() : "";
     const countryCode =
       typeof body.countryCode === "string"
         ? body.countryCode.trim().toUpperCase()

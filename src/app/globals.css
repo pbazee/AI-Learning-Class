@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "vanilla-cookieconsent/dist/cookieconsent.css";
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
@@ -78,6 +79,29 @@
 
 * {
   @apply border-border;
+  cursor: default;
+}
+
+body,
+p,
+span,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+li,
+ul,
+ol,
+div,
+section,
+article,
+main,
+nav,
+header,
+footer {
+  cursor: default;
 }
 
 html {
@@ -102,6 +126,20 @@ body.professional-app {
   :root {
     --mobile-bottom-nav-height: calc(76px + env(safe-area-inset-bottom));
   }
+}
+
+a,
+button,
+[role="button"],
+label {
+  cursor: pointer !important;
+}
+
+input,
+textarea,
+select,
+[contenteditable] {
+  cursor: text !important;
 }
 
 a,

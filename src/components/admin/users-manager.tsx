@@ -1,26 +1,41 @@
 "use client";
 
 import { startTransition, useEffect, useMemo, useState } from "react";
-import { ArrowRight, Award, CreditCard, Search, ShieldCheck, UserCircle2, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  Award,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  Search,
+  ShieldCheck,
+  UserCircle2,
+  X,
+} from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getUserDetailsAction, updateUserRoleAction } from "@/app/admin/actions";
-import { AdminButton, AdminCard, AdminDrawer, AdminInput, AdminModal, AdminPageIntro, AdminStatCard, AdminStatGrid, StatusPill } from "@/components/admin/ui";
+import {
+  AdminButton,
+  AdminCard,
+  AdminDrawer,
+  AdminInput,
+  AdminModal,
+  AdminPageIntro,
+  AdminSelect,
+  AdminStatCard,
+  AdminStatGrid,
+  FieldLabel,
+  StatusPill,
+} from "@/components/admin/ui";
 import { useToast } from "@/components/ui/ToastProvider";
-import { formatPrice } from "@/lib/utils";
+import type {
+  AdminDirectoryFilters,
+  AdminDirectoryMode,
+  AdminDirectoryRow,
+} from "@/lib/admin-user-directory-types";
+import { cn, formatPrice } from "@/lib/utils";
 
-type UserRow = {
-  id: string;
-  name?: string | null;
-  email: string;
-  role: "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPER_ADMIN";
-  country?: string | null;
-  avatarUrl?: string | null;
-  bio?: string | null;
-  enrollmentsCount: number;
-  activeSubscriptions: number;
-  totalSpent: number;
-  joinedAt: string;
-};
+type UserRow = AdminDirectoryRow;
 
 type UserDetails = {
   id: string;
@@ -88,19 +103,93 @@ const detailFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
+const progressLabels: Record<UserRow["progressStatus"], string> = {
+  NOT_STARTED: "Not started",
+  IN_PROGRESS: "In progress",
+  COMPLETED: "Completed",
+};
+
+function getInitials(name?: string | null, email?: string) {
+  const source = name?.trim() || email || "U";
+  const parts = source.split(/\s+/).filter(Boolean);
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
+function countActiveFilters(mode: AdminDirectoryMode, filters: AdminDirectoryFilters) {
+  const values = [
+    filters.search,
+    mode === "users" ? (filters.role === "all" ? "" : filters.role) : "",
+    filters.plan === "all" ? "" : filters.plan,
+    mode === "learners" ? (filters.progress === "all" ? "" : filters.progress) : "",
+    filters.country,
+    filters.joinedFrom,
+    filters.joinedTo,
+    filters.sort !== "joined" ? filters.sort : "",
+  ];
+
+  return values.filter(Boolean).length;
+}
+
+function getActiveFilterChips(mode: AdminDirectoryMode, filters: AdminDirectoryFilters) {
+  const chips: string[] = [];
+
+  if (filters.search) chips.push(`Search: ${filters.search}`);
+  if (mode === "users" && filters.role !== "all") chips.push(`Role: ${filters.role.replace("_", " ")}`);
+  if (mode === "learners" && filters.progress !== "all") chips.push(`Progress: ${progressLabels[filters.progress]}`);
+  if (filters.plan !== "all") chips.push(`Plan: ${filters.plan[0].toUpperCase()}${filters.plan.slice(1)}`);
+  if (filters.country) chips.push(`Country: ${filters.country}`);
+  if (filters.joinedFrom) chips.push(`From: ${filters.joinedFrom}`);
+  if (filters.joinedTo) chips.push(`To: ${filters.joinedTo}`);
+  if (filters.sort !== "joined") chips.push(`Sort: ${filters.sort}`);
+
+  return chips;
+}
+
+function getProgressTone(status: UserRow["progressStatus"]) {
+  if (status === "COMPLETED") return "success";
+  if (status === "IN_PROGRESS") return "info";
+  return "neutral";
+}
+
+function getProgressBarClass(status: UserRow["progressStatus"]) {
+  if (status === "COMPLETED") {
+    return "bg-gradient-to-r from-emerald-400 to-teal-300";
+  }
+
+  if (status === "IN_PROGRESS") {
+    return "bg-gradient-to-r from-blue-500 to-cyan-400";
+  }
+
+  return "bg-slate-700";
+}
+
 export function UsersManager({
+  mode,
   users,
+  filters,
+  total,
+  pageCount,
+  countries,
   title = "Users",
   description = "Review learner profiles, progress, payments, and certificates from a premium detail workspace.",
   resultLabel = "users",
 }: {
+  mode: AdminDirectoryMode;
   users: UserRow[];
+  filters: AdminDirectoryFilters;
+  total: number;
+  pageCount: number;
+  countries: string[];
   title?: string;
   description?: string;
   resultLabel?: string;
 }) {
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(filters.search);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeUser, setActiveUser] = useState<UserRow | null>(null);
@@ -111,37 +200,78 @@ export function UsersManager({
     label: string;
   } | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const studentCount = users.filter((user) => user.role === "STUDENT").length;
-  const instructorCount = users.filter((user) => user.role === "INSTRUCTOR").length;
-  const adminCount = users.filter((user) => user.role === "ADMIN" || user.role === "SUPER_ADMIN").length;
+  useEffect(() => {
+    setSearchInput(filters.search);
+  }, [filters.search]);
 
+  const studentCount = useMemo(
+    () => users.filter((user) => user.role === "STUDENT").length,
+    [users]
+  );
+  const instructorCount = useMemo(
+    () => users.filter((user) => user.role === "INSTRUCTOR").length,
+    [users]
+  );
+  const adminCount = useMemo(
+    () => users.filter((user) => user.role === "ADMIN" || user.role === "SUPER_ADMIN").length,
+    [users]
+  );
+  const activeFilterCount = countActiveFilters(mode, filters);
+  const activeFilterChips = getActiveFilterChips(mode, filters);
   const totalSubscriptionRevenue = useMemo(
     () => users.reduce((sum, user) => sum + user.totalSpent, 0),
     [users]
   );
-  const filteredUsers = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+  const showingFrom = total === 0 ? 0 : (filters.page - 1) * filters.pageSize + 1;
+  const showingTo = Math.min(filters.page * filters.pageSize, total);
 
-    if (!query) {
-      return users;
+  function updateFilters(next: Partial<AdminDirectoryFilters>) {
+    const params = new URLSearchParams(searchParams.toString());
+
+    const merged: AdminDirectoryFilters = {
+      ...filters,
+      ...next,
+      page: next.page ?? (Object.keys(next).some((key) => key !== "page") ? 1 : filters.page),
+    };
+
+    const entries: Array<[string, string]> = [
+      ["page", merged.page > 1 ? String(merged.page) : ""],
+      ["search", merged.search],
+      ["role", mode === "users" && merged.role !== "all" ? merged.role : ""],
+      ["plan", merged.plan !== "all" ? merged.plan : ""],
+      ["progress", mode === "learners" && merged.progress !== "all" ? merged.progress : ""],
+      ["country", merged.country],
+      ["from", merged.joinedFrom],
+      ["to", merged.joinedTo],
+      ["sort", merged.sort !== "joined" ? merged.sort : ""],
+    ];
+
+    for (const [key, value] of entries) {
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
     }
 
-    return users.filter((user) => {
-      const name = user.name?.toLowerCase() || "";
-      const email = user.email.toLowerCase();
-      return name.includes(query) || email.includes(query);
+    router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, {
+      scroll: false,
     });
-  }, [searchQuery, users]);
+  }
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      setSearchQuery(searchInput);
+      if (searchInput !== filters.search) {
+        updateFilters({ search: searchInput });
+      }
     }, 300);
 
     return () => window.clearTimeout(timeoutId);
-  }, [searchInput]);
+  }, [filters.search, searchInput]);
 
   function openDetails(user: UserRow) {
     setActiveUser(user);
@@ -194,27 +324,61 @@ export function UsersManager({
     });
   }
 
+  function clearFilters() {
+    setSearchInput("");
+    router.replace(pathname, { scroll: false });
+  }
+
   return (
     <div className="space-y-6">
       <AdminPageIntro
         eyebrow="Audience"
-        title={title}
+        title={`${title} (${total.toLocaleString()} total)`}
         description={description}
       />
 
       <AdminStatGrid>
-        <AdminStatCard label="Total Users" value={users.length} />
+        <AdminStatCard label="Total Users" value={total.toLocaleString()} />
         <AdminStatCard label="Students" value={studentCount} accent="from-blue-500 to-cyan-400" />
         <AdminStatCard label="Instructors" value={instructorCount} accent="from-emerald-500 to-teal-400" />
         <AdminStatCard label="Admins" value={adminCount} accent="from-amber-500 to-orange-400" />
-        <AdminStatCard label="Active Subscribers" value={users.filter((user) => user.activeSubscriptions > 0).length} accent="from-violet-500 to-fuchsia-400" />
-        <AdminStatCard label="Tracked Revenue" value={formatPrice(totalSubscriptionRevenue)} accent="from-pink-500 to-rose-400" />
+        <AdminStatCard
+          label="Active Subscribers"
+          value={users.filter((user) => user.activeSubscriptions > 0).length}
+          accent="from-violet-500 to-fuchsia-400"
+        />
+        <AdminStatCard
+          label="Tracked Revenue"
+          value={formatPrice(totalSubscriptionRevenue)}
+          accent="from-pink-500 to-rose-400"
+        />
       </AdminStatGrid>
 
-      <AdminCard className="overflow-hidden">
-        <div className="border-b border-white/10 px-4 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="relative w-full max-w-xl">
+      <AdminCard className="p-5">
+        <div className="mb-4 flex flex-col gap-3 rounded-[24px] border border-white/10 bg-black/20 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Directory Controls</p>
+            <p className="mt-2 text-sm text-slate-300">
+              Adjust filters, share the URL, and move through paginated results without losing state.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
+            <span className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2">
+              Filters ({activeFilterCount})
+            </span>
+            <span className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2">
+              Page {filters.page} of {pageCount}
+            </span>
+            <span className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2">
+              Showing {showingFrom}-{showingTo}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-6">
+          <div className="lg:col-span-2">
+            <FieldLabel>Search</FieldLabel>
+            <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <AdminInput
                 type="text"
@@ -228,7 +392,7 @@ export function UsersManager({
                   type="button"
                   onClick={() => {
                     setSearchInput("");
-                    setSearchQuery("");
+                    updateFilters({ search: "" });
                   }}
                   className="absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"
                   aria-label="Clear search"
@@ -237,59 +401,289 @@ export function UsersManager({
                 </button>
               ) : null}
             </div>
-            <p className="text-sm text-slate-400">
-              Showing {filteredUsers.length} of {users.length} {resultLabel}
-            </p>
+          </div>
+
+          {mode === "users" ? (
+            <div>
+              <FieldLabel>Role</FieldLabel>
+              <AdminSelect
+                value={filters.role}
+                onChange={(event) =>
+                  updateFilters({ role: event.target.value as AdminDirectoryFilters["role"] })
+                }
+              >
+                <option value="all">All roles</option>
+                <option value="STUDENT">Student</option>
+                <option value="ADMIN">Admin</option>
+                <option value="INSTRUCTOR">Instructor</option>
+              </AdminSelect>
+            </div>
+          ) : (
+            <div>
+              <FieldLabel>Progress</FieldLabel>
+              <AdminSelect
+                value={filters.progress}
+                onChange={(event) =>
+                  updateFilters({ progress: event.target.value as AdminDirectoryFilters["progress"] })
+                }
+              >
+                <option value="all">All progress</option>
+                <option value="NOT_STARTED">Not started</option>
+                <option value="IN_PROGRESS">In progress</option>
+                <option value="COMPLETED">Completed</option>
+              </AdminSelect>
+            </div>
+          )}
+
+          <div>
+            <FieldLabel>Plan</FieldLabel>
+            <AdminSelect
+              value={filters.plan}
+              onChange={(event) =>
+                updateFilters({ plan: event.target.value as AdminDirectoryFilters["plan"] })
+              }
+            >
+              <option value="all">All plans</option>
+              <option value="free">Free</option>
+              <option value="pro">Pro</option>
+              <option value="teams">Teams</option>
+            </AdminSelect>
+          </div>
+
+          <div>
+            <FieldLabel>Country</FieldLabel>
+            <AdminSelect
+              value={filters.country || "all"}
+              onChange={(event) =>
+                updateFilters({ country: event.target.value === "all" ? "" : event.target.value })
+              }
+            >
+              <option value="all">All countries</option>
+              {countries.map((country) => (
+                <option key={country} value={country}>
+                  {country}
+                </option>
+              ))}
+            </AdminSelect>
+          </div>
+
+          <div>
+            <FieldLabel>Sort by</FieldLabel>
+            <AdminSelect value={filters.sort} onChange={(event) => updateFilters({ sort: event.target.value })}>
+              <option value="joined">Date joined</option>
+              <option value="revenue">Revenue</option>
+              {mode === "users" ? (
+                <option value="courses">Courses enrolled</option>
+              ) : (
+                <option value="lastActive">Last active</option>
+              )}
+              {mode === "learners" ? <option value="progress">Progress</option> : null}
+              <option value="name">Name</option>
+            </AdminSelect>
           </div>
         </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <FieldLabel>Date joined from</FieldLabel>
+            <AdminInput
+              type="date"
+              value={filters.joinedFrom}
+              onChange={(event) => updateFilters({ joinedFrom: event.target.value })}
+            />
+          </div>
+          <div>
+            <FieldLabel>Date joined to</FieldLabel>
+            <AdminInput
+              type="date"
+              value={filters.joinedTo}
+              onChange={(event) => updateFilters({ joinedTo: event.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-slate-400">
+              Showing {showingFrom}-{showingTo} of {total.toLocaleString()} {resultLabel}
+            </div>
+            <AdminButton
+              type="button"
+              variant="secondary"
+              onClick={clearFilters}
+              disabled={activeFilterCount === 0}
+            >
+              Clear Filters
+            </AdminButton>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {activeFilterChips.length > 0 ? (
+              activeFilterChips.map((chip) => (
+                <span
+                  key={chip}
+                  className="rounded-full border border-primary-blue/25 bg-primary-blue/10 px-3 py-1 text-xs font-medium text-blue-100"
+                >
+                  {chip}
+                </span>
+              ))
+            ) : (
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-500">
+                No active filters
+              </span>
+            )}
+          </div>
+        </div>
+      </AdminCard>
+
+      <AdminCard className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 bg-white/[0.03]">
-                {["User", "Role", "Country", "Learning", "Revenue", "Joined", "Details"].map((heading) => (
-                  <th key={heading} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {[
+                  "User",
+                  "Role",
+                  "Plan",
+                  "Country",
+                  mode === "learners" ? "Progress" : "Learning",
+                  "Revenue",
+                  "Joined",
+                  "Details",
+                ].map((heading) => (
+                  <th
+                    key={heading}
+                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500"
+                  >
                     {heading}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/10">
-              {filteredUsers.map((user) => (
+              {users.map((user) => (
                 <tr key={user.id} className="hover:bg-white/[0.02]">
                   <td className="px-4 py-4">
-                    <div>
-                      <p className="font-semibold text-white">{user.name || "Unnamed user"}</p>
-                      <p className="mt-1 text-xs text-slate-400">{user.email}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-blue-500/20 to-cyan-400/10 text-sm font-bold text-blue-100">
+                        {getInitials(user.name, user.email)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-white">{user.name || "Unnamed user"}</p>
+                        <p className="mt-1 truncate text-xs text-slate-400">{user.email}</p>
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <StatusPill tone={user.role.includes("ADMIN") ? "warning" : user.role === "INSTRUCTOR" ? "info" : "neutral"}>
+                    <StatusPill
+                      tone={
+                        user.role.includes("ADMIN")
+                          ? "warning"
+                          : user.role === "INSTRUCTOR"
+                            ? "info"
+                            : "neutral"
+                      }
+                    >
                       {user.role.replace("_", " ")}
+                    </StatusPill>
+                  </td>
+                  <td className="px-4 py-4">
+                    <StatusPill
+                      tone={
+                        user.planLabel === "Pro"
+                          ? "info"
+                          : user.planLabel === "Teams"
+                            ? "success"
+                            : "neutral"
+                      }
+                    >
+                      {user.planLabel}
                     </StatusPill>
                   </td>
                   <td className="px-4 py-4 text-slate-300">{user.country || "Unknown"}</td>
                   <td className="px-4 py-4">
-                    <p className="font-semibold text-white">{user.enrollmentsCount} courses</p>
-                    <p className="mt-1 text-xs text-slate-400">{user.activeSubscriptions} active plans</p>
+                    {mode === "learners" ? (
+                      <div className="min-w-[220px]">
+                        <StatusPill tone={getProgressTone(user.progressStatus)}>
+                          {progressLabels[user.progressStatus]}
+                        </StatusPill>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
+                          <div
+                            className={cn("h-full rounded-full", getProgressBarClass(user.progressStatus))}
+                            style={{
+                              width: `${Math.max(
+                                user.progressPercent,
+                                user.progressStatus === "NOT_STARTED" ? 8 : 0
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="mt-2 text-xs text-slate-400">
+                          {user.progressPercent}% complete
+                          {user.lastActiveAt
+                            ? ` • active ${detailFormatter.format(new Date(user.lastActiveAt))}`
+                            : " • no activity yet"}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="font-semibold text-white">{user.enrollmentsCount} courses</p>
+                        <p className="text-xs text-slate-400">{user.activeSubscriptions} active plans</p>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-4 font-semibold text-white">{formatPrice(user.totalSpent)}</td>
-                  <td className="px-4 py-4 text-slate-300">{user.joinedAt}</td>
+                  <td className="px-4 py-4 text-slate-300">{detailFormatter.format(new Date(user.joinedAt))}</td>
                   <td className="px-4 py-4">
-                    <AdminButton type="button" variant="ghost" icon={<ArrowRight className="h-4 w-4" />} onClick={() => openDetails(user)}>
+                    <AdminButton
+                      type="button"
+                      variant="ghost"
+                      icon={<ArrowRight className="h-4 w-4" />}
+                      onClick={() => openDetails(user)}
+                    >
                       View Details
                     </AdminButton>
                   </td>
                 </tr>
               ))}
-              {filteredUsers.length === 0 ? (
+              {users.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
-                    No {resultLabel} match your search yet.
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-400">
+                    No {resultLabel} match the current filters. Clear a filter or widen the search to
+                    see more results.
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
+        </div>
+
+        <div className="flex flex-col gap-4 border-t border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-400">
+            Showing {showingFrom}-{showingTo} of {total.toLocaleString()} {resultLabel}
+          </p>
+          <div className="flex items-center gap-2">
+            <AdminButton
+              type="button"
+              variant="secondary"
+              onClick={() => updateFilters({ page: Math.max(filters.page - 1, 1) })}
+              disabled={filters.page <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </AdminButton>
+            <div className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300">
+              Page {filters.page} of {pageCount}
+            </div>
+            <AdminButton
+              type="button"
+              variant="secondary"
+              onClick={() => updateFilters({ page: Math.min(filters.page + 1, pageCount) })}
+              disabled={filters.page >= pageCount}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </AdminButton>
+          </div>
         </div>
       </AdminCard>
 
@@ -307,7 +701,7 @@ export function UsersManager({
       >
         {loading || !details ? (
           <AdminCard className="p-8">
-            <p className="text-sm text-slate-400">Loading user profile details…</p>
+            <p className="text-sm text-slate-400">Loading user profile details...</p>
           </AdminCard>
         ) : (
           <div className="space-y-6">
@@ -330,7 +724,9 @@ export function UsersManager({
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Joined</p>
-                    <p className="mt-2 text-lg font-semibold text-white">{detailFormatter.format(new Date(details.joinedAt))}</p>
+                    <p className="mt-2 text-lg font-semibold text-white">
+                      {detailFormatter.format(new Date(details.joinedAt))}
+                    </p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                     <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Country</p>
@@ -357,13 +753,27 @@ export function UsersManager({
                   Update the access level for this user with an explicit confirmation step.
                 </p>
                 <div className="mt-5 grid gap-3">
-                  <AdminButton type="button" onClick={() => confirmRoleChange("ADMIN", "Promote to Admin")} disabled={details.role === "SUPER_ADMIN"}>
+                  <AdminButton
+                    type="button"
+                    onClick={() => confirmRoleChange("ADMIN", "Promote to Admin")}
+                    disabled={details.role === "SUPER_ADMIN"}
+                  >
                     Promote to Admin
                   </AdminButton>
-                  <AdminButton type="button" variant="secondary" onClick={() => confirmRoleChange("INSTRUCTOR", "Promote to Instructor")} disabled={details.role === "SUPER_ADMIN"}>
+                  <AdminButton
+                    type="button"
+                    variant="secondary"
+                    onClick={() => confirmRoleChange("INSTRUCTOR", "Promote to Instructor")}
+                    disabled={details.role === "SUPER_ADMIN"}
+                  >
                     Promote to Instructor
                   </AdminButton>
-                  <AdminButton type="button" variant="ghost" onClick={() => confirmRoleChange("STUDENT", "Demote to Student")} disabled={details.role === "SUPER_ADMIN"}>
+                  <AdminButton
+                    type="button"
+                    variant="ghost"
+                    onClick={() => confirmRoleChange("STUDENT", "Demote to Student")}
+                    disabled={details.role === "SUPER_ADMIN"}
+                  >
                     Demote to Student
                   </AdminButton>
                 </div>
@@ -394,7 +804,10 @@ export function UsersManager({
                           </StatusPill>
                         </div>
                         <div className="mt-3 h-2 rounded-full bg-white/5">
-                          <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${enrollment.progress}%` }} />
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+                            style={{ width: `${enrollment.progress}%` }}
+                          />
                         </div>
                         <p className="mt-2 text-xs text-slate-500">
                           Enrolled {detailFormatter.format(new Date(enrollment.enrolledAt))}
@@ -416,11 +829,17 @@ export function UsersManager({
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-sm font-semibold text-white">{payment.items.join(", ") || "Purchase"}</p>
-                          <p className="mt-1 text-xs text-slate-400">{detailFormatter.format(new Date(payment.date))}</p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {detailFormatter.format(new Date(payment.date))}
+                          </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold text-white">{formatPrice(payment.amount, payment.currency)}</p>
-                          <StatusPill tone={payment.status === "COMPLETED" ? "success" : "warning"}>{payment.status}</StatusPill>
+                          <p className="text-sm font-semibold text-white">
+                            {formatPrice(payment.amount, payment.currency)}
+                          </p>
+                          <StatusPill tone={payment.status === "COMPLETED" ? "success" : "warning"}>
+                            {payment.status}
+                          </StatusPill>
                         </div>
                       </div>
                     </div>
@@ -435,8 +854,12 @@ export function UsersManager({
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold text-white">{formatPrice(subscription.revenueGenerated)}</p>
-                          <StatusPill tone={subscription.status === "ACTIVE" ? "success" : "warning"}>{subscription.status}</StatusPill>
+                          <p className="text-sm font-semibold text-white">
+                            {formatPrice(subscription.revenueGenerated)}
+                          </p>
+                          <StatusPill tone={subscription.status === "ACTIVE" ? "success" : "warning"}>
+                            {subscription.status}
+                          </StatusPill>
                         </div>
                       </div>
                       <p className="mt-3 text-xs text-slate-400">
@@ -464,7 +887,9 @@ export function UsersManager({
                     details.certificates.map((certificate) => (
                       <div key={certificate.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <p className="text-sm font-semibold text-white">{certificate.courseTitle}</p>
-                        <p className="mt-1 text-xs text-slate-400">Issued {detailFormatter.format(new Date(certificate.issuedAt))}</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Issued {detailFormatter.format(new Date(certificate.issuedAt))}
+                        </p>
                         <p className="mt-2 text-xs text-slate-500">Certificate code: {certificate.code}</p>
                       </div>
                     ))
@@ -485,7 +910,9 @@ export function UsersManager({
                           <p className="text-sm font-semibold text-white">{event.label}</p>
                           <p className="mt-1 text-xs text-slate-400">{event.detail}</p>
                         </div>
-                        <p className="text-xs text-slate-500">{detailFormatter.format(new Date(event.date))}</p>
+                        <p className="text-xs text-slate-500">
+                          {detailFormatter.format(new Date(event.date))}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -513,7 +940,7 @@ export function UsersManager({
         }
       >
         <p className="text-sm text-slate-400">
-          This will immediately update the user’s admin-console permissions and storefront access level.
+          This will immediately update the user&apos;s admin-console permissions and storefront access level.
         </p>
       </AdminModal>
     </div>

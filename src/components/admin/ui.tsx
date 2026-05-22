@@ -116,7 +116,7 @@ export function AdminButton({
   ...props
 }: ButtonProps) {
   const styles = {
-    primary: "bg-primary-blue text-white shadow-[0_20px_40px_-20px_rgba(0,86,210,0.95)] hover:bg-primary-blue/90",
+    primary: "bg-primary-blue text-white shadow-button-primary hover:bg-primary-blue/90 hover:shadow-button-primary-hover",
     secondary: "border border-white/10 bg-slate-900/70 text-slate-100 hover:border-primary-blue/30 hover:bg-slate-900",
     ghost: "bg-transparent text-slate-400 hover:bg-white/5 hover:text-white",
     danger: "bg-rose-600 text-white hover:bg-rose-700",
@@ -396,6 +396,7 @@ export function AdminModal({
   footerClassName,
   scrollBody = false,
   stickyFooter = false,
+  ariaLabelledBy,
 }: {
   open: boolean;
   onClose: () => void;
@@ -408,6 +409,7 @@ export function AdminModal({
   footerClassName?: string;
   scrollBody?: boolean;
   stickyFooter?: boolean;
+  ariaLabelledBy?: string;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -455,6 +457,7 @@ export function AdminModal({
       }}
       role="dialog"
       aria-modal="true"
+      aria-labelledby={ariaLabelledBy}
     >
       <div
         className={cn(
@@ -467,7 +470,7 @@ export function AdminModal({
         {/* Header */}
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
-            <h3 className="text-xl font-black text-slate-50">{title}</h3>
+            <h3 id={ariaLabelledBy} className="text-xl font-black text-slate-50">{title}</h3>
             {description ? <p className="mt-2 text-sm text-slate-400">{description}</p> : null}
           </div>
           <button

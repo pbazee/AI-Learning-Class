@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma, type EnrollmentStatus } from "@prisma/client";
+import { format } from "date-fns";
 import {
   revokeCatalogEntitlements,
   upsertManagedSubscriptionEntitlement,
@@ -9,10 +10,16 @@ import type { CheckoutGateway, CheckoutQuote } from "@/lib/checkout";
 import { syncCourseEnrollmentCounts } from "@/lib/course-metrics";
 import { EntitlementSource } from "@/lib/domain-constants";
 import { DEFAULT_AFFILIATE_PROGRAM } from "@/lib/affiliate-program";
+import {
+  sendCourseEnrollmentEmail,
+  sendPaymentFailedEmail,
+  sendPaymentReceiptEmail,
+} from "@/lib/email";
 import { evaluateAffiliateFraud } from "@/lib/growth-utils";
 import { recordUserCourseOwnership } from "@/lib/learner-records";
 import { prisma } from "@/lib/prisma";
 import type { BillingCycle } from "@/lib/site";
+import { env } from "@/lib/config";
 import {
   ensureOwnerTeamWorkspace,
   syncWorkspaceMemberAccessWindow,
@@ -519,10 +526,12 @@ export async function createPendingCheckoutOrder({
   gateway,
   quote,
   userId,
+  pendingReference,
 }: {
   userId: string;
   gateway: CheckoutGateway;
   quote: CheckoutQuote;
+  pendingReference?: string | null;
 }) {
   const courseItems = quote.items.flatMap((item) => {
     if (item.kind !== "course" || !item.courseId) {
@@ -538,6 +547,22 @@ export async function createPendingCheckoutOrder({
     ];
   });
 
+  if (pendingReference) {
+    const existing = await prisma.order.findFirst({
+      where: {
+        userId,
+        status: "PENDING",
+        paymentMethod: gateway,
+        paymentIntentId: pendingReference,
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return existing;
+    }
+  }
+
   return prisma.order.create({
     data: {
       userId,
@@ -545,6 +570,7 @@ export async function createPendingCheckoutOrder({
       totalAmount: quote.total,
       currency: quote.currency,
       paymentMethod: gateway,
+      paymentIntentId: pendingReference ?? null,
       items:
         courseItems.length > 0
           ? {
@@ -605,6 +631,95 @@ export async function markCheckoutOrderFailedByProviderReference(
   });
 }
 
+export async function handleStripePaymentFailure(input: {
+  paymentIntentId?: string | null;
+  stripeSubscriptionId?: string | null;
+  customerId?: string | null;
+  customerEmail?: string | null;
+}) {
+  const paymentIntentId = normalizeOptionalValue(input.paymentIntentId);
+  const stripeSubscriptionId = normalizeOptionalValue(input.stripeSubscriptionId);
+  const customerId = normalizeOptionalValue(input.customerId);
+  const customerEmail = normalizeOptionalValue(input.customerEmail);
+
+  const result = await prisma.$transaction(async (transaction) => {
+    const order = paymentIntentId
+      ? await transaction.order.findFirst({
+          where: { paymentIntentId },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+              },
+            },
+          },
+        })
+      : null;
+
+    if (order && order.status !== "COMPLETED" && order.status !== "REFUNDED") {
+      await transaction.order.update({
+        where: { id: order.id },
+        data: { status: "PAYMENT_FAILED" },
+      });
+    }
+
+    const subscription = stripeSubscriptionId
+      ? await transaction.userSubscription.findFirst({
+          where: { stripeSubscriptionId },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+              },
+            },
+          },
+        })
+      : customerId
+        ? await transaction.userSubscription.findFirst({
+            where: {
+              user: { stripeCustomerId: customerId },
+              status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] },
+            },
+            orderBy: { currentPeriodEnd: "desc" },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                },
+              },
+            },
+          })
+        : null;
+
+    if (subscription) {
+      await transaction.userSubscription.update({
+        where: { id: subscription.id },
+        data: { status: "PAYMENT_FAILED" },
+      });
+    }
+
+    return {
+      orderId: order?.id ?? null,
+      userId: order?.userId ?? subscription?.userId ?? null,
+      email: customerEmail ?? order?.user.email ?? subscription?.user.email ?? null,
+    };
+  });
+
+  if (result.email) {
+    void sendPaymentFailedEmail({
+      userId: result.userId,
+      email: result.email,
+      orderId: result.orderId,
+      retryHref: `${env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/checkout`,
+    }).catch((error) => {
+      console.error("[payments] Unable to send payment failed email.", error);
+    });
+  }
+}
+
 export async function finalizeCheckoutOrder({
   affiliateCode,
   couponCode,
@@ -641,7 +756,7 @@ export async function finalizeCheckoutOrder({
   const normalizedCustomerId = normalizeOptionalValue(customerId);
   const normalizedStripeSubscriptionId = normalizeOptionalValue(stripeSubscriptionId);
 
-  return prisma.$transaction(async (transaction) => {
+  const result = await prisma.$transaction(async (transaction) => {
     const order = normalizedOrderId
       ? await transaction.order.findUnique({
           where: { id: normalizedOrderId },
@@ -761,6 +876,73 @@ export async function finalizeCheckoutOrder({
       subscriptionId,
     };
   });
+
+  if (!result.alreadyCompleted) {
+    const completedOrder = await prisma.order.findUnique({
+      where: { id: result.orderId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+        items: {
+          include: {
+            course: {
+              select: {
+                title: true,
+                slug: true,
+                totalDuration: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (completedOrder?.user?.email) {
+      const appUrl = env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const primaryItemLabel =
+        normalizedPlanSlug
+          ? normalizedPlanSlug
+              .split("-")
+              .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+              .join(" ")
+          : completedOrder.items.length === 1
+            ? completedOrder.items[0].course.title
+            : `AI Genius Lab Order (${completedOrder.items.length} items)`;
+
+      void sendPaymentReceiptEmail({
+        userId: completedOrder.user.id,
+        email: completedOrder.user.email,
+        planName: primaryItemLabel,
+        amountLabel: `${completedOrder.currency} ${completedOrder.totalAmount.toFixed(2)}`,
+        nextBillingDate: currentPeriodEnd ? format(currentPeriodEnd, "MMMM d, yyyy") : null,
+        receiptHref: normalizedReceiptUrl ?? completedOrder.receiptUrl ?? null,
+        orderId: completedOrder.id,
+      }).catch((error) => {
+        console.error("[payments] Unable to send payment receipt email.", error);
+      });
+
+      for (const item of completedOrder.items) {
+        void sendCourseEnrollmentEmail({
+          userId: completedOrder.user.id,
+          email: completedOrder.user.email,
+          courseName: item.course.title,
+          courseHref: `${appUrl}/courses/${item.course.slug}`,
+          estimatedDuration:
+            item.course.totalDuration > 0 ? `${item.course.totalDuration} minutes` : null,
+          orderId: completedOrder.id,
+        }).catch((error) => {
+          console.error("[payments] Unable to send course enrollment email.", error);
+        });
+      }
+    }
+  }
+
+  return result;
 }
 
 export async function syncManagedStripeSubscription({

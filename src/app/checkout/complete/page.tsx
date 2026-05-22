@@ -1,12 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, ShieldAlert } from "lucide-react";
-import { NavbarClient } from "@/components/layout/NavbarClient";
 
-export default function CheckoutCompletePage() {
+const errorMessages: Record<string, string> = {
+  card_declined: "Your card was declined. Please try a different card.",
+  insufficient_funds: "Insufficient funds. Please try a different payment method.",
+  expired_card: "Your card has expired. Please update your card details.",
+  incorrect_cvc: "Incorrect CVC. Please check your card details.",
+};
+
+function resolveFriendlyError(payload: { error?: string; errorCode?: string } | null, fallback: string) {
+  if (payload?.errorCode && errorMessages[payload.errorCode]) {
+    return errorMessages[payload.errorCode];
+  }
+
+  return payload?.error || fallback;
+}
+
+function CheckoutCompletePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const gateway = searchParams.get("gateway");
@@ -31,11 +45,13 @@ export default function CheckoutCompletePage() {
           const payload = await response.json().catch(() => null);
 
           if (!response.ok || !payload?.success) {
-            throw new Error(payload?.error || "Unable to confirm your Stripe payment.");
+            throw new Error(resolveFriendlyError(payload, "Unable to confirm your Stripe payment."));
           }
 
           if (!cancelled) {
-            router.replace(`/checkout/success?gateway=stripe&session_id=${encodeURIComponent(payload.sessionId)}`);
+            Promise.resolve(
+              router.replace(`/checkout/success?gateway=stripe&session_id=${encodeURIComponent(payload.sessionId)}`)
+            ).catch(() => {});
           }
           return;
         }
@@ -55,7 +71,9 @@ export default function CheckoutCompletePage() {
           }
 
           if (!cancelled) {
-            router.replace(`/checkout/success?gateway=paypal&session_id=${encodeURIComponent(payload.sessionId)}`);
+            Promise.resolve(
+              router.replace(`/checkout/success?gateway=paypal&session_id=${encodeURIComponent(payload.sessionId)}`)
+            ).catch(() => {});
           }
           return;
         }
@@ -75,7 +93,9 @@ export default function CheckoutCompletePage() {
           }
 
           if (!cancelled) {
-            router.replace(`/checkout/success?gateway=paystack&session_id=${encodeURIComponent(payload.sessionId)}`);
+            Promise.resolve(
+              router.replace(`/checkout/success?gateway=paystack&session_id=${encodeURIComponent(payload.sessionId)}`)
+            ).catch(() => {});
           }
           return;
         }
@@ -124,5 +144,13 @@ export default function CheckoutCompletePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutCompletePage() {
+  return (
+    <Suspense fallback={null}>
+      <CheckoutCompletePageInner />
+    </Suspense>
   );
 }

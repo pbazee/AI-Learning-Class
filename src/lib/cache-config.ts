@@ -26,6 +26,7 @@ export const PUBLIC_CACHE_TAGS = {
   heroSlides: "public-hero-slides",
   homepage: "public-homepage",
   homepageParagraphs: "public-homepage-paragraphs",
+  legalDocuments: "public-legal-documents",
   popups: "public-popups",
   pricing: "public-pricing",
   testimonials: "public-testimonials",

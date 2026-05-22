@@ -2,7 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { OrdersManager, type AdminOrderRecord, type AdminOrderStatus } from "@/components/admin/orders-manager";
 
 
-function normalizeOrderStatus(status: "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED"): AdminOrderStatus {
+function normalizeOrderStatus(
+  status: "PENDING" | "COMPLETED" | "FAILED" | "PAYMENT_FAILED" | "REFUNDED"
+): AdminOrderStatus {
   switch (status) {
     case "COMPLETED":
       return "Paid";
@@ -15,12 +17,15 @@ function normalizeOrderStatus(status: "PENDING" | "COMPLETED" | "FAILED" | "REFU
   }
 }
 
-function normalizeSubscriptionStatus(status: "ACTIVE" | "CANCELLED" | "PAST_DUE" | "TRIALING"): AdminOrderStatus {
+function normalizeSubscriptionStatus(
+  status: "ACTIVE" | "CANCELLED" | "PAST_DUE" | "PAYMENT_FAILED" | "TRIALING"
+): AdminOrderStatus {
   switch (status) {
     case "ACTIVE":
     case "TRIALING":
       return "Paid";
     case "PAST_DUE":
+    case "PAYMENT_FAILED":
       return "Pending";
     default:
       return "Cancelled";
@@ -123,7 +128,7 @@ export default async function AdminOrdersPage() {
             ? "Payment captured"
             : order.status === "REFUNDED"
               ? "Refund processed"
-              : order.status === "FAILED"
+              : order.status === "FAILED" || order.status === "PAYMENT_FAILED"
                 ? "Order cancelled"
                 : "Awaiting payment",
         timestamp: order.updatedAt.toISOString(),

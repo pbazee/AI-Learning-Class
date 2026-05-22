@@ -173,6 +173,9 @@ export function HeroCarousel({
               exit={{ opacity: 0, y: -18 }}
               transition={{ duration: 0.42 }}
               className="w-full max-w-3xl"
+              role="tabpanel"
+              id={`slide-${current}`}
+              aria-labelledby={`tab-${current}`}
             >
               <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white backdrop-blur-sm sm:text-xs">
                 <Sparkles className="h-3.5 w-3.5 text-white" />
@@ -216,12 +219,16 @@ export function HeroCarousel({
         </div>
 
         <div className="flex items-center justify-between gap-4 pt-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" role="tablist" aria-label="Hero slides">
             {slides.map((_, index) => (
               <button
                 key={slides[index]?.id || index}
                 type="button"
                 aria-label={`Go to slide ${index + 1}`}
+                id={`tab-${index}`}
+                role="tab"
+                aria-selected={index === current}
+                aria-controls={`slide-${index}`}
                 onClick={() => setCurrent(index)}
                 className={`rounded-full transition-all ${
                   index === current ? "h-2.5 w-10 bg-white" : "h-2.5 w-2.5 bg-white/38"

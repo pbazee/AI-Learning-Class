@@ -25,9 +25,34 @@ import { prisma } from "@/lib/prisma";
 
 import { env } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { captureException } from "@/lib/monitoring";
 
 function getAppOrigin(request: NextRequest) {
   return env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+}
+
+function buildCheckoutAttemptKey(input: {
+  userId: string;
+  gateway: CheckoutGateway;
+  planSlug?: string | null;
+  billingCycle?: BillingCycle | null;
+  items: Array<{ courseId?: string; title: string; price: number; kind: string }>;
+}) {
+  const windowBucket = Math.floor(Date.now() / 10_000);
+  const itemSignature = input.items
+    .map((item) => `${item.kind}:${item.courseId ?? item.title}:${item.price.toFixed(2)}`)
+    .sort()
+    .join("|");
+  const raw = [
+    input.userId,
+    input.gateway,
+    input.planSlug ?? "cart",
+    input.billingCycle ?? "once",
+    itemSignature,
+    String(windowBucket),
+  ].join("-");
+
+  return raw.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 180);
 }
 
 export async function POST(request: NextRequest) {
@@ -122,6 +147,13 @@ export async function POST(request: NextRequest) {
       userId: dbUser.id,
       gateway: method,
       quote,
+      pendingReference: `pending:${buildCheckoutAttemptKey({
+        userId: dbUser.id,
+        gateway: method,
+        planSlug: quote.planSlug,
+        billingCycle: quote.billingCycle,
+        items: quote.items,
+      })}`,
     });
     const providerState = encodeProviderState({
       orderId: pendingOrder.id,
@@ -142,6 +174,13 @@ export async function POST(request: NextRequest) {
       try {
         const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
           apiVersion: "2024-06-20",
+        });
+        const idempotencyKey = buildCheckoutAttemptKey({
+          userId: dbUser.id,
+          gateway: method,
+          planSlug: quote.planSlug,
+          billingCycle: quote.billingCycle,
+          items: quote.items,
         });
         const session = await stripe.checkout.sessions.create({
           mode: isPlanCheckout ? "subscription" : "payment",
@@ -201,7 +240,7 @@ export async function POST(request: NextRequest) {
                 },
               }
             : undefined,
-        });
+        }, { idempotencyKey });
 
         if (typeof session.customer === "string" && session.customer !== dbUser.stripeCustomerId) {
           await prisma.user.updateMany({
@@ -220,6 +259,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ url: session.url, sessionId: session.id });
       } catch (error) {
         await markCheckoutOrderFailed(pendingOrder.id);
+        if (error instanceof Stripe.errors.StripeError) {
+          return NextResponse.json(
+            {
+              error: error.message || "Unable to start Stripe checkout right now.",
+              errorCode: error.code ?? null,
+            },
+            { status: 400 }
+          );
+        }
+
         throw error;
       }
     }
@@ -232,7 +281,13 @@ export async function POST(request: NextRequest) {
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
-            "PayPal-Request-Id": crypto.randomUUID(),
+            "PayPal-Request-Id": buildCheckoutAttemptKey({
+              userId: dbUser.id,
+              gateway: method,
+              planSlug: quote.planSlug,
+              billingCycle: quote.billingCycle,
+              items: quote.items,
+            }),
           },
           body: JSON.stringify({
             intent: "CAPTURE",
@@ -296,6 +351,13 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      const paystackReference = buildCheckoutAttemptKey({
+        userId: dbUser.id,
+        gateway: method,
+        planSlug: quote.planSlug,
+        billingCycle: quote.billingCycle,
+        items: quote.items,
+      }).slice(0, 100);
       const paystackResponse = await fetch(
         "https://api.paystack.co/transaction/initialize",
         {
@@ -308,6 +370,7 @@ export async function POST(request: NextRequest) {
             email: customerEmail || dbUser.email,
             amount: Math.round(quote.total * 100),
             currency: quote.currency,
+            reference: paystackReference,
             channels: getPaystackChannels({
               country,
               currency: quote.currency,
@@ -361,6 +424,7 @@ export async function POST(request: NextRequest) {
       throw error;
     }
     } catch (error) {
+      captureException(error, { route: "api.checkout.session" });
       logger.error("[checkout.session] Unable to create checkout session.", error);
       const message =
         error instanceof CheckoutQuoteError

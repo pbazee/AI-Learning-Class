@@ -17,10 +17,12 @@ import { normalizeEmail } from "@/lib/admin-email";
 import { env } from "@/lib/config";
 import { notifyContactReply } from "@/lib/contact-notifications";
 import { syncCourseReviewMetrics } from "@/lib/course-reviews";
+import { sendMarketingNewsletter } from "@/lib/email";
 import { HOMEPAGE_PARAGRAPH_SECTION_KEYS } from "@/lib/homepage-paragraphs";
 import { ensureLessonPreviewColumns } from "@/lib/lesson-preview";
 import { ensureLessonAssetsTable } from "@/lib/lesson-assets-table";
 import { inferPrimaryLessonTypeFromAsset } from "@/lib/lesson-assets";
+import { LEGAL_DOCUMENT_SLUGS } from "@/lib/legal-document-defaults";
 import { PUBLIC_CACHE_TAGS } from "@/lib/cache-config";
 import { prisma } from "@/lib/prisma";
 import { isPrismaConnectionError } from "@/lib/prisma-errors";
@@ -338,6 +340,12 @@ const homepageParagraphSchema = z.object({
   content: z.string().trim().min(1, "Paragraph content is required.").max(500, "Keep the paragraph under 500 characters."),
 });
 
+const legalDocumentSchema = z.object({
+  slug: z.enum(LEGAL_DOCUMENT_SLUGS),
+  title: z.string().trim().min(2, "Title is required."),
+  content: z.string().trim().min(10, "Add the page content before saving."),
+});
+
 const homepageParagraphDeleteSchema = z.object({
   sectionKey: z.enum(HOMEPAGE_PARAGRAPH_SECTION_KEYS),
 });
@@ -568,6 +576,21 @@ function revalidateMany(paths: string[]) {
 
   if (uniquePaths.some((path) => path === "/" || path.startsWith("/admin/paragraphs"))) {
     revalidateTag(PUBLIC_CACHE_TAGS.homepageParagraphs);
+  }
+
+  if (
+    uniquePaths.some(
+      (path) =>
+        path.startsWith("/privacy") ||
+        path.startsWith("/terms") ||
+        path.startsWith("/refund") ||
+        path.startsWith("/admin/legal-pages") ||
+        path.startsWith("/pricing") ||
+        path.startsWith("/checkout")
+    )
+  ) {
+    revalidateTag(PUBLIC_CACHE_TAGS.legalDocuments);
+    revalidateTag(PUBLIC_CACHE_TAGS.pricing);
   }
 
   if (uniquePaths.some((path) => path === "/" || path.startsWith("/admin/trusted-logos"))) {
@@ -2268,6 +2291,29 @@ export async function saveHomepageParagraphAction(input: z.input<typeof homepage
   );
 }
 
+export async function saveLegalDocumentAction(input: z.input<typeof legalDocumentSchema>) {
+  return runValidatedAdminAction(
+    legalDocumentSchema,
+    input,
+    "saveLegalDocument",
+    ["/privacy", "/terms", "/refund", "/pricing", "/checkout", "/admin/legal-pages"],
+    async (values) =>
+      prisma.legalDocument.upsert({
+        where: { slug: values.slug },
+        update: {
+          title: values.title.trim(),
+          content: values.content.trim(),
+        },
+        create: {
+          slug: values.slug,
+          title: values.title.trim(),
+          content: values.content.trim(),
+        },
+      }),
+    "Legal document saved successfully."
+  );
+}
+
 export async function saveAskAiSettingsAction(input: z.input<typeof askAiSettingsSchema>) {
   return runValidatedAdminAction(
     askAiSettingsSchema,
@@ -2408,15 +2454,12 @@ export async function sendNewsletterAction(input: z.input<typeof newsletterSchem
     "sendNewsletter",
     ["/admin/subscribers"],
     async (values) => {
-      if (!env.RESEND_API_KEY) {
-        throw new Error("RESEND_API_KEY is not configured, so the newsletter cannot be sent yet.");
-      }
-
       const subscribers = await prisma.newsletterSubscriber.findMany({
         where: values.subscriberIds.length
           ? { id: { in: values.subscriberIds }, isActive: true }
           : { isActive: true },
         select: {
+          id: true,
           email: true,
         },
       });
@@ -2425,39 +2468,43 @@ export async function sendNewsletterAction(input: z.input<typeof newsletterSchem
         throw new Error("There are no active subscribers selected.");
       }
 
-      const { Resend } = await import("resend");
-      const resend = new Resend(env.RESEND_API_KEY);
-      const siteSettings = await prisma.siteSettings.findUnique({ where: { id: "singleton" } });
-      const fromAddress =
-        env.RESEND_FROM_EMAIL ||
-        siteSettings?.supportEmail ||
-        "noreply@aigeniuslab.com";
-
-      await resend.emails.send({
-        from: fromAddress,
-        to: subscribers.map((subscriber) => subscriber.email),
-        subject: values.subject.trim(),
-        html: `
-          <div style="font-family: Inter, Arial, sans-serif; margin: 0 auto; max-width: 720px; padding: 32px; background: #f8fbff; color: #0f172a;">
-            <p style="margin: 0 0 12px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">
-              ${siteSettings?.siteName || "AI Genius Lab"}
-            </p>
-            <h1 style="margin: 0 0 12px; font-size: 32px; line-height: 1.15; color: #020617;">
-              ${values.subject.trim()}
-            </h1>
-            ${
-              optionalString(values.previewText)
-                ? `<p style="margin: 0 0 28px; font-size: 16px; color: #475569;">${values.previewText?.trim()}</p>`
-                : ""
-            }
-            <div style="border-radius: 24px; background: white; padding: 28px; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);">
-              ${values.html}
-            </div>
-          </div>
-        `,
+      const users = await prisma.user.findMany({
+        where: {
+          email: {
+            in: subscribers.map((subscriber) => subscriber.email),
+          },
+        },
+        select: {
+          id: true,
+          email: true,
+        },
       });
 
-      return { sent: subscribers.length };
+      if (users.length === 0) {
+        throw new Error("Newsletter emails are only sent to registered users with email preferences.");
+      }
+
+      let sentCount = 0;
+
+      for (const user of users) {
+        const result = await sendMarketingNewsletter({
+          userId: user.id,
+          email: user.email,
+          subject: values.subject.trim(),
+          previewText: optionalString(values.previewText),
+          html: values.html,
+        });
+
+        if (result.sent) {
+          sentCount += 1;
+        }
+      }
+
+      if (sentCount === 0) {
+        throw new Error("No newsletter emails were sent because every matching user is unsubscribed.");
+      }
+
+      return { sent: sentCount };
     },
     "Newsletter sent successfully."
   );

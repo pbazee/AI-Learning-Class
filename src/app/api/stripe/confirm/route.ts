@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { finalizeCheckoutOrder } from "@/lib/payments";
 import { logger } from "@/lib/logger";
+import { captureException } from "@/lib/monitoring";
 import { env } from "@/lib/config";
 
 async function getStripeReceiptUrl(
@@ -63,8 +64,22 @@ export async function POST(request: NextRequest) {
         : session.payment_status === "paid";
 
     if (!paymentConfirmed) {
+      let errorCode: string | null = null;
+      let errorMessage = "Stripe has not confirmed this payment yet.";
+
+      if (typeof session.payment_intent === "string") {
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+          errorCode = paymentIntent.last_payment_error?.code ?? null;
+          errorMessage =
+            paymentIntent.last_payment_error?.message || errorMessage;
+        } catch (error) {
+          logger.warn("[stripe.confirm] Unable to inspect failed payment intent.", error);
+        }
+      }
+
       return NextResponse.json(
-        { error: "Stripe has not confirmed this payment yet." },
+        { error: errorMessage, errorCode },
         { status: 400 }
       );
     }
@@ -102,6 +117,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, sessionId: session.id });
   } catch (error) {
+    captureException(error, { route: "api.stripe.confirm" });
     logger.error("[stripe.confirm] Unable to confirm Stripe checkout.", error);
     return NextResponse.json(
       { error: "Unable to confirm Stripe payment." },

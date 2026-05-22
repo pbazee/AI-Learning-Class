@@ -111,7 +111,7 @@ export function AuthShell({
             </div>
 
             <div className="rounded-[28px] border border-white/20 bg-white/20 p-6">
-              <p className="text-lg leading-8 text-white">"{testimonialQuote}"</p>
+              <p className="text-lg leading-8 text-white">&quot;{testimonialQuote}&quot;</p>
               <div className="mt-5">
                 <p className="text-sm font-semibold text-white">{testimonialName}</p>
                 <p className="text-sm text-white/80">{testimonialRole}</p>

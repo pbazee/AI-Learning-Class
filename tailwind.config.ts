@@ -73,6 +73,15 @@ const config: Config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        button: "0.75rem",
+        card: "1rem",
+        modal: "1.5rem",
+      },
+      boxShadow: {
+        card: "0 1px 3px 0 hsl(var(--border)/0.5)",
+        "card-hover": "0 4px 12px hsl(var(--border)/0.4)",
+        "button-primary": "0 20px 40px -20px rgb(var(--primary-blue-rgb)/0.95)",
+        "button-primary-hover": "0 24px 50px -24px rgb(var(--primary-blue-rgb)/0.95)",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],

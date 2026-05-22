@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { notifyAdminOfContactMessage } from "@/lib/contact-notifications";
 import { prisma } from "@/lib/prisma";
+import { sanitizeText } from "@/lib/sanitize";
 
 export const dynamic = "force-dynamic";
 
@@ -16,13 +17,19 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const values = contactMessageSchema.parse(body);
+    const sanitizedValues = {
+      name: sanitizeText(values.name),
+      email: sanitizeText(values.email).toLowerCase(),
+      subject: sanitizeText(values.subject),
+      message: sanitizeText(values.message),
+    };
 
     const savedMessage = await prisma.contactMessage.create({
       data: {
-        name: values.name,
-        email: values.email.toLowerCase(),
-        subject: values.subject,
-        message: values.message,
+        name: sanitizedValues.name,
+        email: sanitizedValues.email,
+        subject: sanitizedValues.subject,
+        message: sanitizedValues.message,
         status: "UNREAD",
       },
     });

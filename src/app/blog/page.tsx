@@ -95,6 +95,7 @@ export default async function BlogPage({
                         src={featured.coverImage}
                         alt={featured.title}
                         fill
+                        priority
                         quality={75}
                         placeholder="blur"
                         blurDataURL={IMAGE_BLUR_DATA_URL}

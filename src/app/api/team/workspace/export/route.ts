@@ -32,14 +32,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error("[team.workspace.export] Unable to export team report.", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to export your team report right now.",
-      },
-      { status: 500 }
-    );
+    return new Response("Internal server error", { status: 500 });
   }
 }

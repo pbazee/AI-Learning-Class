@@ -130,9 +130,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ success: true, conversion });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to update the affiliate conversion." },
-      { status: 400 }
-    );
+    console.error("[admin.affiliate-conversions] Unable to update conversion.", error);
+    return new Response("Internal server error", { status: 500 });
   }
 }

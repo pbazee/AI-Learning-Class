@@ -15,6 +15,7 @@ type ActivePopup = {
 };
 
 const POPUP_RESPONSE_TTL_MS = 60_000;
+const inFlightPopupRequests = new Map<string, Promise<ActivePopup | null>>();
 
 function getDismissalStorageKey(id: string) {
   return `popup-dismissed:${id}`;
@@ -32,7 +33,6 @@ export function PopupCampaigns() {
 
   useEffect(() => {
     let cancelled = false;
-    const controller = new AbortController();
 
     function applyPopup(nextPopup: ActivePopup | null) {
       setPopup(null);
@@ -51,6 +51,7 @@ export function PopupCampaigns() {
 
     async function loadPopup() {
       const storageKey = getPopupResponseStorageKey(pathname || "/");
+      const requestKey = pathname || "/";
 
       try {
         const cachedPayload = localStorage.getItem(storageKey);
@@ -73,18 +74,30 @@ export function PopupCampaigns() {
       applyPopup(null);
 
       try {
-        const response = await fetch(
-          `/api/popups/active?path=${encodeURIComponent(pathname || "/")}`,
-          {
+        const request =
+          inFlightPopupRequests.get(requestKey) ??
+          fetch(`/api/popups/active?path=${encodeURIComponent(requestKey)}`, {
             cache: "force-cache",
-            signal: controller.signal,
-          }
-        );
-        const payload = (await response.json().catch(() => null)) as
-          | { popup?: ActivePopup | null }
-          | null;
+          })
+            .then(async (response) => {
+              const payload = (await response.json().catch(() => null)) as
+                | { popup?: ActivePopup | null }
+                | null;
 
-        if (!response.ok || cancelled) {
+              if (!response.ok) {
+                return null;
+              }
+
+              return payload?.popup ?? null;
+            })
+            .finally(() => {
+              inFlightPopupRequests.delete(requestKey);
+            });
+
+        inFlightPopupRequests.set(requestKey, request);
+        const resolvedPopup = await request;
+
+        if (cancelled) {
           return;
         }
 
@@ -93,14 +106,14 @@ export function PopupCampaigns() {
             storageKey,
             JSON.stringify({
               expiresAt: Date.now() + POPUP_RESPONSE_TTL_MS,
-              popup: payload?.popup ?? null,
+              popup: resolvedPopup,
             })
           );
         } catch {
           // Ignore storage quota or serialization errors.
         }
 
-        applyPopup(payload?.popup ?? null);
+        applyPopup(resolvedPopup);
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           console.error("[popup-campaigns] Unable to load popup.", error);
@@ -112,7 +125,6 @@ export function PopupCampaigns() {
 
     return () => {
       cancelled = true;
-      controller.abort();
     };
   }, [pathname]);
 

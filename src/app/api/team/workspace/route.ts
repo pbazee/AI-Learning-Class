@@ -116,14 +116,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Choose a valid workspace action." }, { status: 400 });
   } catch (error) {
     console.error("[team.workspace] Workspace action failed.", error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to complete that Teams action right now.",
-      },
-      { status: 500 }
-    );
+    return new Response("Internal server error", { status: 500 });
   }
 }

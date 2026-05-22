@@ -2,7 +2,12 @@
 
 export type Level = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "ALL_LEVELS";
 export type Role = "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPER_ADMIN";
-export type OrderStatus = "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED";
+export type OrderStatus =
+  | "PENDING"
+  | "COMPLETED"
+  | "FAILED"
+  | "PAYMENT_FAILED"
+  | "REFUNDED";
 export type EnrollmentStatus = "ACTIVE" | "COMPLETED" | "SUSPENDED" | "EXPIRED";
 export type CourseAssetType = "AUDIO" | "VIDEO" | "PDF";
 export type LessonAssetType = "VIDEO" | "PDF" | "FILE" | "IMAGE";
@@ -274,6 +279,14 @@ export interface SubscriptionPlan {
   features: string[];
   isPopular: boolean;
   isActive: boolean;
+}
+
+export interface LegalDocument {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  updatedAt: string;
 }
 
 export interface TeamWorkspaceDashboardData {

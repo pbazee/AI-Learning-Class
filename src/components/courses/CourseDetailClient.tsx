@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AskAI } from "@/components/courses/AskAI";
 import { ExpiredSubscriptionNotice } from "@/components/courses/ExpiredSubscriptionNotice";
 import { CoursePreviewModal } from "@/components/courses/CoursePreviewModal";
 import { CourseReviewsSection } from "@/components/courses/CourseReviewsSection";
@@ -46,6 +46,10 @@ import type { Course, CourseAccessState, CoursePreviewState } from "@/types";
 
 const thumbnailFallback =
   "https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=600&h=340&fit=crop";
+const AskAI = dynamic(
+  () => import("@/components/courses/AskAI").then((module) => ({ default: module.AskAI })),
+  { ssr: false }
+);
 
 function getPrimaryLessonAsset(lesson: NonNullable<Course["modules"]>[number]["lessons"][number]) {
   const assets = lesson.assets ?? [];

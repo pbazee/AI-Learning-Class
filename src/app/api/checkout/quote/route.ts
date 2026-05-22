@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       console.error("[checkout.quote] Unable to build checkout quote.", error);
       const message =
         error instanceof CheckoutQuoteError
-          ? error.message
+          ? "Unable to build your checkout summary right now."
           : "Unable to build your checkout summary right now.";
       const status = error instanceof CheckoutQuoteError ? 400 : 500;
       return NextResponse.json({ error: message }, { status });

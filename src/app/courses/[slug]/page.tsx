@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { Footer } from "@/components/layout/Footer";
 import { JsonLd } from "@/components/seo/JsonLd";
@@ -121,25 +122,27 @@ export default async function CourseDetailPage({
   return (
     <div className="bg-background">
       <JsonLd data={courseJsonLd} />
-      <CourseDetailClient
-        course={course}
-        viewer={viewer ? { id: viewer.id, name: viewer.name || viewer.email || "Member" } : null}
-        courseAccess={courseAccess}
-        previewState={previewState}
-        askAiEnabled={askAiSettings.enabled}
-        askAiAssistantLabel={askAiSettings.assistantLabel}
-        shareUrl={absoluteUrl(`/courses/${course.slug}`)}
-        relatedCourses={relatedCourses}
-        expiredAccess={
-          expiredAccess
-            ? {
-                expiredAt: expiredAccess.expiredAt?.toISOString() ?? null,
-                planSlug: expiredAccess.planSlug,
-                billingCycle: expiredAccess.billingCycle,
-              }
-            : null
-        }
-      />
+      <Suspense fallback={null}>
+        <CourseDetailClient
+          course={course}
+          viewer={viewer ? { id: viewer.id, name: viewer.name || viewer.email || "Member" } : null}
+          courseAccess={courseAccess}
+          previewState={previewState}
+          askAiEnabled={askAiSettings.enabled}
+          askAiAssistantLabel={askAiSettings.assistantLabel}
+          shareUrl={absoluteUrl(`/courses/${course.slug}`)}
+          relatedCourses={relatedCourses}
+          expiredAccess={
+            expiredAccess
+              ? {
+                  expiredAt: expiredAccess.expiredAt?.toISOString() ?? null,
+                  planSlug: expiredAccess.planSlug,
+                  billingCycle: expiredAccess.billingCycle,
+                }
+              : null
+          }
+        />
+      </Suspense>
       <Footer />
     </div>
   );

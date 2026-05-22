@@ -2,9 +2,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   finalizeCheckoutOrder,
+  handleStripePaymentFailure,
   syncManagedStripeSubscription,
 } from "@/lib/payments";
 import { logger } from "@/lib/logger";
+import { captureException } from "@/lib/monitoring";
 import { env } from "@/lib/config";
 
 async function getStripeReceiptUrl(
@@ -120,8 +122,55 @@ export async function POST(req: NextRequest) {
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object as { id?: string };
+        const invoice = event.data.object as {
+          id?: string;
+          customer?: string | null;
+          customer_email?: string | null;
+          subscription?: string | null;
+          payment_intent?: string | null;
+        };
+
+        await handleStripePaymentFailure({
+          paymentIntentId:
+            typeof invoice.payment_intent === "string" ? invoice.payment_intent : null,
+          stripeSubscriptionId:
+            typeof invoice.subscription === "string" ? invoice.subscription : null,
+          customerId: typeof invoice.customer === "string" ? invoice.customer : null,
+          customerEmail: invoice.customer_email ?? null,
+        });
+
         logger.warn("[stripe.webhook] Payment failed for invoice:", invoice.id);
+        break;
+      }
+
+      case "payment_intent.payment_failed": {
+        const paymentIntent = event.data.object as {
+          id?: string;
+          customer?: string | null;
+          receipt_email?: string | null;
+          invoice?: string | null;
+        };
+
+        let stripeSubscriptionId: string | null = null;
+
+        if (typeof paymentIntent.invoice === "string") {
+          try {
+            const invoice = await stripe.invoices.retrieve(paymentIntent.invoice);
+            stripeSubscriptionId =
+              typeof invoice.subscription === "string" ? invoice.subscription : null;
+          } catch (error) {
+            logger.warn("[stripe.webhook] Unable to load invoice for failed payment intent.", error);
+          }
+        }
+
+        await handleStripePaymentFailure({
+          paymentIntentId: paymentIntent.id ?? null,
+          stripeSubscriptionId,
+          customerId: typeof paymentIntent.customer === "string" ? paymentIntent.customer : null,
+          customerEmail: paymentIntent.receipt_email ?? null,
+        });
+
+        logger.warn("[stripe.webhook] Payment intent failed:", paymentIntent.id);
         break;
       }
 
@@ -146,9 +195,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ received: true });
-  } catch (error: any) {
+  } catch (error) {
+    captureException(error, { route: "api.stripe.webhook" });
     logger.error("[stripe.webhook] Webhook error:", error);
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return new Response("Internal server error", { status: 500 });
   }
 }
 

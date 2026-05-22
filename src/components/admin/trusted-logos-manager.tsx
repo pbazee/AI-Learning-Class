@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { deleteTrustedLogoAction, saveTrustedLogoAction } from "@/app/admin/actions";
 import { MediaUploader } from "@/components/admin/media-uploader";
 import { SimpleCrudManager } from "@/components/admin/simple-crud-manager";
@@ -120,7 +121,7 @@ export function TrustedLogosManager({ logos }: { logos: TrustedLogoRow[] }) {
           cell: (item) => (
             <div className="flex items-center gap-3">
               <div className="flex h-12 w-20 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/90 p-3">
-                <img src={item.imageUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                <Image src={item.imageUrl} alt={item.name} width={80} height={48} className="max-h-full max-w-full object-contain" />
               </div>
               <div>
                 <p className="font-semibold text-foreground">{item.name}</p>

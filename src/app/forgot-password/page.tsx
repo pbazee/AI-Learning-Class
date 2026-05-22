@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Mail } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { DEFAULT_SITE_NAME } from "@/lib/site";
-import { getSupabaseClient } from "@/lib/supabase";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -52,16 +51,25 @@ export default function ForgotPasswordPage() {
     setMessage("");
 
     try {
-      const supabase = getSupabaseClient();
-      const redirectTo = `${window.location.origin}/reset-password`;
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      const response = await fetch("/api/auth/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          redirectTo: `${window.location.origin}/reset-password`,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
 
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        throw new Error(payload?.error || "Unable to send reset instructions.");
       }
 
       setStatus("success");
-      setMessage("Password reset instructions have been sent to your email address.");
+      setMessage(
+        payload?.message ||
+          "If an account exists for that email, password reset instructions have been sent."
+      );
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Unable to send reset instructions.");

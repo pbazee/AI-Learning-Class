@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
+import { captureException } from "@/lib/monitoring";
 import { env } from "@/lib/config";
 import {
   finalizeCheckoutOrder,
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
+    captureException(error, { route: "api.paystack.webhook" });
     logger.error("[paystack.webhook] Unable to process Paystack webhook.", error);
     return NextResponse.json(
       { error: "Unable to process Paystack webhook." },

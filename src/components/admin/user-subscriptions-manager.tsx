@@ -42,10 +42,13 @@ type SubscriptionRow = {
   coursesIncluded: string[];
 };
 
+type DerivedSubscriptionStatus = "ACTIVE" | "EXPIRED" | "CANCELLED" | "PAST_DUE";
+
 type SortKey =
   | "userName"
   | "planName"
   | "status"
+  | "currentPeriodStart"
   | "currentPeriodEnd"
   | "revenue"
   | "userCountry"
@@ -64,11 +67,30 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
-function statusTone(status: string): "success" | "warning" | "danger" | "info" | "neutral" {
+function deriveSubscriptionStatus(subscription: SubscriptionRow): DerivedSubscriptionStatus {
+  const renewDate = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
+  const now = new Date();
+
+  if (!renewDate || Number.isNaN(renewDate.getTime()) || renewDate < now) {
+    return "EXPIRED";
+  }
+
+  if (subscription.status === "CANCELLED") {
+    return "CANCELLED";
+  }
+
+  if (subscription.status === "PAST_DUE" || subscription.status === "PAYMENT_FAILED") {
+    return "PAST_DUE";
+  }
+
+  return "ACTIVE";
+}
+
+function statusTone(status: DerivedSubscriptionStatus): "success" | "warning" | "danger" | "info" | "neutral" {
   if (status === "ACTIVE") return "success";
-  if (status === "TRIALING") return "info";
   if (status === "PAST_DUE") return "warning";
-  if (status === "CANCELLED") return "danger";
+  if (status === "EXPIRED") return "danger";
+  if (status === "CANCELLED") return "neutral";
   return "neutral";
 }
 
@@ -105,8 +127,8 @@ function serializeCsv(rows: SubscriptionRow[]) {
     "Status",
     "Billing Cycle",
     "Revenue",
-    "Current Period Start",
-    "Current Period End",
+    "Start Date",
+    "End Date",
     "Last Active At",
     "Courses Included",
   ];
@@ -120,7 +142,7 @@ function serializeCsv(rows: SubscriptionRow[]) {
       row.userEmail,
       row.userCountry,
       row.planName,
-      row.status,
+      deriveSubscriptionStatus(row),
       row.billingCycle,
       row.revenue.toFixed(2),
       row.currentPeriodStart,
@@ -175,12 +197,13 @@ export function UserSubscriptionsManager({ subscriptions }: { subscriptions: Sub
   const filteredSubscriptions = useMemo(() => {
     const normalizedQuery = deferredQuery.trim().toLowerCase();
     const nextRows = subscriptions.filter((subscription) => {
+      const derivedStatus = deriveSubscriptionStatus(subscription);
       const matchesQuery =
         !normalizedQuery ||
         `${subscription.userName} ${subscription.userEmail} ${subscription.planName} ${subscription.userCountry}`
           .toLowerCase()
           .includes(normalizedQuery);
-      const matchesStatus = statusFilter === "all" || subscription.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || derivedStatus === statusFilter;
       const matchesPlan = planFilter === "all" || subscription.planName === planFilter;
       const matchesCountry = countryFilter === "all" || subscription.userCountry === countryFilter;
       const expiryWindow = Number(expiryFilter);
@@ -199,13 +222,21 @@ export function UserSubscriptionsManager({ subscriptions }: { subscriptions: Sub
           ? left.lastActiveAt ? new Date(left.lastActiveAt).getTime() : 0
           : sortKey === "currentPeriodEnd"
             ? new Date(left.currentPeriodEnd).getTime()
-            : left[sortKey];
+            : sortKey === "currentPeriodStart"
+              ? new Date(left.currentPeriodStart).getTime()
+              : sortKey === "status"
+                ? deriveSubscriptionStatus(left)
+                : left[sortKey];
       const rightValue =
         sortKey === "lastActiveAt"
           ? right.lastActiveAt ? new Date(right.lastActiveAt).getTime() : 0
           : sortKey === "currentPeriodEnd"
             ? new Date(right.currentPeriodEnd).getTime()
-            : right[sortKey];
+            : sortKey === "currentPeriodStart"
+              ? new Date(right.currentPeriodStart).getTime()
+              : sortKey === "status"
+                ? deriveSubscriptionStatus(right)
+                : right[sortKey];
 
       const comparison = compareValue(leftValue as string | number, rightValue as string | number);
       return sortDirection === "asc" ? comparison : -comparison;
@@ -229,15 +260,13 @@ export function UserSubscriptionsManager({ subscriptions }: { subscriptions: Sub
   const selectedRows = filteredSubscriptions.filter((subscription) => selectedIds.includes(subscription.id));
 
   const stats = useMemo(() => {
-    const active = subscriptions.filter((subscription) =>
-      ["ACTIVE", "TRIALING"].includes(subscription.status)
-    );
+    const active = subscriptions.filter((subscription) => deriveSubscriptionStatus(subscription) === "ACTIVE");
     const expiringSoon = subscriptions.filter((subscription) => {
       const remainingDays = daysUntil(subscription.currentPeriodEnd);
-      return remainingDays >= 0 && remainingDays <= 7 && ["ACTIVE", "TRIALING"].includes(subscription.status);
+      return remainingDays >= 0 && remainingDays <= 7 && deriveSubscriptionStatus(subscription) === "ACTIVE";
     });
     const inactive = subscriptions.filter((subscription) => isInactive(subscription.lastActiveAt));
-    const atRisk = subscriptions.filter((subscription) => subscription.status === "PAST_DUE");
+    const atRisk = subscriptions.filter((subscription) => deriveSubscriptionStatus(subscription) === "PAST_DUE");
 
     return {
       active: active.length,
@@ -394,7 +423,7 @@ export function UserSubscriptionsManager({ subscriptions }: { subscriptions: Sub
             <AdminSelect value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}>
               <option value="all">All statuses</option>
               <option value="ACTIVE">Active</option>
-              <option value="TRIALING">Trialing</option>
+              <option value="EXPIRED">Expired</option>
               <option value="PAST_DUE">Past due</option>
               <option value="CANCELLED">Cancelled</option>
             </AdminSelect>
@@ -483,6 +512,8 @@ export function UserSubscriptionsManager({ subscriptions }: { subscriptions: Sub
                 <th className="px-4 py-3 text-left"><SortButton label="Plan" column="planName" /></th>
                 <th className="px-4 py-3 text-left"><SortButton label="Status" column="status" /></th>
                 <th className="px-4 py-3 text-left"><SortButton label="Revenue" column="revenue" /></th>
+                <th className="px-4 py-3 text-left"><SortButton label="Start Date" column="currentPeriodStart" /></th>
+                <th className="px-4 py-3 text-left"><SortButton label="End Date" column="currentPeriodEnd" /></th>
                 <th className="px-4 py-3 text-left"><SortButton label="Renews" column="currentPeriodEnd" /></th>
                 <th className="px-4 py-3 text-left"><SortButton label="Country" column="userCountry" /></th>
                 <th className="px-4 py-3 text-left"><SortButton label="Last Active" column="lastActiveAt" /></th>
@@ -492,7 +523,7 @@ export function UserSubscriptionsManager({ subscriptions }: { subscriptions: Sub
             <tbody className="divide-y divide-white/10">
               {currentPageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center text-slate-500">
+                  <td colSpan={11} className="px-4 py-16 text-center text-slate-500">
                     No subscriptions match the current filters.
                   </td>
                 </tr>
@@ -500,6 +531,7 @@ export function UserSubscriptionsManager({ subscriptions }: { subscriptions: Sub
                 currentPageRows.map((subscription) => {
                   const renewalDays = daysUntil(subscription.currentPeriodEnd);
                   const inactive = isInactive(subscription.lastActiveAt);
+                  const derivedStatus = deriveSubscriptionStatus(subscription);
 
                   return (
                     <tr key={subscription.id} className="hover:bg-white/[0.02]">
@@ -521,15 +553,34 @@ export function UserSubscriptionsManager({ subscriptions }: { subscriptions: Sub
                         <p className="mt-1 text-xs capitalize text-slate-400">{subscription.billingCycle}</p>
                       </td>
                       <td className="px-4 py-4">
-                        <StatusPill tone={statusTone(subscription.status)}>{subscription.status.replace("_", " ")}</StatusPill>
+                        <StatusPill tone={statusTone(derivedStatus)}>{derivedStatus.replace("_", " ")}</StatusPill>
                       </td>
                       <td className="px-4 py-4 font-semibold text-white">
                         {formatPrice(subscription.revenue, subscription.planCurrency)}
                       </td>
+                      <td className="px-4 py-4 text-slate-300">
+                        {dateFormatter.format(new Date(subscription.currentPeriodStart))}
+                      </td>
+                      <td className="px-4 py-4 text-slate-300">
+                        {dateFormatter.format(new Date(subscription.currentPeriodEnd))}
+                      </td>
                       <td className="px-4 py-4">
                         <p className="font-medium text-slate-200">{dateFormatter.format(new Date(subscription.currentPeriodEnd))}</p>
-                        <p className={cn("mt-1 text-xs", renewalDays <= 7 ? "text-amber-300" : "text-slate-500")}>
-                          {renewalDays >= 0 ? `${renewalDays} day${renewalDays === 1 ? "" : "s"} left` : "Expired"}
+                        <p
+                          className={cn(
+                            "mt-1 text-xs",
+                            derivedStatus === "EXPIRED"
+                              ? "text-rose-300"
+                              : renewalDays <= 7
+                                ? "text-amber-300"
+                                : "text-slate-500"
+                          )}
+                        >
+                          {derivedStatus === "EXPIRED"
+                            ? "Expired"
+                            : renewalDays >= 0
+                              ? `${renewalDays} day${renewalDays === 1 ? "" : "s"} left`
+                              : "Expired"}
                         </p>
                       </td>
                       <td className="px-4 py-4 text-slate-300">{subscription.userCountry}</td>

@@ -54,6 +54,8 @@ model User {
   user_courses            user_courses[]
   entitlements            UserEntitlement[]
   user_wishlists          user_wishlists[]
+  emailPreferences        EmailPreference?
+  emailLogs               EmailLog[]
 }
 
 model Category {
@@ -362,6 +364,46 @@ model UserSubscription {
   createdAt            DateTime           @default(now())
   plan                 SubscriptionPlan   @relation(fields: [planId], references: [id])
   user                 User               @relation(fields: [userId], references: [id])
+}
+
+model LegalDocument {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  title     String
+  content   String
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("legal_documents")
+}
+
+model EmailLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  recipient  String
+  template   String
+  subject    String?
+  status     String
+  providerId String?  @map("provider_id")
+  error      String?
+  sentAt     DateTime @default(now()) @map("sent_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+  metadata   Json?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([recipient, sentAt], map: "email_logs_recipient_sent_at_idx")
+  @@index([template, sentAt], map: "email_logs_template_sent_at_idx")
+  @@map("email_logs")
+}
+
+model EmailPreference {
+  userId              String   @id @map("user_id")
+  subscribedMarketing Boolean  @default(true) @map("subscribed_marketing")
+  unsubscribeToken    String   @unique @default(uuid()) @map("unsubscribe_token")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_preferences")
 }
 
 model UserEntitlement {
@@ -869,6 +911,7 @@ enum OrderStatus {
   PENDING
   COMPLETED
   FAILED
+  PAYMENT_FAILED
   REFUNDED
 }
 
@@ -876,6 +919,7 @@ enum SubscriptionStatus {
   ACTIVE
   CANCELLED
   PAST_DUE
+  PAYMENT_FAILED
   TRIALING
 }
 

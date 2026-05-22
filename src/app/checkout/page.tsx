@@ -1,12 +1,12 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Suspense, type ReactNode, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Check, Loader2, Lock, Shield, Tag, X } from "lucide-react";
 import { CountryCombobox } from "@/components/checkout/CountryCombobox";
-import { NavbarClient } from "@/components/layout/NavbarClient";
+import { RefundPolicyNotice } from "@/components/legal/RefundPolicyNotice";
 import { type BillingCycle, getBillingCycleLabel } from "@/lib/site";
 import { cn, formatPrice } from "@/lib/utils";
 import { useCartStore } from "@/store/cart";
@@ -40,6 +40,29 @@ type AccountProfileResponse = {
     countryCode?: string;
   };
 };
+
+type RefundPolicySummaryResponse = {
+  summary: string;
+  updatedAtLabel: string;
+};
+
+const errorMessages: Record<string, string> = {
+  card_declined: "Your card was declined. Please try a different card.",
+  insufficient_funds: "Insufficient funds. Please try a different payment method.",
+  expired_card: "Your card has expired. Please update your card details.",
+  incorrect_cvc: "Incorrect CVC. Please check your card details.",
+};
+
+function resolveCheckoutErrorMessage(
+  payload: { error?: string; errorCode?: string } | null,
+  fallback: string
+) {
+  if (payload?.errorCode && errorMessages[payload.errorCode]) {
+    return errorMessages[payload.errorCode];
+  }
+
+  return payload?.error || fallback;
+}
 
 function StripeMark() {
   return <span className="text-sm font-black tracking-[0.08em] text-[#635BFF]">Stripe</span>;
@@ -115,7 +138,7 @@ function inferCheckoutCountry() {
   return timezoneCountryMap.find((entry) => entry.pattern.test(timezone))?.code ?? null;
 }
 
-export default function CheckoutPage() {
+function CheckoutPageInner() {
   const searchParams = useSearchParams();
   const { items } = useCartStore();
   const planSlug = searchParams.get("plan");
@@ -132,6 +155,7 @@ export default function CheckoutPage() {
     billingParam === "yearly" ? "yearly" : "monthly"
   );
   const [formData, setFormData] = useState({ name: "", email: "", country: "US" });
+  const [refundPolicy, setRefundPolicy] = useState<RefundPolicySummaryResponse | null>(null);
 
   const cartSavings = useMemo(
     () =>
@@ -210,6 +234,34 @@ export default function CheckoutPage() {
     }
 
     void loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRefundPolicy() {
+      try {
+        const response = await fetch("/api/legal/refund-summary", { cache: "no-store" });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json().catch(() => null)) as RefundPolicySummaryResponse | null;
+
+        if (!cancelled && payload?.summary && payload?.updatedAtLabel) {
+          setRefundPolicy(payload);
+        }
+      } catch {
+        // Checkout should remain usable if the refund policy hint cannot be loaded.
+      }
+    }
+
+    void loadRefundPolicy();
 
     return () => {
       cancelled = true;
@@ -298,7 +350,7 @@ export default function CheckoutPage() {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(payload?.error || "Unable to start checkout right now.");
+        throw new Error(resolveCheckoutErrorMessage(payload, "Unable to start checkout right now."));
       }
 
       if (!payload?.url) {
@@ -547,25 +599,34 @@ export default function CheckoutPage() {
                       Explore free courses
                     </Link>
                   ) : (
-                    <button
-                      type="submit"
-                      disabled={processing || quoteLoading || !quote}
-                      className="action-primary flex w-full justify-center py-4 text-base"
-                    >
-                      {processing ? (
-                        <>
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                          Redirecting
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="h-5 w-5" />
-                          {isPlanCheckout
-                            ? `${method === "stripe" ? "Start" : "Activate"} ${getBillingCycleLabel(quote?.billingCycle ?? billingCycle)} ${quote?.planSlug === "teams" ? "Teams" : "Pro"} ${method === "stripe" ? "Subscription" : "Plan"}`
-                            : `Pay ${quote ? formatPrice(quote.total, quote.currency) : ""}`}
-                        </>
-                      )}
-                    </button>
+                    <div className="space-y-3">
+                      {refundPolicy ? (
+                        <RefundPolicyNotice
+                          summary={refundPolicy.summary}
+                          updatedAtLabel={refundPolicy.updatedAtLabel}
+                        />
+                      ) : null}
+
+                      <button
+                        type="submit"
+                        disabled={processing || quoteLoading || !quote}
+                        className="action-primary flex w-full justify-center py-4 text-base"
+                      >
+                        {processing ? (
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Redirecting
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="h-5 w-5" />
+                            {isPlanCheckout
+                              ? `${method === "stripe" ? "Start" : "Activate"} ${getBillingCycleLabel(quote?.billingCycle ?? billingCycle)} ${quote?.planSlug === "teams" ? "Teams" : "Pro"} ${method === "stripe" ? "Subscription" : "Plan"}`
+                              : `Pay ${quote ? formatPrice(quote.total, quote.currency) : ""}`}
+                          </>
+                        )}
+                      </button>
+                    </div>
                   )}
 
                   <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
@@ -704,5 +765,13 @@ export default function CheckoutPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={null}>
+      <CheckoutPageInner />
+    </Suspense>
   );
 }

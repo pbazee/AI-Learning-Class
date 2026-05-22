@@ -76,7 +76,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={contextValue}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[99999] flex w-[min(92vw,24rem)] flex-col gap-3">
+      <div role="alert" aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-[99999] flex w-[min(92vw,24rem)] flex-col gap-3">
         <AnimatePresence>
           {toasts.map((toast) => (
             <motion.div

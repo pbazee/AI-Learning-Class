@@ -363,7 +363,7 @@ export function NavbarClient({
     const supabase = getSupabaseClient();
     await supabase.auth.signOut();
     setUserRole(null);
-    router.replace("/");
+    Promise.resolve(router.replace("/")).catch(() => {});
     window.location.assign("/");
   }
 
@@ -411,7 +411,7 @@ export function NavbarClient({
             <div ref={desktopSearchRef} className="relative w-full max-w-[460px] flex-1">
               <form onSubmit={(event) => { event.preventDefault(); submitSearch(); }} className="group flex h-12 items-center gap-3 rounded-full border border-slate-300 bg-white px-4 shadow-[0_16px_34px_-28px_rgba(15,23,42,0.35)] transition focus-within:border-primary-blue/35 dark:border-slate-800 dark:bg-slate-900">
                 <Search className="h-[17px] w-[17px] shrink-0 text-slate-400 group-focus-within:text-primary-blue dark:text-slate-500" />
-                <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onFocus={() => setSearchFocused(true)} placeholder="Search AI courses, LLM tracks, prompts..." className="h-full flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500" />
+                <input aria-label="Search courses" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onFocus={() => setSearchFocused(true)} placeholder="Search AI courses, LLM tracks, prompts..." className="h-full flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500" />
               </form>
               <AnimatePresence>{showSearchSuggestions ? <SearchPanel query={searchQuery} loading={searchLoading} results={searchResults} onSubmit={submitSearch} onClose={() => setSearchFocused(false)} /> : null}</AnimatePresence>
             </div>
@@ -500,7 +500,7 @@ export function NavbarClient({
               <div ref={mobileSearchRef} className="relative min-w-0 flex-1">
                 <form onSubmit={(event) => { event.preventDefault(); submitSearch(); }} className="group flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 shadow-[0_12px_26px_-24px_rgba(15,23,42,0.35)] transition focus-within:border-primary-blue/35 dark:border-slate-800 dark:bg-slate-900">
                   <Search className="h-[15px] w-[15px] shrink-0 text-slate-400 group-focus-within:text-primary-blue dark:text-slate-500" />
-                  <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onFocus={() => setSearchFocused(true)} placeholder="Search" className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500" />
+                  <input aria-label="Search courses" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onFocus={() => setSearchFocused(true)} placeholder="Search" className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500" />
                 </form>
                 <AnimatePresence>{showSearchSuggestions ? <SearchPanel query={searchQuery} loading={searchLoading} results={searchResults} onSubmit={submitSearch} onClose={() => setSearchFocused(false)} /> : null}</AnimatePresence>
               </div>

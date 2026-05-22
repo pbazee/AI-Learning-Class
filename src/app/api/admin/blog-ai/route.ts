@@ -197,11 +197,6 @@ ${askAiSettings.systemPrompt?.trim() ? `Additional instructions: ${askAiSettings
     return NextResponse.json({ result });
   } catch (error) {
     console.error("[admin.blog-ai] Unable to generate blog AI output.", error);
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "The AI assistant is unavailable right now.",
-      },
-      { status: 500 }
-    );
+    return new Response("Internal server error", { status: 500 });
   }
 }

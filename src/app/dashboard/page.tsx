@@ -26,7 +26,7 @@ import {
 import { getUserWorkspaceNotes } from "@/lib/lesson-player";
 import { prisma } from "@/lib/prisma";
 import { getUserTeamWorkspaceSummary } from "@/lib/team-workspace";
-import { formatDuration } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 import { ReferEarnCard } from "@/components/dashboard/refer-earn-card";
 import { LearnerInboxPanel } from "@/components/dashboard/LearnerInboxPanel";
 import { WorkspaceNotesPanel } from "@/components/dashboard/WorkspaceNotesPanel";
@@ -205,6 +205,12 @@ export default async function DashboardPage() {
       latestSubscription?.currentPeriodEnd &&
       latestSubscription.currentPeriodEnd < new Date()
   );
+  const subscriptionReference = activeSubscription ?? latestSubscription;
+  const subscriptionRenewsAt = subscriptionReference?.currentPeriodEnd ?? null;
+  const subscriptionIsActive = Boolean(
+    subscriptionRenewsAt && new Date(subscriptionRenewsAt) > new Date()
+  );
+  const subscriptionDisplayStatus = subscriptionIsActive ? "active" : "inactive";
 
   const totalCompletedSeconds = completedLessons.reduce(
     (sum, item) => sum + (item.lesson.duration ?? 0),
@@ -219,8 +225,8 @@ export default async function DashboardPage() {
       : 0;
   const purchasedCourseCount = new Set(purchasedItems.map((item) => item.courseId)).size;
   const hasTeamsSubscription = activeSubscription?.plan.slug === "teams";
-  const subscriptionSummary = activeSubscription
-    ? `${activeSubscription.status.toLowerCase().replace("_", " ")} | ${activeSubscription.billingCycle}`
+  const subscriptionSummary = subscriptionReference
+    ? `${subscriptionDisplayStatus} | ${subscriptionReference.billingCycle}`
     : "Upgrade anytime from pricing";
 
   const recentActivity = [
@@ -653,6 +659,43 @@ export default async function DashboardPage() {
             </div>
 
             <div className="space-y-6">
+              <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <div className="mb-3 flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-primary-blue" />
+                  <h2 className="text-sm font-bold text-foreground">Subscription plan</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="text-lg font-black text-foreground">
+                    {subscriptionReference?.plan.name ?? "Free"}
+                  </p>
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                      subscriptionIsActive
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                        : "bg-rose-500/12 text-rose-600 dark:text-rose-300"
+                    )}
+                  >
+                    {subscriptionIsActive ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {subscriptionIsActive
+                    ? subscriptionReference
+                      ? `${subscriptionReference.billingCycle} access renews ${subscriptionReference.currentPeriodEnd.toLocaleDateString()}`
+                      : "Upgrade anytime from pricing."
+                    : "Inactive — Renew to restore access"}
+                </p>
+                {!subscriptionIsActive ? (
+                  <Link
+                    href="/pricing"
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90"
+                  >
+                    Renew Now <ArrowRight className="h-4 w-4" />
+                  </Link>
+                ) : null}
+              </div>
+
               <ReferEarnCard />
 
               {hasTeamsSubscription ? (

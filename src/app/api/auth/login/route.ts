@@ -4,6 +4,8 @@ import {
   resolvePostAuthDestination,
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
+import { checkRateLimit, authRatelimit } from "@/lib/rate-limit";
+import { sanitizeText } from "@/lib/sanitize";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
@@ -13,9 +15,16 @@ function normalizeEmail(value: unknown) {
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "anonymous";
+    const limited = await checkRateLimit(authRatelimit, ip);
+
+    if (limited) {
+      return new Response("Too many requests", { status: 429 });
+    }
+
     const body = await request.json().catch(() => ({}));
     const mode = body.mode === "magic" ? "magic" : "password";
-    const email = normalizeEmail(body.email);
+    const email = normalizeEmail(typeof body.email === "string" ? sanitizeText(body.email) : "");
     const redirectPath = sanitizeAuthRedirectPath(
       typeof body.redirect === "string" ? body.redirect : null
     );
@@ -47,7 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, mode: "magic" });
     }
 
-    const password = typeof body.password === "string" ? body.password : "";
+    const password = typeof body.password === "string" ? sanitizeText(body.password) : "";
 
     if (!password) {
       return NextResponse.json(

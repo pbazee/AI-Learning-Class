@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/Footer";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { Check, X, HelpCircle } from "lucide-react";
 import { getSubscriptionPlans } from "@/lib/data";
+import { getRefundPolicySummary } from "@/lib/legal-documents";
 import { buildSiteMetadata } from "@/lib/site-server";
 
 
@@ -38,6 +39,7 @@ export default async function PricingPage({
   searchParams?: Promise<{ reason?: string }>;
 }) {
   const plans = await getSubscriptionPlans();
+  const refundPolicy = await getRefundPolicySummary();
   const params = searchParams ? await searchParams : undefined;
   const isExpiredReason = params?.reason === "expired";
 
@@ -54,7 +56,13 @@ export default async function PricingPage({
             </div>
           </div>
         ) : null}
-        <PricingSection plans={plans} />
+        <PricingSection
+          plans={plans}
+          refundNotice={{
+            summary: refundPolicy.summary,
+            updatedAtLabel: refundPolicy.updatedAtLabel,
+          }}
+        />
 
         <div className="mx-auto max-w-5xl px-4 pb-24 sm:px-6 lg:px-8">
           <h2 className="mb-10 text-center text-2xl font-black text-foreground">

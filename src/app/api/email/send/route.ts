@@ -116,9 +116,9 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ sent: true, id: result.data?.id });
-  } catch (error: any) {
+  } catch (error) {
     logger.error("Email send error:", error);
-    return NextResponse.json({ sent: false, error: error.message }, { status: 500 });
+    return new Response("Internal server error", { status: 500 });
   }
 }
 

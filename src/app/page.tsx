@@ -3,7 +3,6 @@ import nextDynamic from "next/dynamic";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { HeroCarousel } from "@/components/landing/HeroCarousel";
-import { CourseSection } from "@/components/landing/CourseSection";
 import { TrustedLogosMarquee } from "@/components/landing/TrustedLogosMarquee";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { StorefrontPersonalizationProvider } from "@/components/storefront/StorefrontPersonalizationProvider";
@@ -22,6 +21,11 @@ const CategoriesGrid = nextDynamic(() =>
 const TestimonialsSection = nextDynamic(() =>
   import("@/components/landing/TestimonialsSection").then((module) => ({
     default: module.TestimonialsSection,
+  }))
+);
+const CourseSection = nextDynamic(() =>
+  import("@/components/landing/CourseSection").then((module) => ({
+    default: module.CourseSection,
   }))
 );
 const BlogSection = nextDynamic(() =>
@@ -48,11 +52,14 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
 export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { slides } = await getPublicHomepageData();
+  const [{ slides }, branding] = await Promise.all([
+    getPublicHomepageData(),
+    getSiteBranding(),
+  ]);
   const shareImage =
     resolveMediaUrl({
       url: slides[0]?.imageUrl,
-      fallback: "",
+      fallback: branding.logoUrl || "",
     }) || undefined;
 
   return buildSiteMetadata("/", {

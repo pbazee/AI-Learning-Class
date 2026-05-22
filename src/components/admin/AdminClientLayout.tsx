@@ -60,6 +60,7 @@ const navItems = [
   { label: "Trusted Logos", href: "/admin/trusted-logos", icon: BadgeCheck },
   { label: "Messages", href: "/admin/messages", icon: Inbox },
   { label: "Paragraphs", href: "/admin/paragraphs", icon: FileText },
+  { label: "Legal Pages", href: "/admin/legal-pages", icon: FileText },
   { label: "Affiliates", href: "/admin/affiliates", icon: Link2 },
   { label: "Referrals", href: "/admin/referrals", icon: Share2 },
   { label: "Ask AI", href: "/admin/ask-ai", icon: Sparkles },
@@ -125,6 +126,10 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/admin/paragraphs": {
     title: "Homepage Sections",
     subtitle: "Edit the supporting copy that appears across the homepage in real time.",
+  },
+  "/admin/legal-pages": {
+    title: "Legal Pages",
+    subtitle: "Manage the privacy, terms, and refund pages shown to every learner.",
   },
 };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
   Area,
   AreaChart,
@@ -258,7 +259,7 @@ export function AffiliateDashboard() {
           Apply to unlock your partner workspace.
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
-          Once approved, you'll get your own earnings chart, payout controls, QR-enabled link sharing,
+          Once approved, you&apos;ll get your own earnings chart, payout controls, QR-enabled link sharing,
           and conversion visibility in one place.
         </p>
         <a
@@ -326,7 +327,7 @@ export function AffiliateDashboard() {
         <div className="rounded-[30px] border border-primary-blue/20 bg-primary-blue p-5 text-[#ffffff]">
           <p className="font-semibold">Your affiliate account is currently {data.affiliate.status.replace("_", " ")}.</p>
           <p className="mt-2 text-sm text-white/80">
-            We'll keep this dashboard live so you can review your profile, but link sharing and payouts unlock once the account is fully active.
+            We&apos;ll keep this dashboard live so you can review your profile, but link sharing and payouts unlock once the account is fully active.
           </p>
         </div>
       ) : null}
@@ -405,8 +406,7 @@ export function AffiliateDashboard() {
               <div className="rounded-[28px] border border-border bg-slate-50 p-4 text-center">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">QR Ready</p>
                 <div className="mt-4 overflow-hidden rounded-[24px] border border-white bg-white p-3 shadow-sm">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qrUrl} alt="Affiliate QR code" className="mx-auto h-40 w-40 rounded-2xl" />
+                  <Image src={qrUrl} alt="Affiliate QR code" width={160} height={160} className="mx-auto h-40 w-40 rounded-2xl" />
                 </div>
                 <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm">
                   <QrCode className="h-4 w-4 text-primary-blue" />

@@ -1,56 +1,46 @@
-import { prisma } from "@/lib/prisma";
 import { UsersManager } from "@/components/admin/users-manager";
+import { getAdminDirectoryPage } from "@/lib/admin-user-directory";
 
-
-const joinedFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
-export default async function AdminUsersPage() {
-  const users = await (async () => {
-    try {
-      return await prisma.user.findMany({
-        include: {
-          enrollments: {
-            select: { id: true },
-          },
-          subscriptions: {
-            where: { status: "ACTIVE" },
-            select: { id: true },
-          },
-          orders: {
-            where: { status: "COMPLETED" },
-            select: { totalAmount: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-    } catch (error) {
-      console.error(
-        "[database] admin users query failed. Returning a safe fallback while the database catches up.",
-        error
-      );
-      return [];
-    }
-  })();
+export default async function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = searchParams ? await searchParams : undefined;
+  const directory = await getAdminDirectoryPage("users", params).catch((error) => {
+    console.error(
+      "[database] admin users query failed. Returning a safe fallback while the database catches up.",
+      error
+    );
+    return {
+      mode: "users" as const,
+      filters: {
+        page: 1,
+        pageSize: 20,
+        search: "",
+        role: "all" as const,
+        plan: "all" as const,
+        progress: "all" as const,
+        country: "",
+        joinedFrom: "",
+        joinedTo: "",
+        sort: "joined",
+      },
+      users: [],
+      total: 0,
+      pageCount: 1,
+      countries: [],
+    };
+  });
 
   return (
     <UsersManager
-      users={users.map((user) => ({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        country: user.country,
-        avatarUrl: user.avatarUrl,
-        bio: user.bio,
-        enrollmentsCount: user.enrollments.length,
-        activeSubscriptions: user.subscriptions.length,
-        totalSpent: user.orders.reduce((sum, order) => sum + order.totalAmount, 0),
-        joinedAt: joinedFormatter.format(user.createdAt),
-      }))}
+      mode="users"
+      users={directory.users}
+      filters={directory.filters}
+      total={directory.total}
+      pageCount={directory.pageCount}
+      countries={directory.countries}
     />
   );
 }

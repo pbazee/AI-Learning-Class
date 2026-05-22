@@ -1,9 +1,9 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/admin-auth";
 import { getR2BucketName, getR2Client, getR2Url } from "@/lib/r2";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { checkRateLimit, uploadRatelimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 const CORS_HEADERS = {
@@ -28,42 +28,19 @@ function sanitizeFolder(folder: string) {
     .replace(/^\/|\/$/g, "");
 }
 
-async function isAdmin() {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user?.email) {
-    return false;
-  }
-
-  const dbUser = await prisma.user.findUnique({
-    where: { email: user.email },
-    select: { role: true },
-  });
-
-  return dbUser?.role === "ADMIN" || dbUser?.role === "SUPER_ADMIN";
+function getRequestIp(request: Request) {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonymous";
 }
 
 export async function POST(request: Request) {
-  console.log("[upload-url] Cloudflare R2 env check", {
-    endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
-    accessKeyIdDefined:
-      typeof (process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ?? process.env.R2_ACCESS_KEY_ID) !==
-      "undefined",
-    secretAccessKeyDefined:
-      typeof (process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY ?? process.env.R2_SECRET_ACCESS_KEY) !==
-      "undefined",
-    bucketName:
-      process.env.CLOUDFLARE_R2_BUCKET_NAME ?? process.env.R2_BUCKET_NAME,
-    publicUrl:
-      process.env.CLOUDFLARE_R2_PUBLIC_URL ?? process.env.R2_PUBLIC_URL,
-  });
-
   try {
     if (!(await isAdmin())) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403, headers: CORS_HEADERS });
+    }
+
+    const limited = await checkRateLimit(uploadRatelimit, getRequestIp(request));
+    if (limited) {
+      return new Response("Too many requests", { status: 429, headers: CORS_HEADERS });
     }
 
     const body = await request.json().catch(() => ({}));

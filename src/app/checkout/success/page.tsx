@@ -1,12 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { NavbarClient } from "@/components/layout/NavbarClient";
 import { Check, BookOpen, Award, ArrowRight, Sparkles, Mail } from "lucide-react";
 
-export default function CheckoutSuccessPage() {
+function CheckoutSuccessPageInner() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
   const [confetti, setConfetti] = useState(true);
@@ -130,5 +129,13 @@ export default function CheckoutSuccessPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={null}>
+      <CheckoutSuccessPageInner />
+    </Suspense>
   );
 }

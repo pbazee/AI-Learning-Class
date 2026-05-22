@@ -51,7 +51,7 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
                 ))}
               </div>
 
-              <p className="flex-1 text-sm leading-7 text-white/[0.88]">"{t.text}"</p>
+              <p className="flex-1 text-sm leading-7 text-white/[0.88]">&quot;{t.text}&quot;</p>
 
               {t.courseCompleted ? (
                 <div className="inline-flex w-fit rounded-full border border-white/[0.15] bg-white px-3 py-1.5 text-xs font-semibold text-primary-blue shadow-sm">
