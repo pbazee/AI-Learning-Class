@@ -444,9 +444,7 @@ function calculateCourseProgress(allLessons: CourseLesson[], lessonProgressMap: 
     normalizeLessonProgressEntry(lessonProgressMap[lesson.id])
   );
   const completedLessons = progressEntries.filter((entry) => entry.isCompleted).length;
-  const overallProgress = Math.round(
-    progressEntries.reduce((sum, entry) => sum + entry.progressPercent, 0) / allLessons.length
-  );
+  const overallProgress = Math.round((completedLessons / allLessons.length) * 100);
 
   return {
     completedLessons,
@@ -669,6 +667,23 @@ export function LessonPlayerClient({
     () => calculateCourseProgress(allLessons, lessonProgressMap),
     [allLessons, lessonProgressMap]
   );
+  const resumeLesson = useMemo(() => {
+    return (
+      allLessons
+        .map((lesson) => ({
+          lesson,
+          progress: normalizeLessonProgressEntry(lessonProgressMap[lesson.id]),
+        }))
+        .filter(
+          (entry) => !entry.progress.isCompleted && Boolean(entry.progress.updatedAt)
+        )
+        .sort(
+          (left, right) =>
+            new Date(right.progress.updatedAt ?? 0).getTime() -
+            new Date(left.progress.updatedAt ?? 0).getTime()
+        )[0]?.lesson ?? null
+    );
+  }, [allLessons, lessonProgressMap]);
   const currentAssetProgress = useMemo(
     () =>
       getAssetProgressState(
@@ -2615,6 +2630,29 @@ export function LessonPlayerClient({
               </div>
 
               <div className="border-t border-white/5 bg-white/[0.02] p-4">
+                {hasFullCourseAccess && resumeLesson && resumeLesson.id !== currentLesson.id ? (
+                  <button
+                    type="button"
+                    onClick={() => handleLessonSelect(resumeLesson.id)}
+                    className="mb-4 w-full rounded-xl border border-primary-blue/25 bg-primary-blue/10 p-3 text-left transition hover:border-primary-blue/40 hover:bg-primary-blue/14"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-blue">
+                      Continue Where You Left Off
+                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">
+                          {resumeLesson.title}
+                        </p>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Jump back into your most recent in-progress lesson.
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-primary-blue" />
+                    </div>
+                  </button>
+                ) : null}
+
                 <div className="rounded-lg bg-white/5 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-300">Course Progress</span>

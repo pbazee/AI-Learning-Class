@@ -3,6 +3,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  serverExternalPackages: ["html-encoding-sniffer", "@exodus/bytes"],
   experimental: {
     serverActions: {
       bodySizeLimit: "100mb",

@@ -66,6 +66,47 @@ function buildFallbackPreview(course: Course, previewState?: CoursePreviewState 
   ];
 }
 
+function getCourseLessonPreviewSource(
+  lesson: NonNullable<Course["modules"]>[number]["lessons"][number]
+) {
+  const primaryAsset =
+    [...(lesson.assets ?? [])].sort((left, right) => {
+      if (left.isPrimary !== right.isPrimary) {
+        return left.isPrimary ? -1 : 1;
+      }
+
+      return left.sortOrder - right.sortOrder;
+    })[0] ?? null;
+
+  return primaryAsset?.assetUrl || lesson.assetUrl || lesson.videoUrl || undefined;
+}
+
+function buildCoursePreviewLessons(course: Course): CoursePreviewLessonState[] {
+  const modules = course.modules ?? [];
+
+  return modules.flatMap((module) =>
+    module.lessons.flatMap<CoursePreviewLessonState>((lesson) => {
+      if (!lesson.isPreview) {
+        return [];
+      }
+
+      return [
+        {
+          id: lesson.id,
+          title: lesson.title,
+          type: lesson.type,
+          sourceUrl: getCourseLessonPreviewSource(lesson),
+          content: lesson.content?.trim() || undefined,
+          duration: lesson.duration ?? undefined,
+          previewMinutes: lesson.previewMinutes ?? undefined,
+          previewPages: lesson.previewPages ?? undefined,
+          moduleTitle: module.title,
+        },
+      ];
+    })
+  );
+}
+
 export function CoursePreviewModal({
   accessActionLabel,
   course,
@@ -86,8 +127,37 @@ export function CoursePreviewModal({
   const [pdfPage, setPdfPage] = useState(1);
 
   const previewLessons = useMemo(() => {
+    const coursePreviewLessons = buildCoursePreviewLessons(course);
     const configuredLessons = previewState?.previewLessons ?? [];
-    return configuredLessons.length > 0 ? configuredLessons : buildFallbackPreview(course, previewState);
+
+    if (configuredLessons.length === 0) {
+      return coursePreviewLessons.length > 0
+        ? coursePreviewLessons
+        : buildFallbackPreview(course, previewState);
+    }
+
+    const coursePreviewById = new Map(coursePreviewLessons.map((lesson) => [lesson.id, lesson]));
+    const mergedLessons = configuredLessons.map((lesson) => {
+      const coursePreview = coursePreviewById.get(lesson.id);
+
+      return {
+        ...coursePreview,
+        ...lesson,
+        sourceUrl: lesson.sourceUrl ?? coursePreview?.sourceUrl,
+        content: lesson.content ?? coursePreview?.content,
+        duration: lesson.duration ?? coursePreview?.duration,
+        previewMinutes: lesson.previewMinutes ?? coursePreview?.previewMinutes,
+        previewPages: lesson.previewPages ?? coursePreview?.previewPages,
+        moduleTitle: lesson.moduleTitle ?? coursePreview?.moduleTitle,
+      };
+    });
+    const mergedLessonIds = new Set(mergedLessons.map((lesson) => lesson.id));
+    const missingCourseLessons = coursePreviewLessons.filter((lesson) => !mergedLessonIds.has(lesson.id));
+    const resolvedLessons = [...mergedLessons, ...missingCourseLessons];
+
+    return resolvedLessons.length > 0
+      ? resolvedLessons
+      : buildFallbackPreview(course, previewState);
   }, [course, previewState]);
 
   const activePreview =

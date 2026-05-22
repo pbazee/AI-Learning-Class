@@ -134,11 +134,15 @@ export function CourseDetailClient({
   const resolvedCourseAccess = courseAccess ?? previewState?.courseAccess;
   const hasAccess = Boolean(resolvedCourseAccess?.hasAccess);
   const defaultLessonId = modules[0]?.lessons[0]?.id;
+  const hasConfiguredPreviewLessons = modules.some((module) =>
+    module.lessons.some((lesson) => lesson.isPreview)
+  );
   const classroomHref =
     resolvedCourseAccess?.lessonHref ??
     (defaultLessonId ? `/learn/${course.slug}/${defaultLessonId}` : `/courses/${course.slug}`);
   const shouldAutoEnroll = searchParams.get("enroll") === "free";
   const hasPreviewContent =
+    hasConfiguredPreviewLessons ||
     Boolean(previewState?.previewLessons?.length) ||
     Boolean(previewState?.previewVideoUrl) ||
     Boolean(course.previewVideoUrl);

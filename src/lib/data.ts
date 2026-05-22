@@ -1071,6 +1071,12 @@ async function computeUserCourseAccess(
               select: {
                 id: true,
                 title: true,
+                lessonAssets: {
+                  select: {
+                    id: true,
+                  },
+                  orderBy: { sortOrder: "asc" },
+                },
               },
             },
           },
@@ -1118,49 +1124,76 @@ async function computeUserCourseAccess(
     const orderedLessons = course.modules.flatMap((module) => module.lessons);
     const orderedLessonIds = new Set(orderedLessons.map((lesson) => lesson.id));
     const courseProgress = progressByCourse.get(course.id) ?? [];
-    const progressByLessonId = new Map(
-      courseProgress.map((row) => [row.lessonId, row])
+    const progressByKey = new Map(
+      courseProgress.map((row) => [`${row.lessonId}:${row.assetId ?? "primary"}`, row])
     );
+    const lessonProgress = orderedLessons.map((lesson) => {
+      const assetIds =
+        lesson.lessonAssets.length > 0 ? lesson.lessonAssets.map((asset) => asset.id) : [null];
+      const assetRows = assetIds.map(
+        (assetId) => progressByKey.get(`${lesson.id}:${assetId ?? "primary"}`) ?? null
+      );
+      const isCompleted =
+        assetRows.length > 0 &&
+        assetRows.every((row) => Boolean(row?.isCompleted || (row?.progressPercent ?? 0) >= 100));
+      const latestUpdatedAt = assetRows.reduce<Date | null>((latest, row) => {
+        if (!row?.updatedAt) {
+          return latest;
+        }
+
+        if (!latest || latest.getTime() < row.updatedAt.getTime()) {
+          return row.updatedAt;
+        }
+
+        return latest;
+      }, null);
+
+      return {
+        lessonId: lesson.id,
+        title: lesson.title,
+        isCompleted,
+        updatedAt: latestUpdatedAt,
+      };
+    });
     const completedLessonIds = new Set(
-      courseProgress
-        .filter(
-          (row) =>
-            orderedLessonIds.has(row.lessonId) &&
-            (row.isCompleted || (row.progressPercent ?? 0) >= 100)
-        )
-        .map((row) => row.lessonId)
+      lessonProgress.filter((lesson) => lesson.isCompleted).map((lesson) => lesson.lessonId)
     );
-    const completedLessons = orderedLessons.filter((lesson) => completedLessonIds.has(lesson.id)).length;
+    const completedLessons = completedLessonIds.size;
     const totalLessons = orderedLessons.length || course.totalLessons;
-    const latestProgress = courseProgress.find((row) => orderedLessonIds.has(row.lessonId));
+    const latestIncompleteLesson =
+      lessonProgress
+        .filter((lesson) => !lesson.isCompleted && lesson.updatedAt)
+        .sort(
+          (left, right) =>
+            (right.updatedAt?.getTime() ?? 0) - (left.updatedAt?.getTime() ?? 0)
+        )[0] ?? null;
+    const latestTouchedLesson =
+      lessonProgress
+        .filter((lesson) => lesson.updatedAt)
+        .sort(
+          (left, right) =>
+            (right.updatedAt?.getTime() ?? 0) - (left.updatedAt?.getTime() ?? 0)
+        )[0] ?? null;
     const firstIncompleteLesson =
       orderedLessons.find((lesson) => !completedLessonIds.has(lesson.id)) ?? orderedLessons[0];
-    const resumeLessonId = latestProgress?.lessonId ?? firstIncompleteLesson?.id;
+    const resumeLessonId =
+      latestIncompleteLesson?.lessonId ??
+      latestTouchedLesson?.lessonId ??
+      firstIncompleteLesson?.id;
     const progress =
-      totalLessons > 0
-        ? Math.round(
-            orderedLessons.reduce((sum, lesson) => {
-              const lessonProgress = progressByLessonId.get(lesson.id);
-              const lessonPercent = lessonProgress?.isCompleted
-                ? 100
-                : Math.max(0, Math.min(100, Math.round(lessonProgress?.progressPercent ?? 0)));
-
-              return sum + lessonPercent;
-            }, 0) / totalLessons
-          )
-        : 0;
+      totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
     return {
       courseId: course.id,
       courseSlug: course.slug,
       hasAccess: true,
       statusLabel: getCourseAccessLabels(accessByCourseId?.get(course.id)?.source).statusLabel,
-      actionLabel: latestProgress ? "Continue Learning" : "Go to Classroom",
+      actionLabel: latestTouchedLesson ? "Continue Learning" : "Go to Classroom",
       lessonHref: resumeLessonId ? `/learn/${course.slug}/${resumeLessonId}` : `/courses/${course.slug}`,
       progress,
       completedLessons,
       totalLessons,
-      lastLessonTitle: latestProgress?.lesson.title,
+      lastLessonTitle: latestIncompleteLesson?.title ?? latestTouchedLesson?.title,
       completedLessonIds: Array.from(completedLessonIds),
       accessSource: accessByCourseId?.get(course.id)?.source,
       expiresAt: accessByCourseId?.get(course.id)?.expiresAt?.toISOString() ?? null,

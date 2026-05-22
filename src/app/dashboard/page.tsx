@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import {
@@ -9,7 +8,6 @@ import {
   CreditCard,
   BookOpen,
   Clock,
-  Play,
   ShoppingBag,
   TrendingUp,
   ArrowRight,
@@ -26,9 +24,10 @@ import {
 import { getUserWorkspaceNotes } from "@/lib/lesson-player";
 import { prisma } from "@/lib/prisma";
 import { getUserTeamWorkspaceSummary } from "@/lib/team-workspace";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { ReferEarnCard } from "@/components/dashboard/refer-earn-card";
 import { LearnerInboxPanel } from "@/components/dashboard/LearnerInboxPanel";
+import { DashboardCoursesList } from "@/components/dashboard/DashboardCoursesList";
 import { WorkspaceNotesPanel } from "@/components/dashboard/WorkspaceNotesPanel";
 import { ResetOnboardingButton } from "@/components/onboarding/ResetOnboardingButton";
 
@@ -569,60 +568,7 @@ export default async function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {enrollments.map((enrollment) => (
-                      <div key={enrollment.id} className="rounded-2xl border border-border p-5">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                          <div className="relative h-44 w-full overflow-hidden rounded-xl sm:h-16 sm:w-24 sm:shrink-0">
-                            <Image
-                              src={enrollment.course.thumbnailUrl || thumbnailFallback}
-                              alt={enrollment.course.title}
-                              fill
-                              quality={75}
-                              placeholder="blur"
-                              blurDataURL={IMAGE_BLUR_DATA_URL}
-                              sizes="(min-width: 640px) 96px, 100vw"
-                              className="object-cover"
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <Link
-                              href={`/courses/${enrollment.course.slug}`}
-                              className="line-clamp-1 text-sm font-bold text-foreground transition-colors hover:text-primary-blue"
-                            >
-                              {enrollment.course.title}
-                            </Link>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {enrollment.lastLessonTitle
-                                ? `Latest progress: ${enrollment.lastLessonTitle}`
-                                : "Start the classroom from your first lesson."}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {enrollment.completedLessons}/{enrollment.totalLessons} lessons completed / {formatDuration(enrollment.remainingMinutes)} left
-                            </p>
-                            <div className="mt-3 flex items-center gap-3">
-                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className="h-full rounded-full bg-primary-blue"
-                                  style={{ width: `${enrollment.progress}%` }}
-                                />
-                              </div>
-                              <span className="shrink-0 text-xs text-muted-foreground">
-                                {enrollment.progress}%
-                              </span>
-                            </div>
-                          </div>
-                          <Link
-                            href={enrollment.lessonHref}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-blue/90 sm:self-start"
-                          >
-                            <Play className="h-4 w-4" />
-                            {enrollment.actionLabel}
-                          </Link>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <DashboardCoursesList initialEnrollments={enrollments} />
                 )}
               </div>
 

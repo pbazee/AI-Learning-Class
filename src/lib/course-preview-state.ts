@@ -4,6 +4,24 @@ import type { CourseAccessState, CoursePreviewLessonState, CoursePreviewState, L
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { env } from "@/lib/config";
 
+type PreviewLessonPayload = {
+  assetUrl?: string | null;
+  content?: string | null;
+  duration?: number | null;
+  id?: string;
+  moduleTitle?: string | null;
+  module_title?: string | null;
+  previewMinutes?: number | null;
+  previewPages?: number | null;
+  preview_minutes?: number | null;
+  preview_pages?: number | null;
+  sourceUrl?: string | null;
+  source_url?: string | null;
+  title?: string;
+  type?: Lesson["type"] | string | null;
+  videoUrl?: string | null;
+};
+
 type PreviewPayload = {
   courseAccess?: {
     accessSource?: CourseAccessState["accessSource"];
@@ -20,23 +38,20 @@ type PreviewPayload = {
   } | null;
   courseCurrency?: string | null;
   courseId?: string;
+  course_id?: string;
   coursePrice?: number;
   courseSlug?: string;
+  course_slug?: string;
   courseTitle?: string;
+  course_title?: string;
   isFreeCourse?: boolean;
-  previewLessons?: Array<{
-    content?: string | null;
-    duration?: number | null;
-    id?: string;
-    moduleTitle?: string | null;
-    previewMinutes?: number | null;
-    previewPages?: number | null;
-    sourceUrl?: string | null;
-    title?: string;
-    type?: Lesson["type"] | null;
-  }> | null;
+  is_free_course?: boolean;
+  previewLessons?: PreviewLessonPayload[] | null;
+  preview_lessons?: PreviewLessonPayload[] | null;
   previewVideoUrl?: string | null;
+  preview_video_url?: string | null;
   thumbnailUrl?: string | null;
+  thumbnail_url?: string | null;
 } | null;
 
 const supportedLessonTypes: Lesson["type"][] = [
@@ -54,15 +69,28 @@ function isSupportedLessonType(value?: string | null): value is Lesson["type"] {
   return Boolean(value && supportedLessonTypes.includes(value as Lesson["type"]));
 }
 
+function getTrimmedString(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
 function normalizePreviewLessons(
-  previewLessons: NonNullable<PreviewPayload>["previewLessons"]
+  previewLessons: NonNullable<PreviewPayload>["previewLessons"] | NonNullable<PreviewPayload>["preview_lessons"]
 ): CoursePreviewLessonState[] {
   if (!Array.isArray(previewLessons)) {
     return [];
   }
 
   return previewLessons.flatMap<CoursePreviewLessonState>((lesson) => {
-    if (!lesson?.id || !lesson.title || !isSupportedLessonType(lesson.type)) {
+    const normalizedType =
+      typeof lesson?.type === "string" ? lesson.type.trim().toUpperCase() : lesson?.type;
+
+    if (!lesson?.id || !lesson.title || !isSupportedLessonType(normalizedType)) {
       return [];
     }
 
@@ -70,13 +98,18 @@ function normalizePreviewLessons(
       {
         id: lesson.id,
         title: lesson.title,
-        type: lesson.type,
-        sourceUrl: lesson.sourceUrl?.trim() || undefined,
+        type: normalizedType,
+        sourceUrl: getTrimmedString(
+          lesson.sourceUrl,
+          lesson.source_url,
+          lesson.videoUrl,
+          lesson.assetUrl
+        ),
         content: lesson.content?.trim() || undefined,
         duration: lesson.duration ?? undefined,
-        previewMinutes: lesson.previewMinutes ?? undefined,
-        previewPages: lesson.previewPages ?? undefined,
-        moduleTitle: lesson.moduleTitle?.trim() || undefined,
+        previewMinutes: lesson.previewMinutes ?? lesson.preview_minutes ?? undefined,
+        previewPages: lesson.previewPages ?? lesson.preview_pages ?? undefined,
+        moduleTitle: getTrimmedString(lesson.moduleTitle, lesson.module_title),
       },
     ];
   });
@@ -106,21 +139,29 @@ function normalizeCourseAccess(
 }
 
 function normalizePreviewPayload(payload: PreviewPayload): CoursePreviewState | null {
-  if (!payload?.courseId || !payload.courseSlug || !payload.courseTitle) {
+  if (!payload) {
+    return null;
+  }
+
+  const courseId = getTrimmedString(payload?.courseId, payload?.course_id);
+  const courseSlug = getTrimmedString(payload?.courseSlug, payload?.course_slug);
+  const courseTitle = getTrimmedString(payload?.courseTitle, payload?.course_title);
+
+  if (!courseId || !courseSlug || !courseTitle) {
     return null;
   }
 
   return {
-    courseId: payload.courseId,
-    courseSlug: payload.courseSlug,
-    courseTitle: payload.courseTitle,
-    thumbnailUrl: payload.thumbnailUrl?.trim() || undefined,
-    previewVideoUrl: payload.previewVideoUrl?.trim() || undefined,
+    courseId,
+    courseSlug,
+    courseTitle,
+    thumbnailUrl: getTrimmedString(payload.thumbnailUrl, payload.thumbnail_url),
+    previewVideoUrl: getTrimmedString(payload.previewVideoUrl, payload.preview_video_url),
     coursePrice: payload.coursePrice ?? 0,
-    courseCurrency: payload.courseCurrency?.trim() || undefined,
-    isFreeCourse: Boolean(payload.isFreeCourse),
-    previewLessons: normalizePreviewLessons(payload.previewLessons),
-    courseAccess: normalizeCourseAccess(payload.courseId, payload.courseAccess ?? undefined),
+    courseCurrency: getTrimmedString(payload.courseCurrency),
+    isFreeCourse: Boolean(payload.isFreeCourse ?? payload.is_free_course),
+    previewLessons: normalizePreviewLessons(payload.previewLessons ?? payload.preview_lessons),
+    courseAccess: normalizeCourseAccess(courseId, payload.courseAccess ?? undefined),
   };
 }
 

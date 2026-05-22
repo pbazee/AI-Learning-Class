@@ -471,22 +471,47 @@ export async function getCourseProgressState(userId: string, courseId: string) {
           assetEntries.length > 0
             ? Math.round(assetEntries.reduce((sum, item) => sum + item.progressPercent, 0) / assetEntries.length)
             : 0;
-        const isCompleted = assetEntries.length > 0 && assetEntries.every((item) => item.isCompleted);
+        const isCompleted =
+          assetEntries.length > 0 &&
+          assetEntries.every((item) => item.isCompleted || item.progressPercent >= 100);
+        const latestUpdatedAt = assetEntries.reduce<string | null>((latest, item) => {
+          if (!item.updatedAt) {
+            return latest;
+          }
+
+          if (!latest || new Date(latest).getTime() < new Date(item.updatedAt).getTime()) {
+            return item.updatedAt;
+          }
+
+          return latest;
+        }, null);
+        const latestCompletedAt = assetEntries.reduce<string | null>((latest, item) => {
+          if (!item.completedAt) {
+            return latest;
+          }
+
+          if (!latest || new Date(latest).getTime() < new Date(item.completedAt).getTime()) {
+            return item.completedAt;
+          }
+
+          return latest;
+        }, null);
+        const contentType = assetEntries.find((item) => item.contentType)?.contentType ?? null;
 
         return [
           lesson.id,
           {
             lessonId: lesson.id,
             assetId: null,
-            contentType: assetEntries[0]?.contentType ?? null,
+            contentType,
             progressPercent: isCompleted ? 100 : progressPercent,
             lastPosition: null,
             lastPage: null,
             watchedSeconds: 0,
             lastPdfPage: null,
             isCompleted,
-            completedAt: isCompleted ? assetEntries[assetEntries.length - 1]?.completedAt ?? null : null,
-            updatedAt: assetEntries[assetEntries.length - 1]?.updatedAt ?? null,
+            completedAt: isCompleted ? latestCompletedAt : null,
+            updatedAt: latestUpdatedAt,
           },
         ];
       })
@@ -503,14 +528,29 @@ export async function getCourseProgressState(userId: string, courseId: string) {
     const totalAssets = lessons.reduce((sum, lesson) => sum + Math.max(lesson.lessonAssets.length, 1), 0);
     const completedAssetCount = Object.values(assetProgressByKey).filter((entry) => entry.isCompleted).length;
     const percentage =
-      totalAssets > 0
-        ? Math.round(
-            lessons.reduce((sum, lesson) => {
-              const weight = Math.max(lesson.lessonAssets.length, 1);
-              return sum + (lessonProgressByLessonId[lesson.id]?.progressPercent ?? 0) * weight;
-            }, 0) / totalAssets
-          )
+      totalLessons > 0
+        ? Math.round((completedCount / totalLessons) * 100)
         : 0;
+
+    const latestIncompleteLesson = lessons.reduce<{ id: string; updatedAt: string } | null>(
+      (latest, lesson) => {
+        const progress = lessonProgressByLessonId[lesson.id];
+
+        if (!progress || progress.isCompleted || !progress.updatedAt) {
+          return latest;
+        }
+
+        if (!latest || new Date(latest.updatedAt).getTime() < new Date(progress.updatedAt).getTime()) {
+          return {
+            id: lesson.id,
+            updatedAt: progress.updatedAt,
+          };
+        }
+
+        return latest;
+      },
+      null
+    );
 
     return {
       completedLessonIds,
@@ -521,6 +561,7 @@ export async function getCourseProgressState(userId: string, courseId: string) {
       percentage,
       lessonProgressByLessonId,
       assetProgressByKey,
+      resumeLessonId: latestIncompleteLesson?.id ?? null,
     };
   } catch (error) {
     console.error("Progress state failed, continuing without it:", error);
@@ -533,6 +574,7 @@ export async function getCourseProgressState(userId: string, courseId: string) {
       percentage: 0,
       lessonProgressByLessonId: {},
       assetProgressByKey: {},
+      resumeLessonId: null,
     };
   }
 }
