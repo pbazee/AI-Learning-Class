@@ -34,6 +34,8 @@ type BlogRow = {
   content: string;
   coverImage?: string | null;
   coverImagePath?: string | null;
+  authorAvatarUrl?: string | null;
+  authorAvatarPath?: string | null;
   metaTitle?: string | null;
   metaDescription?: string | null;
   focusKeyword?: string | null;
@@ -60,6 +62,8 @@ type BlogFormState = {
   content: string;
   coverImage: string;
   coverImagePath: string;
+  authorAvatarUrl: string;
+  authorAvatarPath: string;
   metaTitle: string;
   metaDescription: string;
   focusKeyword: string;
@@ -95,6 +99,8 @@ function buildEmptyForm(authorId: string): BlogFormState {
     content: "<p></p>",
     coverImage: "",
     coverImagePath: "",
+    authorAvatarUrl: "",
+    authorAvatarPath: "",
     metaTitle: "",
     metaDescription: "",
     focusKeyword: "",
@@ -120,6 +126,8 @@ function mapPostToForm(post: BlogRow): BlogFormState {
     content: post.content,
     coverImage: post.coverImage || "",
     coverImagePath: post.coverImagePath || "",
+    authorAvatarUrl: post.authorAvatarUrl || "",
+    authorAvatarPath: post.authorAvatarPath || "",
     metaTitle: post.metaTitle || "",
     metaDescription: post.metaDescription || "",
     focusKeyword: post.focusKeyword || "",
@@ -229,6 +237,8 @@ export function BlogsManager({
         content: form.content,
         coverImage: form.coverImage,
         coverImagePath: form.coverImagePath,
+        authorAvatarUrl: form.authorAvatarUrl,
+        authorAvatarPath: form.authorAvatarPath,
         metaTitle: form.metaTitle,
         metaDescription: form.metaDescription,
         focusKeyword: form.focusKeyword,
@@ -393,6 +403,34 @@ export function BlogsManager({
                   </option>
                 ))}
               </AdminSelect>
+            </div>
+            <div>
+              <MediaUploader
+                label="Author photo"
+                hint="Optional per-post avatar shown in the public byline."
+                folder="blogs/authors"
+                accept="image/jpeg,image/png,image/webp"
+                value={{
+                  url: form.authorAvatarUrl,
+                  path: form.authorAvatarPath,
+                  fileName: form.title || "Author photo",
+                  mimeType: "image/*",
+                }}
+                onUploaded={(file) =>
+                  setForm((current) => ({
+                    ...current,
+                    authorAvatarUrl: file.url,
+                    authorAvatarPath: file.path,
+                  }))
+                }
+                onRemoved={() =>
+                  setForm((current) => ({
+                    ...current,
+                    authorAvatarUrl: "",
+                    authorAvatarPath: "",
+                  }))
+                }
+              />
             </div>
             <div>
               <FieldLabel>Category</FieldLabel>

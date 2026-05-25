@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { CheckCircle2, Globe2, Loader2, Save, UserRound } from "lucide-react";
+import Image from "next/image";
+import { CheckCircle2, Globe2, Loader2, Save, UploadCloud, UserRound } from "lucide-react";
 import { CountryCombobox } from "@/components/checkout/CountryCombobox";
 import { getSupabaseClient } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ type LearnerSettingsClientProps = {
     countryCode: string;
     countryName: string;
     preferredCurrency: string;
+    avatarUrl?: string | null;
     role: string;
     joinedAt: string;
   };
@@ -37,6 +39,7 @@ export function LearnerSettingsClient({
     bio: initialProfile.bio,
     countryCode: initialProfile.countryCode,
     preferredCurrency: initialProfile.preferredCurrency || "USD",
+    avatarUrl: initialProfile.avatarUrl || "",
   });
   const [savedProfile, setSavedProfile] = useState(initialProfile);
   const [status, setStatus] = useState<{
@@ -44,6 +47,7 @@ export function LearnerSettingsClient({
     message: string;
   }>({ tone: "idle", message: "" });
   const [isPending, startTransition] = useTransition();
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const joinedAtLabel = useMemo(
     () =>
@@ -54,6 +58,99 @@ export function LearnerSettingsClient({
       }).format(new Date(savedProfile.joinedAt)),
     [savedProfile.joinedAt]
   );
+
+  const displayInitial = useMemo(
+    () => (formData.name || savedProfile.name || "L").trim().slice(0, 1).toUpperCase(),
+    [formData.name, savedProfile.name]
+  );
+
+  async function parseJsonResponse(response: Response) {
+    const text = await response.text();
+
+    if (!text) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return { error: text };
+    }
+  }
+
+  async function handleAvatarUpload(file: File) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setStatus({
+        tone: "error",
+        message: "Use a JPG, PNG, or WebP image for your profile picture.",
+      });
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setStatus({
+        tone: "error",
+        message: "Profile pictures must be 2MB or smaller.",
+      });
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setStatus({ tone: "idle", message: "" });
+
+    try {
+      const signResponse = await fetch("/api/account/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          folder: "avatars/learners",
+        }),
+      });
+      const signPayload = await parseJsonResponse(signResponse);
+
+      if (
+        !signResponse.ok ||
+        typeof signPayload?.url !== "string" ||
+        typeof signPayload?.publicUrl !== "string"
+      ) {
+        throw new Error(
+          typeof signPayload?.error === "string"
+            ? signPayload.error
+            : "Unable to prepare your profile picture upload."
+        );
+      }
+
+      const uploadResponse = await fetch(signPayload.url, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Upload failed before the file reached storage.");
+      }
+
+      updateField("avatarUrl", signPayload.publicUrl);
+      setStatus({
+        tone: "success",
+        message: "Profile picture uploaded. Save your profile to publish it on reviews.",
+      });
+    } catch (error) {
+      setStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to upload your profile picture right now.",
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   function updateField<K extends keyof typeof formData>(
     field: K,
@@ -105,6 +202,7 @@ export function LearnerSettingsClient({
               bio: trimmedBio,
               countryCode: formData.countryCode,
               preferredCurrency: formData.preferredCurrency,
+              avatarUrl: formData.avatarUrl,
             }),
           });
           const payload = await response.json().catch(() => null);
@@ -123,12 +221,14 @@ export function LearnerSettingsClient({
             countryName: payload.profile.country ?? "",
             preferredCurrency:
               payload.profile.preferredCurrency ?? current.preferredCurrency,
+            avatarUrl: payload.profile.avatarUrl ?? "",
           }));
           setFormData({
             name: payload.profile.name ?? "",
             bio: payload.profile.bio ?? "",
             countryCode: payload.profile.countryCode ?? "",
             preferredCurrency: payload.profile.preferredCurrency ?? "USD",
+            avatarUrl: payload.profile.avatarUrl ?? "",
           });
           setStatus({
             tone: "success",
@@ -206,6 +306,62 @@ export function LearnerSettingsClient({
           </div>
 
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-3 block text-xs font-medium text-muted-foreground">
+                Profile picture
+              </label>
+              <div className="flex flex-col gap-4 rounded-3xl border border-border bg-background/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4">
+                  {formData.avatarUrl ? (
+                    <Image
+                      src={formData.avatarUrl}
+                      alt={formData.name || "Learner avatar"}
+                      width={72}
+                      height={72}
+                      className="h-[72px] w-[72px] rounded-full object-cover ring-1 ring-border"
+                    />
+                  ) : (
+                    <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-primary-blue text-xl font-bold text-white">
+                      {displayInitial}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Show your photo on learner reviews
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Upload a JPG, PNG, or WebP image up to 2MB.
+                    </p>
+                  </div>
+                </div>
+                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground hover:border-primary-blue/30 hover:text-primary-blue">
+                  {uploadingAvatar ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="h-4 w-4" />
+                      Upload avatar
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    disabled={uploadingAvatar}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        void handleAvatarUpload(file);
+                      }
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Display name

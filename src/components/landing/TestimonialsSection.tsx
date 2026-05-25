@@ -60,7 +60,7 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
               ) : null}
 
               <div className="flex items-center gap-3 border-t border-white/[0.12] pt-4">
-                {t.avatar && (
+                {t.avatar ? (
                   <Image
                     src={t.avatar}
                     alt={t.name}
@@ -68,6 +68,10 @@ export function TestimonialsSection({ testimonials }: { testimonials: Testimonia
                     height={44}
                     className="rounded-full ring-2 ring-white/20"
                   />
+                ) : (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/16 text-sm font-bold text-white ring-2 ring-white/14">
+                    {t.name.slice(0, 1).toUpperCase()}
+                  </div>
                 )}
                 <div>
                   <div className="text-sm font-semibold text-white">{t.name}</div>

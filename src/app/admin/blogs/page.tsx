@@ -68,6 +68,8 @@ export default async function AdminBlogsPage() {
         content: post.content,
         coverImage: post.coverImage,
         coverImagePath: post.coverImagePath,
+        authorAvatarUrl: post.authorAvatarUrl,
+        authorAvatarPath: post.authorAvatarPath,
         metaTitle: post.metaTitle,
         metaDescription: post.metaDescription,
         focusKeyword: post.focusKeyword,

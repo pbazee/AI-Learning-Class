@@ -3,6 +3,7 @@ import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import { findCountryCodeByName, getCountryNameFromCode } from "@/lib/countries";
 import { prisma } from "@/lib/prisma";
 import { sanitizeText } from "@/lib/sanitize";
+import { sanitizeSupabaseAuthMetadata } from "@/lib/supabase-auth-admin";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 const supportedCurrencies = new Set(["USD", "KES", "GHS", "NGN", "ZAR"]);
@@ -20,6 +21,7 @@ function normalizeProfile(profile: Awaited<ReturnType<typeof prisma.user.findUni
     country: profile.country,
     countryCode: findCountryCodeByName(profile.country) ?? "",
     preferredCurrency: profile.preferredCurrency,
+    avatarUrl: profile.avatarUrl,
     role: profile.role,
     joinedAt: profile.createdAt.toISOString(),
   };
@@ -85,6 +87,8 @@ export async function PATCH(request: Request) {
       typeof body.preferredCurrency === "string"
         ? body.preferredCurrency.trim().toUpperCase()
         : profile.preferredCurrency;
+    const avatarUrl =
+      typeof body.avatarUrl === "string" ? body.avatarUrl.trim() : profile.avatarUrl ?? "";
 
     if (name.length < 2 || name.length > 120) {
       return NextResponse.json(
@@ -107,6 +111,13 @@ export async function PATCH(request: Request) {
       );
     }
 
+    if (avatarUrl && !/^https?:\/\//i.test(avatarUrl)) {
+      return NextResponse.json(
+        { error: "Profile image must be a valid public URL." },
+        { status: 400 }
+      );
+    }
+
     const country = countryCode ? getCountryNameFromCode(countryCode) : null;
 
     if (countryCode && !country) {
@@ -123,7 +134,16 @@ export async function PATCH(request: Request) {
         bio: bio || null,
         country,
         preferredCurrency,
+        avatarUrl: avatarUrl || null,
       },
+    });
+
+    await sanitizeSupabaseAuthMetadata({
+      authUserId: profile.id,
+      email: profile.email,
+      avatarUrl: avatarUrl || null,
+    }).catch((error) => {
+      console.warn("[account.profile] Unable to sync avatar metadata back to auth.", error);
     });
 
     return NextResponse.json({ profile: normalizeProfile(updatedProfile) });

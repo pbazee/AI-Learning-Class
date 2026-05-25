@@ -203,6 +203,7 @@ export async function sanitizeSupabaseAuthMetadata(input: {
   email?: string | null;
   role?: Role | string | null;
   onboardingCompletedAt?: string | null;
+  avatarUrl?: string | null;
 }) {
   const authUser = await resolveSupabaseAuthUser(input);
 
@@ -215,6 +216,7 @@ export async function sanitizeSupabaseAuthMetadata(input: {
   const nextUserMetadata = sanitizeSupabaseUserMetadata(authUser.user_metadata, {
     role: roleOverride,
     onboarding_completed_at: input.onboardingCompletedAt,
+    avatar_url: input.avatarUrl,
   });
   const nextAppMetadata =
     roleOverride || typeof authUser.app_metadata?.role === "string"

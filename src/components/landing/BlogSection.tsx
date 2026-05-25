@@ -76,7 +76,7 @@ export function BlogSection({ posts }: { posts: BlogPost[] }) {
                       {post.title}
                     </h3>
                     {post.excerpt && (
-                      <p className="mb-4 line-clamp-3 flex-1 text-sm leading-6 text-muted-foreground">{post.excerpt}</p>
+                      <p className="mb-4 line-clamp-2 flex-1 text-sm leading-6 text-muted-foreground">{post.excerpt}</p>
                     )}
                     <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
                       <span>{post.authorName}</span>

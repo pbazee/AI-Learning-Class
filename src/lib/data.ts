@@ -381,6 +381,36 @@ function formatRole(role?: string | null) {
     .join(" ");
 }
 
+function stripHtmlTags(value: string) {
+  return value
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(p|div|section|li|h1|h2|h3|h4|blockquote)>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildExcerpt(excerpt: string | null | undefined, content: string, maxLength = 160) {
+  const manualExcerpt = excerpt?.trim();
+
+  if (manualExcerpt) {
+    return manualExcerpt;
+  }
+
+  const source = stripHtmlTags(content).trim();
+
+  if (!source) {
+    return undefined;
+  }
+
+  if (source.length <= maxLength) {
+    return source;
+  }
+
+  return `${source.slice(0, maxLength).trimEnd()}...`;
+}
+
 function formatNumberCompact(value: number) {
   return new Intl.NumberFormat("en-US", {
     notation: "compact",
@@ -1730,7 +1760,7 @@ export async function getTrustedLogos(): Promise<TrustedLogo[]> {
 async function getBlogAuthorMap(authorIds: string[]) {
   const uniqueAuthorIds = Array.from(new Set(authorIds.filter(Boolean)));
   if (uniqueAuthorIds.length === 0) {
-    return new Map<string, string>();
+    return new Map<string, { name: string; avatarUrl?: string | null }>();
   }
 
   const authors = await prisma.user.findMany({
@@ -1739,25 +1769,36 @@ async function getBlogAuthorMap(authorIds: string[]) {
       id: true,
       name: true,
       email: true,
+      avatarUrl: true,
     },
   });
 
   return new Map(
-    authors.map((author) => [author.id, author.name || author.email || "AI GENIUS LAB"])
+    authors.map((author) => [
+      author.id,
+      {
+        name: author.name || author.email || "AI GENIUS LAB",
+        avatarUrl: author.avatarUrl,
+      },
+    ])
   );
 }
 
 function mapBlogPost(
   post: PrismaBlogPost & { category?: { name: string } | null; status?: string },
-  authorMap: Map<string, string>
+  authorMap: Map<string, { name: string; avatarUrl?: string | null }>
 ): BlogPostRecord {
+  const author = authorMap.get(post.authorId);
+
   return {
     id: post.id,
     title: post.title,
     slug: post.slug,
-    excerpt: post.excerpt ?? undefined,
+    excerpt: buildExcerpt(post.excerpt, post.content),
     content: post.content,
     coverImage: post.coverImage ?? undefined,
+    authorAvatarUrl: ("authorAvatarUrl" in post ? post.authorAvatarUrl : null) ?? author?.avatarUrl ?? undefined,
+    authorAvatarPath: ("authorAvatarPath" in post ? post.authorAvatarPath : null) ?? undefined,
     metaTitle: post.metaTitle ?? undefined,
     metaDescription: post.metaDescription ?? undefined,
     focusKeyword: post.focusKeyword ?? undefined,
@@ -1769,7 +1810,7 @@ function mapBlogPost(
     noIndex: post.noIndex,
     categoryName: post.category?.name ?? undefined,
     status: (post.status as BlogPost["status"]) ?? undefined,
-    authorName: authorMap.get(post.authorId) ?? "AI GENIUS LAB",
+    authorName: author?.name ?? "AI GENIUS LAB",
     tags: post.tags,
     publishedAt: formatDate(post.publishedAt ?? post.createdAt),
     publishedAtIso: (post.publishedAt ?? post.createdAt).toISOString(),

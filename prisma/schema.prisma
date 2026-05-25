@@ -540,6 +540,8 @@ model BlogPost {
   excerpt        String?
   content        String
   coverImage     String?
+  authorAvatarUrl String?      @map("author_avatar_url")
+  authorAvatarPath String?     @map("author_avatar_path")
   metaTitle      String?       @map("meta_title")
   metaDescription String?      @map("meta_description")
   focusKeyword   String?       @map("focus_keyword")

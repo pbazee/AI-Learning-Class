@@ -89,6 +89,7 @@ export function SignupPageClient({
   const redirectPath = sanitizeAuthRedirectPath(searchParams.get("redirect"));
   const requestedStep = searchParams.get("step");
   const [step, setStep] = useState<SignupStep>(requestedStep === "quiz" ? "quiz" : "account");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
   const [answers, setAnswers] = useState<Partial<OnboardingQuizAnswers>>({});
@@ -106,7 +107,11 @@ export function SignupPageClient({
   const [newsletterOptIn, setNewsletterOptIn] = useState(true);
 
   const currentQuizQuestion = quizQuestions[quizStep];
-  const currentStepIndex = stepConfig.findIndex((entry) => entry.id === step);
+  const visibleStepConfig = useMemo(
+    () => (isAuthenticated ? stepConfig.filter((entry) => entry.id !== "account") : stepConfig),
+    [isAuthenticated]
+  );
+  const currentStepIndex = visibleStepConfig.findIndex((entry) => entry.id === step);
   const displayCategories = categories.length > 0 ? categories : defaultCategories;
   const roadmapCourses = useMemo(
     () => recommendedCourses.slice(0, 3),
@@ -173,6 +178,7 @@ export function SignupPageClient({
           return;
         }
 
+        setIsAuthenticated(false);
         setStep("account");
         setQuizStep(0);
         setAnswers({});
@@ -180,6 +186,8 @@ export function SignupPageClient({
         setAuthResolved(true);
         return;
       }
+
+      setIsAuthenticated(true);
 
       if (typeof user.user_metadata?.onboarding_completed_at === "string") {
         if (typeof window !== "undefined") {
@@ -530,7 +538,7 @@ export function SignupPageClient({
       setRecommendedCourses([]);
       setAnswers({});
       setQuizStep(0);
-      setStep("account");
+      setStep(isAuthenticated ? "quiz" : "account");
       setOnboardingLoading(false);
     }
   }
@@ -560,7 +568,7 @@ export function SignupPageClient({
       <div className="right-panel w-full rounded-[32px] border border-white/30 bg-primary-blue p-6 text-white shadow-[0_34px_100px_-44px_rgba(37,99,235,0.55)] sm:p-8">
         <div className="mb-8">
           <div className="flex items-start gap-2">
-            {stepConfig.map((entry, index) => {
+            {visibleStepConfig.map((entry, index) => {
               const isComplete = currentStepIndex > index;
               const isActive = step === entry.id;
 
@@ -582,7 +590,7 @@ export function SignupPageClient({
                       {entry.label}
                     </span>
                   </div>
-                  {index < stepConfig.length - 1 ? (
+                  {index < visibleStepConfig.length - 1 ? (
                     <div
                       className={`mt-5 h-0.5 flex-1 transition-all ${
                         isComplete ? "bg-white/85" : "bg-white/35"

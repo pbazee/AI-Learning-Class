@@ -26,6 +26,7 @@ export default async function SettingsPage() {
               countryCode: findCountryCodeByName(user.country) ?? "",
               countryName: user.country ?? "",
               preferredCurrency: user.preferredCurrency ?? "USD",
+              avatarUrl: user.avatarUrl ?? "",
               role: user.role,
               joinedAt: user.createdAt.toISOString(),
             }}

@@ -187,6 +187,8 @@ const blogSchema = z.object({
   content: z.string().min(10, "Blog content is required."),
   coverImage: z.string().optional(),
   coverImagePath: z.string().optional(),
+  authorAvatarUrl: z.string().optional(),
+  authorAvatarPath: z.string().optional(),
   authorId: z.string().min(1, "Select an author."),
   categoryId: z.string().optional().nullable(),
   tags: z.array(z.string()).optional().default([]),
@@ -1675,12 +1677,14 @@ export async function saveBlogAction(input: z.input<typeof blogSchema>) {
       const status = values.status as ContentStatus;
       const publishedAt = status === "PUBLISHED" ? new Date() : null;
       const ogImagePath = optionalString(values.ogImagePath);
+      const authorAvatarPath = optionalString(values.authorAvatarPath);
       const existing = values.id
         ? await prisma.blogPost.findUnique({
             where: { id: values.id },
             select: {
               publishedAt: true,
               ogImagePath: true,
+              authorAvatarPath: true,
             },
           })
         : null;
@@ -1694,6 +1698,8 @@ export async function saveBlogAction(input: z.input<typeof blogSchema>) {
           content: values.content,
           coverImage: optionalString(values.coverImage),
           coverImagePath: optionalString(values.coverImagePath),
+          authorAvatarUrl: optionalString(values.authorAvatarUrl),
+          authorAvatarPath,
           authorId: values.authorId,
           categoryId: nullableString(values.categoryId),
           tags: uniqueStrings(values.tags),
@@ -1717,6 +1723,8 @@ export async function saveBlogAction(input: z.input<typeof blogSchema>) {
           content: values.content,
           coverImage: optionalString(values.coverImage),
           coverImagePath: optionalString(values.coverImagePath),
+          authorAvatarUrl: optionalString(values.authorAvatarUrl),
+          authorAvatarPath,
           authorId: values.authorId,
           categoryId: nullableString(values.categoryId),
           tags: uniqueStrings(values.tags),
@@ -1739,6 +1747,10 @@ export async function saveBlogAction(input: z.input<typeof blogSchema>) {
         await deleteAssetPath(existing.ogImagePath);
       }
 
+      if (existing?.authorAvatarPath && existing.authorAvatarPath !== authorAvatarPath) {
+        await deleteAssetPath(existing.authorAvatarPath);
+      }
+
       revalidatePath(`/blog/${slug}`);
       return post;
     },
@@ -1754,6 +1766,7 @@ export async function deleteBlogAction(id: string) {
       const post = await prisma.blogPost.findUnique({ where: { id } });
       await deleteAssetPath(post?.coverImagePath);
       await deleteAssetPath(post?.ogImagePath);
+      await deleteAssetPath(post?.authorAvatarPath);
       return prisma.blogPost.delete({ where: { id } });
     },
     "Blog post deleted successfully."

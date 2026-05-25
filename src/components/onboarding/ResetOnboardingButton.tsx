@@ -27,7 +27,7 @@ export function ResetOnboardingButton({
         window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
       }
 
-      router.push("/signup?step=quiz");
+      router.push("/signup?step=quiz&redirect=/settings");
       router.refresh();
       setIsPending(false);
     }

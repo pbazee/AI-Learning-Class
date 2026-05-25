@@ -13,6 +13,9 @@ import { buildBlogPostJsonLd } from "@/lib/seo";
 import { resolveMediaUrl } from "@/lib/media";
 import { absoluteUrl, buildSiteMetadata, getSiteBranding } from "@/lib/site-server";
 
+function getInitial(name?: string) {
+  return (name || "A").trim().slice(0, 1).toUpperCase();
+}
 
 export async function generateMetadata({
   params,
@@ -68,7 +71,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   }
 
   const related = (await getBlogPosts(6)).filter((entry) => entry.slug !== slug).slice(0, 2);
-  const content = (post.content || post.excerpt || "").trim();
+  const content = sanitizeHtml((post.content || post.excerpt || "").trim());
   const branding = await getSiteBranding();
   const canonicalUrl = post.canonicalUrl?.trim() || absoluteUrl(`/blog/${post.slug}`);
   const articleJsonLd = buildBlogPostJsonLd(post, branding);
@@ -120,18 +123,41 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                 {post.title}
               </h1>
               <div
-                className={`flex items-center gap-4 text-sm ${
+                className={`flex flex-wrap items-center gap-4 text-sm ${
                   post.coverImage ? "text-white/70" : "text-muted-foreground"
                 }`}
               >
-                <span className={`font-medium ${post.coverImage ? "text-white/90" : "text-foreground"}`}>
-                  {post.authorName}
-                </span>
+                <div className="flex items-center gap-3">
+                  {post.authorAvatarUrl ? (
+                    <Image
+                      src={post.authorAvatarUrl}
+                      alt={post.authorName || "Author"}
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 rounded-full object-cover ring-1 ring-black/5"
+                    />
+                  ) : (
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${
+                        post.coverImage
+                          ? "bg-white/15 text-white ring-1 ring-white/20"
+                          : "bg-blue-50 text-blue-700 ring-1 ring-blue-100"
+                      }`}
+                    >
+                      {getInitial(post.authorName)}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className={`font-medium ${post.coverImage ? "text-white/90" : "text-foreground"}`}>
+                      {post.authorName}
+                    </span>
+                    <span>{post.publishedAt}</span>
+                  </div>
+                </div>
                 <span className="flex items-center gap-1">
                   <Clock className="h-3.5 w-3.5" />
                   {post.readTime}
                 </span>
-                <span>{post.publishedAt}</span>
                 <BlogSharePopover canonicalUrl={canonicalUrl} title={post.ogTitle || post.metaTitle || post.title} />
               </div>
             </div>
@@ -145,64 +171,12 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             </p>
           )}
 
-          <div className="space-y-4">
-            {content.split("\n\n").filter(Boolean).map((block, index) => {
-              if (block.startsWith("## ")) {
-                return (
-                  <h2 key={index} className="mt-8 mb-3 text-xl font-black text-foreground">
-                    {block.slice(3)}
-                  </h2>
-                );
-              }
-
-              if (block.startsWith("**") && block.endsWith("**")) {
-                return (
-                  <p key={index} className="font-semibold text-foreground">
-                    {block.slice(2, -2)}
-                  </p>
-                );
-              }
-
-              if (block.startsWith("1. ")) {
-                return (
-                  <ol key={index} className="ml-4 space-y-2">
-                    {block.split("\n").map((item, itemIndex) => (
-                      <li key={itemIndex} className="text-sm leading-relaxed text-muted-foreground">
-                        {item.replace(/^\d+\. /, "").replace(/\*\*(.*?)\*\*/g, "$1")}
-                      </li>
-                    ))}
-                  </ol>
-                );
-              }
-
-              if (block.startsWith("- ")) {
-                return (
-                  <ul key={index} className="ml-4 space-y-2">
-                    {block.split("\n").map((item, itemIndex) => (
-                      <li
-                        key={itemIndex}
-                        className="list-disc text-sm leading-relaxed text-muted-foreground"
-                      >
-                        {item.slice(2).replace(/\*\*(.*?)\*\*/g, "$1")}
-                      </li>
-                    ))}
-                  </ul>
-                );
-              }
-
-              return (
-                <p
-                  key={index}
-                  className="text-sm leading-relaxed text-muted-foreground"
-                  dangerouslySetInnerHTML={{
-                    __html: sanitizeHtml(
-                      block.replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>')
-                    ),
-                  }}
-                />
-              );
-            })}
-          </div>
+          <div
+            className="blog-content"
+            dangerouslySetInnerHTML={{
+              __html: content,
+            }}
+          />
 
           <div className="mt-12 flex flex-wrap items-center gap-3 border-t border-border pt-8">
             <Tag className="h-4 w-4 text-muted-foreground" />
@@ -259,9 +233,19 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
                         </div>
                       )}
                       <div className="p-4">
+                        {entry.categoryName ? (
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400">
+                            {entry.categoryName}
+                          </p>
+                        ) : null}
                         <p className="line-clamp-2 text-sm font-bold text-foreground transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-400">
                           {entry.title}
                         </p>
+                        {entry.excerpt ? (
+                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                            {entry.excerpt}
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-xs text-muted-foreground">{entry.readTime}</p>
                       </div>
                     </div>

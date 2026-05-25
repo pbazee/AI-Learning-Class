@@ -357,6 +357,8 @@ export interface BlogPost {
   excerpt?: string;
   content?: string;
   coverImage?: string;
+  authorAvatarUrl?: string;
+  authorAvatarPath?: string;
   metaTitle?: string;
   metaDescription?: string;
   focusKeyword?: string;

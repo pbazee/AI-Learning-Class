@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, MessageSquareQuote, Star } from "lucide-react";
@@ -103,9 +104,19 @@ export function CourseReviewsSection({
               <Card key={review.id} className="overflow-hidden">
                 <CardContent className="p-6">
                   <div className="flex items-start gap-4">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                      {(review.name || "A").slice(0, 1).toUpperCase()}
-                    </div>
+                    {review.avatarUrl ? (
+                      <Image
+                        src={review.avatarUrl}
+                        alt={review.name}
+                        width={44}
+                        height={44}
+                        className="h-11 w-11 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                        {(review.name || "A").slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>

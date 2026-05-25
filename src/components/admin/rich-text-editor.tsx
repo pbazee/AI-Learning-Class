@@ -3,27 +3,33 @@
 import {
   forwardRef,
   useEffect,
+  useState,
   useImperativeHandle,
   useRef,
 } from "react";
-import { Bold, Heading2, Italic, Link2, List, Quote } from "lucide-react";
+import { Bold, Heading1, Heading2, Heading3, Italic, Link2, List, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function ToolbarButton({
   title,
   onClick,
   children,
+  active = false,
 }: {
   title: string;
   onClick: () => void;
   children: React.ReactNode;
+  active?: boolean;
 }) {
   return (
     <button
       type="button"
       title={title}
       onClick={onClick}
-      className="rounded-xl border border-border bg-background p-2 text-muted-foreground hover:border-blue-300 hover:text-foreground"
+      className={cn(
+        "rounded-xl border border-border bg-background p-2 text-muted-foreground hover:border-blue-300 hover:text-foreground",
+        active && "border-blue-300 bg-blue-50 text-blue-700"
+      )}
     >
       {children}
     </button>
@@ -47,6 +53,7 @@ export const RichTextEditor = forwardRef<
 >(function RichTextEditor({ value, onChange, className, toolbarExtras }, ref) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
+  const [activeBlock, setActiveBlock] = useState("p");
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
@@ -54,8 +61,42 @@ export const RichTextEditor = forwardRef<
     }
   }, [value]);
 
+  function updateActiveBlock() {
+    const selection = window.getSelection();
+    const editor = editorRef.current;
+
+    if (!selection || !editor || selection.rangeCount === 0) {
+      setActiveBlock("p");
+      return;
+    }
+
+    let node: Node | null = selection.anchorNode;
+    while (node && node !== editor) {
+      if (node instanceof HTMLElement) {
+        const tagName = node.tagName.toLowerCase();
+        if (["h1", "h2", "h3", "blockquote", "ul", "ol", "p"].includes(tagName)) {
+          setActiveBlock(tagName);
+          return;
+        }
+      }
+      node = node.parentNode;
+    }
+
+    setActiveBlock("p");
+  }
+
+  useEffect(() => {
+    const handler = () => updateActiveBlock();
+    document.addEventListener("selectionchange", handler);
+
+    return () => {
+      document.removeEventListener("selectionchange", handler);
+    };
+  }, []);
+
   function syncContent() {
     onChange(editorRef.current?.innerHTML || "");
+    updateActiveBlock();
   }
 
   function saveSelection() {
@@ -149,8 +190,14 @@ export const RichTextEditor = forwardRef<
           <ToolbarButton title="Italic" onClick={() => run("italic")}>
             <Italic className="h-4 w-4" />
           </ToolbarButton>
-          <ToolbarButton title="Heading" onClick={() => run("formatBlock", "<h2>")}>
+          <ToolbarButton title="Heading 1" active={activeBlock === "h1"} onClick={() => run("formatBlock", "<h1>")}>
+            <Heading1 className="h-4 w-4" />
+          </ToolbarButton>
+          <ToolbarButton title="Heading 2" active={activeBlock === "h2"} onClick={() => run("formatBlock", "<h2>")}>
             <Heading2 className="h-4 w-4" />
+          </ToolbarButton>
+          <ToolbarButton title="Heading 3" active={activeBlock === "h3"} onClick={() => run("formatBlock", "<h3>")}>
+            <Heading3 className="h-4 w-4" />
           </ToolbarButton>
           <ToolbarButton title="Bulleted list" onClick={() => run("insertUnorderedList")}>
             <List className="h-4 w-4" />

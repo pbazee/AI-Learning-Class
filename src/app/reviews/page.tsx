@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { Footer } from "@/components/layout/Footer";
@@ -63,9 +64,19 @@ export default async function ReviewsPage() {
             <Card key={review.id} className="h-full">
               <CardHeader>
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                    {review.name.slice(0, 1).toUpperCase()}
-                  </div>
+                  {review.avatar ? (
+                    <Image
+                      src={review.avatar}
+                      alt={review.name}
+                      width={48}
+                      height={48}
+                      className="h-12 w-12 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                      {review.name.slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
                   <div>
                     <CardTitle className="text-xl">{review.name}</CardTitle>
                     <CardDescription>{review.role}</CardDescription>
