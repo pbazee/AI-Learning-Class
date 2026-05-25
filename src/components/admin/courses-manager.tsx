@@ -81,14 +81,6 @@ type CourseRow = {
   thumbnailPath?: string | null;
   language: string;
   totalStudents: number;
-  enrollments: Array<{
-    id: string;
-    enrolledAt: string;
-    status: "ACTIVE" | "COMPLETED" | "SUSPENDED" | "EXPIRED";
-    learnerId: string;
-    learnerName: string;
-    learnerEmail: string;
-  }>;
   rating: number;
   tags: string[];
   whatYouLearn: string[];
@@ -284,7 +276,6 @@ export function CoursesManager({
   const [search, setSearch] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
-  const [selectedCourseForStudents, setSelectedCourseForStudents] = useState<CourseRow | null>(null);
   const [form, setForm] = useState<CourseFormState>(() => buildEmptyForm(categoryOptions));
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -666,7 +657,11 @@ export function CoursesManager({
                     <td className="px-4 py-4">
                       <button
                         type="button"
-                        onClick={() => setSelectedCourseForStudents(course)}
+                        onClick={() =>
+                          router.push(
+                            `/admin/learners?courseId=${encodeURIComponent(course.id)}&courseName=${encodeURIComponent(course.title)}`
+                          )
+                        }
                         className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-slate-200 transition hover:border-primary-blue/40 hover:text-white"
                       >
                         <Users className="h-4 w-4" />
@@ -989,44 +984,6 @@ export function CoursesManager({
         onClose={() => setImportOpen(false)}
         instructorOptions={instructorOptions}
       />
-
-      <AdminModal
-        open={Boolean(selectedCourseForStudents)}
-        onClose={() => setSelectedCourseForStudents(null)}
-        title={selectedCourseForStudents ? `${selectedCourseForStudents.title} learners` : "Enrolled learners"}
-        description="Learners currently enrolled in this course."
-        size="lg"
-        scrollBody
-      >
-        {selectedCourseForStudents && selectedCourseForStudents.enrollments.length > 0 ? (
-          <div className="space-y-3">
-            {selectedCourseForStudents.enrollments.map((enrollment) => (
-              <div
-                key={enrollment.id}
-                className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-semibold text-white">{enrollment.learnerName}</p>
-                  <p className="text-sm text-slate-400">{enrollment.learnerEmail}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <StatusPill tone={enrollment.status === "COMPLETED" ? "success" : "info"}>
-                    {enrollment.status}
-                  </StatusPill>
-                  <p className="text-xs text-slate-500">
-                    Enrolled {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(enrollment.enrolledAt))}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="No enrolled learners yet"
-            description="This course does not have any active or completed enrollments to show right now."
-          />
-        )}
-      </AdminModal>
     </div>
   );
 }

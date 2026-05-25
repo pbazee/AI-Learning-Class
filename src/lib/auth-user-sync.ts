@@ -43,6 +43,10 @@ const safeUserSelect = {
   createdAt: true,
   updatedAt: true,
   referralCode: true,
+  onboardingCompleted: true,
+  onboardingCompletedAt: true,
+  onboardingRecommendations: true,
+  quizAnswers: true,
 } as const;
 
 function toJsonb(value: unknown) {
@@ -111,8 +115,8 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
   const email = normalizeEmail(user.email);
   const configuredAdminEmail = getPrimaryAdminEmail();
   let adminEmail = configuredAdminEmail;
-  let existingById: { id: string; role: Role } | null = null;
-  let existingByEmail: { id: string; role: Role } | null = null;
+  let existingById: Prisma.UserGetPayload<{ select: typeof safeUserSelect }> | null = null;
+  let existingByEmail: Prisma.UserGetPayload<{ select: typeof safeUserSelect }> | null = null;
 
   try {
     const settings = await prisma.siteSettings.findUnique({
@@ -125,14 +129,14 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
     adminEmail = normalizeEmail(settings?.adminEmail || configuredAdminEmail);
     existingById = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { id: true, role: true },
+      select: safeUserSelect,
     });
 
     existingByEmail = existingById
       ? null
       : await prisma.user.findUnique({
           where: { email },
-          select: { id: true, role: true },
+          select: safeUserSelect,
         });
   } catch (error) {
     if (!isPrismaConnectionError(error) && !isPrismaSchemaMismatchError(error)) {
@@ -149,21 +153,29 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
     (user.user_metadata?.name as string | undefined) ||
     null;
   const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) || null;
-  const onboardingCompletedAt =
+  const existingProfile = existingById ?? existingByEmail;
+  const metadataOnboardingCompletedAt =
     typeof user.user_metadata?.onboarding_completed_at === "string"
       ? new Date(user.user_metadata.onboarding_completed_at)
       : null;
+  const onboardingCompletedAt =
+    metadataOnboardingCompletedAt ??
+    existingProfile?.onboardingCompletedAt ??
+    null;
+  const onboardingCompleted = Boolean(
+    onboardingCompletedAt || existingProfile?.onboardingCompleted
+  );
   const onboardingRecommendations = Array.isArray(user.user_metadata?.onboarding_recommendations)
     ? user.user_metadata.onboarding_recommendations.filter(
         (value): value is string => typeof value === "string"
       )
-    : [];
+    : existingProfile?.onboardingRecommendations ?? [];
   const quizAnswers =
     user.user_metadata?.onboarding_answers &&
     typeof user.user_metadata.onboarding_answers === "object" &&
     !Array.isArray(user.user_metadata.onboarding_answers)
       ? user.user_metadata.onboarding_answers
-      : undefined;
+      : existingProfile?.quizAnswers ?? undefined;
 
   async function updateUserDefensively(
     userId: string,
@@ -182,7 +194,7 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
         where: { id: userId },
         data: {
           ...safeData,
-          onboardingCompleted: Boolean(onboardingCompletedAt),
+          onboardingCompleted,
           onboardingCompletedAt,
           onboardingRecommendations: toRecommendationField(onboardingRecommendations),
           quizAnswers: toJsonb(quizAnswers),
@@ -194,7 +206,7 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
           where: { id: userId },
           data: {
             ...safeData,
-            onboardingCompleted: Boolean(onboardingCompletedAt),
+            onboardingCompleted,
             onboardingCompletedAt,
             quizAnswers: toJsonb(quizAnswers),
           },
@@ -231,7 +243,7 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
       return await prisma.user.create({
         data: {
           ...safeData,
-          onboardingCompleted: Boolean(onboardingCompletedAt),
+          onboardingCompleted,
           onboardingCompletedAt,
           onboardingRecommendations: toRecommendationField(onboardingRecommendations),
           quizAnswers: toJsonb(quizAnswers),
@@ -242,7 +254,7 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
         return prisma.user.create({
           data: {
             ...safeData,
-            onboardingCompleted: Boolean(onboardingCompletedAt),
+            onboardingCompleted,
             onboardingCompletedAt,
             quizAnswers: toJsonb(quizAnswers),
           },
@@ -299,6 +311,18 @@ export async function syncAuthenticatedUser(user: SupabaseUser) {
       onboardingCompletedAt: onboardingCompletedAt?.toISOString() ?? null,
     }).catch((error) => {
       console.warn("[auth.sync] Unable to trim bulky Supabase auth metadata.", error);
+    });
+  } else if (
+    onboardingCompletedAt &&
+    typeof user.user_metadata?.onboarding_completed_at !== "string"
+  ) {
+    await sanitizeSupabaseAuthMetadata({
+      authUserId: user.id,
+      email,
+      role,
+      onboardingCompletedAt: onboardingCompletedAt.toISOString(),
+    }).catch((error) => {
+      console.warn("[auth.sync] Unable to backfill onboarding completion metadata.", error);
     });
   }
 

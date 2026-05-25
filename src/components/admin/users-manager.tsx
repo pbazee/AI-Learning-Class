@@ -126,6 +126,7 @@ function countActiveFilters(mode: AdminDirectoryMode, filters: AdminDirectoryFil
     mode === "users" ? (filters.role === "all" ? "" : filters.role) : "",
     filters.plan === "all" ? "" : filters.plan,
     mode === "learners" ? (filters.progress === "all" ? "" : filters.progress) : "",
+    filters.courseId,
     filters.country,
     filters.joinedFrom,
     filters.joinedTo,
@@ -142,6 +143,7 @@ function getActiveFilterChips(mode: AdminDirectoryMode, filters: AdminDirectoryF
   if (mode === "users" && filters.role !== "all") chips.push(`Role: ${filters.role.replace("_", " ")}`);
   if (mode === "learners" && filters.progress !== "all") chips.push(`Progress: ${progressLabels[filters.progress]}`);
   if (filters.plan !== "all") chips.push(`Plan: ${filters.plan[0].toUpperCase()}${filters.plan.slice(1)}`);
+  if (filters.courseId) chips.push(`Course: ${filters.courseName || "Selected course"}`);
   if (filters.country) chips.push(`Country: ${filters.country}`);
   if (filters.joinedFrom) chips.push(`From: ${filters.joinedFrom}`);
   if (filters.joinedTo) chips.push(`To: ${filters.joinedTo}`);
@@ -244,6 +246,8 @@ export function UsersManager({
       ["role", mode === "users" && merged.role !== "all" ? merged.role : ""],
       ["plan", merged.plan !== "all" ? merged.plan : ""],
       ["progress", mode === "learners" && merged.progress !== "all" ? merged.progress : ""],
+      ["courseId", merged.courseId],
+      ["courseName", merged.courseName],
       ["country", merged.country],
       ["from", merged.joinedFrom],
       ["to", merged.joinedTo],
@@ -336,6 +340,17 @@ export function UsersManager({
         title={`${title} (${total.toLocaleString()} total)`}
         description={description}
       />
+
+      {mode === "learners" && filters.courseId ? (
+        <AdminCard className="border-primary-blue/20 bg-primary-blue/8 p-4">
+          <p className="text-sm font-semibold text-white">
+            Viewing learners for {filters.courseName || "the selected course"}
+          </p>
+          <p className="mt-1 text-sm text-slate-300">
+            This directory is scoped to one course so you can review progress, payments, and learner details in a richer workspace.
+          </p>
+        </AdminCard>
+      ) : null}
 
       <AdminStatGrid>
         <AdminStatCard label="Total Users" value={total.toLocaleString()} />

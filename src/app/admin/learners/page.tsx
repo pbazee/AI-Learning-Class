@@ -21,6 +21,8 @@ export default async function AdminLearnersPage({
         role: "all" as const,
         plan: "all" as const,
         progress: "all" as const,
+        courseId: "",
+        courseName: "",
         country: "",
         joinedFrom: "",
         joinedTo: "",

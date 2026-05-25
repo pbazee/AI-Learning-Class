@@ -9,6 +9,8 @@ export type AdminDirectoryFilters = {
   role: "all" | Role;
   plan: "all" | "free" | "pro" | "teams";
   progress: "all" | "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+  courseId: string;
+  courseName: string;
   country: string;
   joinedFrom: string;
   joinedTo: string;

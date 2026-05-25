@@ -75,6 +75,8 @@ export function parseAdminDirectoryFilters(
     role: mode === "users" && isRoleValue(roleParam) ? roleParam : "all",
     plan: isPlanValue(planParam) ? planParam : "all",
     progress: mode === "learners" && isProgressValue(progressParam) ? progressParam : "all",
+    courseId: cleanText(readSearchParam(searchParams, "courseId")),
+    courseName: cleanText(readSearchParam(searchParams, "courseName")),
     country: cleanText(readSearchParam(searchParams, "country")),
     joinedFrom: cleanText(readSearchParam(searchParams, "from")),
     joinedTo: cleanText(readSearchParam(searchParams, "to")),
@@ -95,6 +97,12 @@ function buildUserWhere(mode: AdminDirectoryMode, filters: AdminDirectoryFilters
     const query = `%${filters.search.toLowerCase()}%`;
     conditions.push(
       Prisma.sql`(lower(coalesce(u.name, '')) LIKE ${query} OR lower(u.email) LIKE ${query})`
+    );
+  }
+
+  if (filters.courseId) {
+    conditions.push(
+      Prisma.sql`EXISTS (SELECT 1 FROM "Enrollment" course_filter_enrollment WHERE course_filter_enrollment."userId" = u.id AND course_filter_enrollment."courseId" = ${filters.courseId})`
     );
   }
 
@@ -145,7 +153,25 @@ function getOrderBy(mode: AdminDirectoryMode, sort: string) {
   }
 }
 
-function buildUserMetricsCte(userWhere: Prisma.Sql) {
+function buildUserMetricsCte(userWhere: Prisma.Sql, filters: AdminDirectoryFilters) {
+  const courseFilterSql = filters.courseId
+    ? Prisma.sql`AND e."courseId" = ${filters.courseId}`
+    : Prisma.empty;
+  const lessonProgressCourseFilterSql = filters.courseId
+    ? Prisma.sql`AND m."courseId" = ${filters.courseId}`
+    : Prisma.empty;
+  const lastActiveCourseFilterSql = filters.courseId
+    ? Prisma.sql`
+        AND EXISTS (
+          SELECT 1
+          FROM "Lesson" lp_lesson
+          JOIN "Module" lp_module ON lp_module.id = lp_lesson."moduleId"
+          WHERE lp_lesson.id = lp."lessonId"
+            AND lp_module."courseId" = ${filters.courseId}
+        )
+      `
+    : Prisma.empty;
+
   return Prisma.sql`
     WITH user_metrics AS (
       SELECT
@@ -179,6 +205,7 @@ function buildUserMetricsCte(userWhere: Prisma.Sql) {
         SELECT COUNT(*)::int AS enrollments_count
         FROM "Enrollment" e
         WHERE e."userId" = u.id
+          ${courseFilterSql}
       ) enrollments ON TRUE
       LEFT JOIN LATERAL (
         SELECT COUNT(*)::int AS active_subscriptions_count
@@ -209,6 +236,7 @@ function buildUserMetricsCte(userWhere: Prisma.Sql) {
         SELECT MAX(lp."updatedAt") AS last_active_at
         FROM "LessonProgress" lp
         WHERE lp."userId" = u.id
+          ${lastActiveCourseFilterSql}
       ) activity ON TRUE
       LEFT JOIN LATERAL (
         SELECT
@@ -222,6 +250,7 @@ function buildUserMetricsCte(userWhere: Prisma.Sql) {
          AND lp."lessonId" = l.id
          AND lp."isCompleted" = TRUE
         WHERE e."userId" = u.id
+          ${lessonProgressCourseFilterSql}
       ) progress ON TRUE
       WHERE ${userWhere}
     )
@@ -237,7 +266,7 @@ export async function getAdminDirectoryPage(
   const metricWhere = buildMetricWhere(mode, filters);
   const orderBy = getOrderBy(mode, filters.sort);
   const offset = (filters.page - 1) * filters.pageSize;
-  const cte = buildUserMetricsCte(userWhere);
+  const cte = buildUserMetricsCte(userWhere, filters);
 
   const [rows, countResult, countries] = await Promise.all([
     prisma.$queryRaw<
