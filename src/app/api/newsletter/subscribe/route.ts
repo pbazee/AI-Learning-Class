@@ -1,48 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureEmailPreferenceForUser } from "@/lib/email";
-import { prisma } from "@/lib/prisma";
-import { sanitizeText } from "@/lib/sanitize";
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
+import { subscribeEmailToNewsletter } from "@/lib/newsletter";
 
 export async function POST(request: NextRequest) {
   try {
     const { email, name } = await request.json();
-    const normalizedEmail =
-      typeof email === "string" ? normalizeEmail(sanitizeText(email)) : "";
-    const subscriberName =
-      typeof name === "string" ? sanitizeText(name).trim() : undefined;
-
-    if (!normalizedEmail) {
+    if (typeof email !== "string" || email.trim().length === 0) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
 
-    await prisma.newsletterSubscriber.upsert({
-      where: { email: normalizedEmail },
-      update: {
-        isActive: true,
-        name: subscriberName || undefined,
-      },
-      create: {
-        email: normalizedEmail,
-        name: subscriberName || undefined,
-      },
-    });
-
-    const user = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
-      select: { id: true },
-    });
-
-    if (user) {
-      await ensureEmailPreferenceForUser(user.id);
-      await prisma.emailPreference.update({
-        where: { userId: user.id },
-        data: { subscribedMarketing: true },
-      });
-    }
+    await subscribeEmailToNewsletter({ email, name });
 
     return NextResponse.json({
       success: true,

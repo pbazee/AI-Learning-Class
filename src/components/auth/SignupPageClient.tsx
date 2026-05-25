@@ -24,6 +24,7 @@ import {
 } from "@/lib/auth-redirect";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { logger } from "@/lib/logger";
+import { NEWSLETTER_OPT_IN_COOKIE } from "@/lib/newsletter";
 import { onboardingQuizQuestions as quizQuestions } from "@/lib/onboarding";
 import { ONBOARDING_STORAGE_KEY } from "@/lib/onboarding-storage";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -325,10 +326,21 @@ export function SignupPageClient({
     }
   }
 
+  function persistNewsletterOptInForOAuth() {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.cookie = `${NEWSLETTER_OPT_IN_COOKIE}=${newsletterOptIn ? "1" : ""}; Path=/; Max-Age=${
+      newsletterOptIn ? 1800 : 0
+    }; SameSite=Lax`;
+  }
+
   async function handleGoogleSignUp() {
     setError(null);
     setLoading(true);
     const supabase = getSupabaseClient();
+    persistNewsletterOptInForOAuth();
     await syncNewsletterPreference(email, name);
     logger.debug(
       "[signup] Starting Google OAuth, redirectTo:",
@@ -382,7 +394,7 @@ export function SignupPageClient({
     });
 
     if (data.user && !data.session) {
-      void syncNewsletterPreference(email, name);
+      await syncNewsletterPreference(email, name);
       logger.info("[signup] Email confirmation required, check inbox");
       setEmailConfirmSent(true);
       setLoading(false);
@@ -397,7 +409,7 @@ export function SignupPageClient({
         body: JSON.stringify({ referralCode }),
       }).catch(() => {});
     }
-    void syncNewsletterPreference(email, name);
+    await syncNewsletterPreference(email, name);
     setLoading(false);
 
     setStep("quiz");

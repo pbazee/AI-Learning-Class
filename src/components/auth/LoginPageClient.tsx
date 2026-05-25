@@ -12,6 +12,7 @@ import {
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
 import { logger } from "@/lib/logger";
+import { NEWSLETTER_OPT_IN_COOKIE } from "@/lib/newsletter";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type AuthBranding = {
@@ -91,10 +92,21 @@ export function LoginPageClient({
     }
   }
 
+  function persistNewsletterOptInForOAuth() {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.cookie = `${NEWSLETTER_OPT_IN_COOKIE}=${newsletterOptIn ? "1" : ""}; Path=/; Max-Age=${
+      newsletterOptIn ? 1800 : 0
+    }; SameSite=Lax`;
+  }
+
   async function handleGoogleSignIn() {
     setError(null);
     setLoading(true);
     const supabase = getSupabaseClient();
+    persistNewsletterOptInForOAuth();
     await syncNewsletterPreference(email);
     logger.debug("[login] Starting Google OAuth, redirectTo:", buildAuthCallbackUrl(redirectPath));
 
@@ -138,7 +150,7 @@ export function LoginPageClient({
         console.warn("[login] Magic link error:", message);
         setError(message);
       } else {
-        void syncNewsletterPreference(email);
+        await syncNewsletterPreference(email);
         logger.info("[login] Magic link sent successfully to:", email);
         setMagicSent(true);
       }
@@ -166,7 +178,7 @@ export function LoginPageClient({
         console.warn("[login] Password sign-in error:", message);
         setError(message);
       } else {
-        void syncNewsletterPreference(email);
+        await syncNewsletterPreference(email);
         const nextPath =
           typeof payload?.nextPath === "string" ? payload.nextPath : redirectPath;
 

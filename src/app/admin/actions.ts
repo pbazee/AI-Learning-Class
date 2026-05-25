@@ -564,6 +564,15 @@ function revalidateMany(paths: string[]) {
     revalidateTag(PUBLIC_CACHE_TAGS.categories);
   }
 
+  if (
+    uniquePaths.some(
+      (path) => path === "/" || path === "/reviews" || path.startsWith("/admin/reviews")
+    )
+  ) {
+    revalidateTag(PUBLIC_CACHE_TAGS.testimonials);
+    revalidateTag(PUBLIC_CACHE_TAGS.homepage);
+  }
+
   if (uniquePaths.some((path) => path === "/" || path.startsWith("/pricing"))) {
     revalidateTag(PUBLIC_CACHE_TAGS.pricing);
   }
