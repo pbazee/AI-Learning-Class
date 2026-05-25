@@ -46,7 +46,8 @@ export function LearnerSettingsClient({
     tone: "idle" | "success" | "error";
     message: string;
   }>({ tone: "idle", message: "" });
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const [isSaving, setIsSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const joinedAtLabel = useMemo(
@@ -177,6 +178,7 @@ export function LearnerSettingsClient({
       return;
     }
 
+    setIsSaving(true);
     startTransition(() => {
       void (async () => {
         try {
@@ -243,6 +245,8 @@ export function LearnerSettingsClient({
                 ? error.message
                 : "Unable to save your profile right now.",
           });
+        } finally {
+          setIsSaving(false);
         }
       })();
     });
@@ -414,10 +418,10 @@ export function LearnerSettingsClient({
           <div className="mt-8 flex items-center gap-3 border-t border-border pt-6">
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isSaving}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary-blue px-5 py-3 text-sm font-semibold text-white transition hover:bg-primary-blue/90 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {isPending ? (
+              {isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Saving

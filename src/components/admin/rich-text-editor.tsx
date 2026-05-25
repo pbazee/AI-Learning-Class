@@ -182,7 +182,7 @@ export const RichTextEditor = forwardRef<
 
   return (
     <div className={cn("overflow-hidden rounded-3xl border border-input bg-background", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 p-3">
+      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 p-3 backdrop-blur">
         <div className="flex flex-wrap gap-2">
           <ToolbarButton title="Bold" onClick={() => run("bold")}>
             <Bold className="h-4 w-4" />

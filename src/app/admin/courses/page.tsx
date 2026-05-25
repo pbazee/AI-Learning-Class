@@ -28,6 +28,24 @@ export default async function AdminCoursesPage() {
                 email: true,
               },
             },
+            enrollments: {
+              where: {
+                status: { in: ["ACTIVE", "COMPLETED"] },
+              },
+              orderBy: { enrolledAt: "desc" },
+              select: {
+                id: true,
+                enrolledAt: true,
+                status: true,
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
             assets: {
               orderBy: { createdAt: "desc" },
             },
@@ -116,6 +134,14 @@ export default async function AdminCoursesPage() {
         thumbnailPath: course.thumbnailPath,
         language: course.language,
         totalStudents: course.totalStudents,
+        enrollments: course.enrollments.map((enrollment) => ({
+          id: enrollment.id,
+          enrolledAt: enrollment.enrolledAt.toISOString(),
+          status: enrollment.status,
+          learnerId: enrollment.user.id,
+          learnerName: enrollment.user.name || enrollment.user.email || "Unknown learner",
+          learnerEmail: enrollment.user.email,
+        })),
         rating: course.rating,
         tags: course.tags,
         whatYouLearn: course.whatYouLearn,

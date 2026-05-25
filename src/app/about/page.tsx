@@ -133,13 +133,6 @@ export default async function AboutPage() {
               </div>
             </div>
 
-            <div className="mt-6 rounded-[24px] border border-border bg-muted/40 p-5">
-              <p className="text-sm font-semibold text-foreground">Admin-managed content</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                The copy on this page is controlled from the admin settings panel, so your team can
-                update it without changing code.
-              </p>
-            </div>
           </aside>
         </section>
       </main>
