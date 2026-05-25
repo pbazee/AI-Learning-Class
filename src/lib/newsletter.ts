@@ -1,8 +1,7 @@
 import { ensureEmailPreferenceForUser } from "@/lib/email";
+import { NEWSLETTER_OPT_IN_COOKIE } from "@/lib/newsletter-shared";
 import { prisma } from "@/lib/prisma";
 import { sanitizeText } from "@/lib/sanitize";
-
-export const NEWSLETTER_OPT_IN_COOKIE = "ai_gl_newsletter_opt_in";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();

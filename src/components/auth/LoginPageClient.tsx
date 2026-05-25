@@ -12,7 +12,7 @@ import {
   sanitizeAuthRedirectPath,
 } from "@/lib/auth-redirect";
 import { logger } from "@/lib/logger";
-import { NEWSLETTER_OPT_IN_COOKIE } from "@/lib/newsletter";
+import { NEWSLETTER_OPT_IN_COOKIE } from "@/lib/newsletter-shared";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type AuthBranding = {

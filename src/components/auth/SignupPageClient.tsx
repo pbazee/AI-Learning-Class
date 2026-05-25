@@ -24,7 +24,7 @@ import {
 } from "@/lib/auth-redirect";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { logger } from "@/lib/logger";
-import { NEWSLETTER_OPT_IN_COOKIE } from "@/lib/newsletter";
+import { NEWSLETTER_OPT_IN_COOKIE } from "@/lib/newsletter-shared";
 import { onboardingQuizQuestions as quizQuestions } from "@/lib/onboarding";
 import { ONBOARDING_STORAGE_KEY } from "@/lib/onboarding-storage";
 import { getSupabaseClient } from "@/lib/supabase";

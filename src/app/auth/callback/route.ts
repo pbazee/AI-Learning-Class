@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { NEWSLETTER_OPT_IN_COOKIE, subscribeEmailToNewsletter } from "@/lib/newsletter";
+import { subscribeEmailToNewsletter } from "@/lib/newsletter";
+import { NEWSLETTER_OPT_IN_COOKIE } from "@/lib/newsletter-shared";
 import { syncAuthenticatedUser } from "@/lib/auth-user-sync";
 import {
   resolvePostAuthDestination,
